@@ -1,0 +1,5 @@
+node_modules/
+# Sessões logadas do navegador (cookies) e backups locais de contas/proxies: NUNCA subir
+data/
+.env
+*.log

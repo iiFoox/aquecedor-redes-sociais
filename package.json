@@ -1,0 +1,18 @@
+{
+  "name": "insta-warmer",
+  "version": "1.0.0",
+  "description": "Esquentador de contas do Instagram com painel web",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "postinstall": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "express": "^4.19.2",
+    "ghost-cursor": "^1.4.2",
+    "playwright": "^1.47.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}
