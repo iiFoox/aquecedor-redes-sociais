@@ -3,6 +3,7 @@
 const rules = require('./rules');
 
 const STALL_MS = 10 * 60000; // 10 min sem progresso nas metas = travou
+const FAIL_ALERT = 3; // a mesma falha 3 vezes na sessão vira alerta no painel
 
 /**
  * state: estado da sessão ({ stop, stats, startedAt, endsAt, lastProgress, lastBeat, status... })
@@ -14,6 +15,7 @@ function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
   const goalKeys = Object.keys(plan).filter((k) => k !== 'minutes' && plan[k] > 0);
   const left = (k) => (plan[k] || 0) - (done()[k] || 0);
   state.samples = state.samples || {};
+  const fails = {};
   return {
     stats: state.stats,
     plan,
@@ -58,6 +60,20 @@ function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
     alert(level, msg, kind) {
       hooks.alert(level, msg, kind);
     },
+    // Falha numa atividade: vai para o log e, se a mesma falha se repete, vira alerta no painel
+    // (assim um erro do robô ou uma mudança no site não passa dias escondido no log)
+    fail(label, err) {
+      const msg = String((err && err.message) || err).split('\n')[0];
+      this.log(`Falha em "${label}": ${msg}`, 'warn');
+      const key = `${label}|${msg}`;
+      fails[key] = (fails[key] || 0) + 1;
+      if (fails[key] === FAIL_ALERT)
+        hooks.alert(
+          'warn',
+          `"${label}" falhou ${FAIL_ALERT} vezes nesta sessão: ${msg}. Pode ser erro do robô ou mudança no site`,
+          'error',
+        );
+    },
     // Amostra de tempo (pausas, tempo por vídeo, digitação): vira o resumo "Naturalidade" da sessão
     sample(kind, ms) {
       (state.samples[kind] = state.samples[kind] || []).push(Math.round(ms));
@@ -65,4 +81,4 @@ function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
   };
 }
 
-module.exports = { createCtl, STALL_MS };
+module.exports = { createCtl, STALL_MS, FAIL_ALERT };

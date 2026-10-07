@@ -89,6 +89,15 @@ function missingText(plan, done, labels = {}) {
     .join(', ');
 }
 
+// Sessão que viu bastante vídeo e não curtiu nada, com curtidas faltando: sinal de que curtir quebrou.
+// likeLeft: curtidas que faltavam no começo da sessão. stats: o que a sessão fez.
+const NO_LIKE_MIN_VIDEOS = 10;
+function noLikeWarning(likeLeft, stats) {
+  const videos = (stats.watch || 0) + (stats.reel || 0);
+  if (!(likeLeft > 0) || (stats.like || 0) > 0 || videos < NO_LIKE_MIN_VIDEOS) return null;
+  return `A sessão viu ${videos} vídeos e não curtiu nenhum, com ${likeLeft} curtidas faltando. Confira se curtir está funcionando`;
+}
+
 // Ainda dá para avançar alguma meta hoje sem passar do teto?
 function canProgress(activities, plan, done, account) {
   return Object.values(activities).some((a) => activityAllowed(a, plan, done, account) && activityUseful(a, plan, done));
@@ -402,6 +411,7 @@ module.exports = {
   activityUseful,
   activityPriority,
   missingText,
+  noLikeWarning,
   OVERSHOOT_WEIGHT,
   canProgress,
   dayStatus,

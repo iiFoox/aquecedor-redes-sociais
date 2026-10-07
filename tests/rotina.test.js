@@ -193,3 +193,34 @@ test('curtidas: dia normal sempre fecha as curtidas do plano, sem passar dele', 
     }
   }
 });
+
+test('alertas: a mesma falha 3 vezes na sessão e sessão que vê vídeos sem curtir viram aviso no painel', () => {
+  const alerts = [];
+  const logs = [];
+  const state = { stop: false, stats: {}, startedAt: 0, endsAt: 1e12, lastProgress: 0, lastBeat: 0 };
+  const ctl = createCtl({
+    state,
+    plan: { watch: 30, like: 6 },
+    done: () => ({}),
+    now: () => 0,
+    hooks: { status() {}, action() {}, log: (m) => logs.push(m), alert: (level, msg, kind) => alerts.push({ level, msg, kind }) },
+  });
+  const err = new Error('this.page.browser is not a function\n    at stack');
+  ctl.fail('Assistir o Para Você', err);
+  ctl.fail('Assistir o Para Você', err);
+  assert.equal(alerts.length, 0);
+  ctl.fail('Assistir o Para Você', err);
+  assert.equal(alerts.length, 1);
+  assert.match(alerts[0].msg, /falhou 3 vezes.*this\.page\.browser is not a function/);
+  assert.equal(alerts[0].kind, 'error');
+  ctl.fail('Assistir o Para Você', err); // não repete o alerta a cada falha
+  assert.equal(alerts.length, 1);
+  assert.equal(logs.length, 4);
+  assert.ok(!logs[0].includes('at stack'));
+
+  assert.match(rules.noLikeWarning(6, { watch: 12 }), /12 vídeos e não curtiu nenhum, com 6 curtidas faltando/);
+  assert.equal(rules.noLikeWarning(6, { watch: 12, like: 1 }), null); // curtiu algo
+  assert.equal(rules.noLikeWarning(6, { watch: 4 }), null); // viu pouco
+  assert.equal(rules.noLikeWarning(0, { watch: 30 }), null); // não faltava curtida
+  assert.match(rules.noLikeWarning(3, { reel: 10 }), /10 vídeos/); // reels do Instagram contam
+});

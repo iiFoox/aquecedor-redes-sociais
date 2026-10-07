@@ -193,12 +193,13 @@ const ACTIVITIES = {
       );
       ctl.action('reel', `${sec}s`);
 
-      // Às vezes pausa o reel com um clique, espera e volta
+      // Às vezes pausa o reel com um clique no vídeo, espera e despausa
       if (bot.random() < 0.1) {
         ctl.status('Pausou o reel');
-        await page.mouse.click(bot.rand(500, 700), bot.rand(300, 500));
-        await bot.pause('glance');
-        await page.mouse.click(bot.rand(500, 700), bot.rand(300, 500)); // despausa
+        if (await bot.tapVideo()) {
+          await bot.pause('glance');
+          await bot.tapVideo();
+        }
       }
 
       ctl.status('Passando para o próximo reel');
@@ -298,7 +299,7 @@ async function run({ page, bot, ctl, account }) {
       ok = await ACTIVITIES[act]({ page, bot, ctl, account });
     } catch (e) {
       if (isFatal(e)) throw e;
-      ctl.log(`Falha em "${ACT_LABEL[act]}": ${e.message.split('\n')[0]}`, 'warn');
+      ctl.fail(ACT_LABEL[act], e);
     }
     if (!ok) {
       fails[act] = (fails[act] || 0) + 1;

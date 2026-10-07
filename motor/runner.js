@@ -258,7 +258,10 @@ async function run(account, platform, s, ctl) {
     // Personalidade da conta + humor do dia (pequena variação de um dia para o outro)
     const bot = createBot(page, ctl, { persona: account.persona, mood: human.dayMood(account.persona, rules.localDate()) });
     bot.guard = () => guard(page, platform, account);
+    const likeLeft = ctl.left('like');
     const reason = await platform.run({ page, bot, ctl, plan: s.plan, account });
+    const noLike = rules.noLikeWarning(likeLeft, s.stats);
+    if (noLike) ctl.alert('warn', noLike, 'error');
     if (reason === 'goals' && rules.completion(s.plan, store.todayOf(account.id)) < 1)
       ctl.log(`Parte desta sessão feita (${Math.round(ctl.target * 100)}% do dia). O resto fica para a próxima sessão ✔`);
     else if (reason === 'goals') ctl.log('Todas as metas do dia foram batidas ✔');

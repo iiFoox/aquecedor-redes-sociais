@@ -48,7 +48,9 @@ npm run format         # Prettier
 ## Regras
 
 - O ID de uma conta e a pasta `data/profiles/<id>` nunca mudam: mudar perde o login.
-- Testes nunca abrem o TikTok ou o Instagram.
+- Testes nunca abrem o TikTok ou o Instagram. `tests/navegador.test.js` usa um Chromium de verdade com uma página local que
+  imita o TikTok (toda requisição é respondida no teste): é ele que pega clique que não chega no site.
+- Falha repetida (a mesma 3x numa sessão) e sessão que vê vídeos sem curtir viram alerta no painel (`ctl.fail`, `rules.noLikeWarning`).
 - Não aumentar a atividade das contas além do plano de fases. Humanizar muda COMO e QUANDO, nunca QUANTO
   (o simulador e tests/human.test.js conferem o teto de 120%). Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).
 - Captcha, bloqueio ou falta de login: a sessão para na hora e a conta fica com `attention` até o dono resolver

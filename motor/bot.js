@@ -276,6 +276,18 @@ function createBot(page, ctl, opts = {}) {
     await page.mouse.up({ clickCount: 2 });
   }
 
+  // Um clique no meio do vídeo (pausar/despausar). false se não há vídeo inteiro na tela.
+  async function tapVideo() {
+    const box = await mainVideo();
+    if (!box) return false;
+    await moveTo(Math.round(box.x + box.width * (0.3 + rng() * 0.4)), Math.round(box.y + box.height * (0.3 + rng() * 0.3)));
+    await clock.sleep(r(80, 250));
+    await page.mouse.down();
+    await clock.sleep(r(45, 110));
+    await page.mouse.up();
+    return true;
+  }
+
   // Curte um vídeo: pela personalidade, com dois cliques no vídeo ou no coração.
   // Sem vídeo na tela, vai no coração. Retorna como curtiu ('tap' | 'icon') ou null se não achou onde.
   async function likeVideo(iconSelector, iconOpts = {}) {
@@ -315,6 +327,7 @@ function createBot(page, ctl, opts = {}) {
     type,
     likeVideo,
     doubleTap,
+    tapVideo,
     moveTo,
     fidget,
     click,

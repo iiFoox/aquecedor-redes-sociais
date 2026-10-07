@@ -369,7 +369,7 @@ async function run({ page, bot, ctl, account }) {
       ok = await ACTIVITIES[act]({ page, bot, ctl, account });
     } catch (e) {
       if (isFatal(e)) throw e;
-      ctl.log(`Falha em "${ACT_LABEL[act]}": ${e.message.split('\n')[0]}`, 'warn');
+      ctl.fail(ACT_LABEL[act], e);
     }
     if (!ok) {
       fails[act] = (fails[act] || 0) + 1;
@@ -412,4 +412,6 @@ module.exports = {
   run,
   _likeVideo: likeVideo, // para os testes
   _activities: ACTIVITIES,
+  _browseComments: browseComments,
+  _typedSearch: typedSearch,
 };
