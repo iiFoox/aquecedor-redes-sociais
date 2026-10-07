@@ -87,6 +87,7 @@ function supabaseStore({ url, key }) {
     },
     async logAttempt(a) {
       const { error } = await sb.from('login_attempts').insert({
+        ...(a.t ? { t: new Date(a.t).toISOString() } : {}),
         email: a.email || null,
         user_id: a.userId || null,
         ip: a.ip || null,
@@ -187,7 +188,7 @@ function memoryStore({ now = Date.now } = {}) {
       for (const [id, s] of sessions) if (s.userId === userId && id !== exceptId) sessions.delete(id);
     },
     async logAttempt(a) {
-      attempts.push({ ...a, t: now() });
+      attempts.push({ ...a, t: a.t ?? now() });
     },
     async failuresSince(ip, since) {
       return attempts.filter((a) => a.ip === ip && a.reason === 'senha' && a.t >= since).map((a) => a.t);

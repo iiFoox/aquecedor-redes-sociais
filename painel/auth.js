@@ -9,6 +9,7 @@ const DAY = 24 * 60 * 60000;
 const REMEMBER_MS = 30 * DAY; // "Manter conectado"
 const SHORT_MS = 12 * 60 * 60000; // sem "Manter conectado": cookie some ao fechar o navegador; no servidor, 12 h sem uso
 const TOUCH_EVERY = 10 * 60000; // grava o "último uso" no banco no máximo a cada 10 min
+const RECHECK_MS = 30000; // reconfere no banco a cada 30 s: sessão encerrada por fora ("npm run usuario -- senha") cai logo
 const MAX_FAILS = 5;
 const FAIL_WINDOW = 15 * 60000;
 const LOCK_MS = 15 * 60000;
@@ -52,6 +53,8 @@ function sameOrigin(req) {
  */
 function createAuth({ store, now = Date.now, secure = false }) {
   const cache = new Map(); // id (hash) -> sessão; evita ir ao banco a cada pedido
+  // Hora da tentativa pelo relógio do painel (o relógio do banco pode estar uns segundos adiantado)
+  const logAttempt = (a) => store.logAttempt({ ...a, t: now() });
 
   function setCookie(res, code, persistent) {
     const parts = [`${COOKIE}=${code}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
@@ -76,7 +79,7 @@ function createAuth({ store, now = Date.now, secure = false }) {
       userAgent: agentOf(req),
     };
     await store.insertSession(s);
-    cache.set(s.id, s);
+    cache.set(s.id, { ...s, checkedAt: t });
     setCookie(res, code, persistent);
     return s;
   }
@@ -86,13 +89,19 @@ function createAuth({ store, now = Date.now, secure = false }) {
     const code = readCookie(req, COOKIE);
     if (!code || code.length > 100) return null;
     const id = hash(code);
+    const t = now();
     let s = cache.get(id);
-    if (!s) {
-      s = await store.getSession(id).catch(() => null);
-      if (!s) return null;
+    if (!s || t - s.checkedAt > RECHECK_MS) {
+      const fresh = await store.getSession(id).catch(() => undefined);
+      if (fresh === null) {
+        cache.delete(id); // apagada no banco (sair em outro lugar, troca de senha pelo terminal)
+        return null;
+      }
+      if (fresh) s = { ...fresh, lastSeen: Math.max(fresh.lastSeen, s ? s.lastSeen : 0) };
+      if (!s) return null; // banco fora do ar e nada na memória
+      s.checkedAt = t;
       cache.set(id, s);
     }
-    const t = now();
     if (s.expiresAt <= t) {
       cache.delete(id);
       store.deleteSession(id).catch(() => {});
@@ -141,13 +150,13 @@ function createAuth({ store, now = Date.now, secure = false }) {
     const ip = ipOf(req);
     const lock = await lockedFor(ip);
     if (lock > 0) {
-      await store.logAttempt({ email: null, ip, userAgent: agentOf(req), ok: false, reason: 'bloqueado' });
+      await logAttempt({ email: null, ip, userAgent: agentOf(req), ok: false, reason: 'bloqueado' });
       return res.status(429).json({ error: lockMsg(lock), retryAfter: Math.ceil(lock / 1000) });
     }
     const r = cred.login.safeParse(req.body || {});
     // Mensagem igual para e-mail e senha: não revela qual dos dois errou
     const wrong = async (email) => {
-      await store.logAttempt({ email, ip, userAgent: agentOf(req), ok: false, reason: 'senha' });
+      await logAttempt({ email, ip, userAgent: agentOf(req), ok: false, reason: 'senha' });
       const after = await lockedFor(ip);
       if (after > 0) return res.status(429).json({ error: lockMsg(after), retryAfter: Math.ceil(after / 1000) });
       res.status(401).json({ error: 'E-mail ou senha incorretos' });
@@ -156,7 +165,7 @@ function createAuth({ store, now = Date.now, secure = false }) {
     const userId = await store.verify(r.data.email, r.data.password).catch(() => null);
     if (!userId) return wrong(r.data.email);
     await startSession(req, res, userId, r.data.remember);
-    await store.logAttempt({ email: r.data.email, userId, ip, userAgent: agentOf(req), ok: true, reason: 'ok' });
+    await logAttempt({ email: r.data.email, userId, ip, userAgent: agentOf(req), ok: true, reason: 'ok' });
     res.json({ ok: true });
   });
 
@@ -165,7 +174,7 @@ function createAuth({ store, now = Date.now, secure = false }) {
     const ip = ipOf(req);
     const settings = await store.getSettings();
     if (!settings.signup || !isLoopback(req)) {
-      await store.logAttempt({ email: null, ip, userAgent: agentOf(req), ok: false, reason: 'cadastro-recusado' });
+      await logAttempt({ email: null, ip, userAgent: agentOf(req), ok: false, reason: 'cadastro-recusado' });
       return res.status(403).json({ error: 'Cadastro fechado. Só dá para criar conta neste PC, com o cadastro liberado em Ajustes.' });
     }
     const r = cred.signup.safeParse(req.body || {});
@@ -176,7 +185,7 @@ function createAuth({ store, now = Date.now, secure = false }) {
     if (u.error) return res.status(500).json({ error: `Não consegui criar a conta: ${u.error}` });
     if (first) await store.claimOrphans(u.id);
     await startSession(req, res, u.id, false);
-    await store.logAttempt({ email: r.data.email, userId: u.id, ip, userAgent: agentOf(req), ok: true, reason: 'cadastro' });
+    await logAttempt({ email: r.data.email, userId: u.id, ip, userAgent: agentOf(req), ok: true, reason: 'cadastro' });
     res.json({ ok: true, first });
   });
 
@@ -198,7 +207,7 @@ function createAuth({ store, now = Date.now, secure = false }) {
     cache.delete(req.session.id);
     await store.deleteSession(req.session.id);
     const u = await store.user(req.session.userId);
-    await store.logAttempt({
+    await logAttempt({
       email: u && u.email,
       userId: req.session.userId,
       ip: ipOf(req),
@@ -215,7 +224,7 @@ function createAuth({ store, now = Date.now, secure = false }) {
     if (!r.success) return res.status(400).json({ error: cred.firstError(r) });
     const u = await store.user(req.session.userId);
     if (!u || !(await store.verify(u.email, r.data.current))) {
-      await store.logAttempt({
+      await logAttempt({
         email: u && u.email,
         userId: req.session.userId,
         ip: ipOf(req),
@@ -229,7 +238,7 @@ function createAuth({ store, now = Date.now, secure = false }) {
     // Senha nova: encerra as outras sessões (outros aparelhos); esta continua
     await store.deleteUserSessions(u.id, req.session.id);
     for (const [id, s] of cache) if (s.userId === u.id && id !== req.session.id) cache.delete(id);
-    await store.logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
+    await logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
     res.json({ ok: true });
   });
 

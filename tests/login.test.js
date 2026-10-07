@@ -214,6 +214,20 @@ test('sessão: vence sem uso, sair encerra no servidor, trocar a senha derruba o
   }
 });
 
+test('sessão apagada por fora (troca de senha pelo terminal) cai em até 30 s', async () => {
+  const s = await setup();
+  try {
+    await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA });
+    const c = s.cookieOf(await s.post('/auth/login', { email: 'eu@exemplo.com', password: SENHA, remember: true }));
+    assert.equal((await s.req('/api/x', { cookie: c })).status, 200);
+    s.store._sessions.clear(); // o que o "npm run usuario -- senha" faz no banco
+    s.clock.advance(31000);
+    assert.equal((await s.req('/api/x', { cookie: c })).status, 401);
+  } finally {
+    s.close();
+  }
+});
+
 test('cadastro: dá para fechar em Ajustes', async () => {
   const s = await setup();
   try {
