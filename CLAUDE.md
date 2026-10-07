@@ -55,6 +55,8 @@ npm run format         # Prettier
   (o simulador e tests/human.test.js conferem o teto de 120%). Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).
 - Captcha, bloqueio ou falta de login: a sessão para na hora e a conta fica com `attention` até o dono resolver
   (captcha: botão "Abrir navegador"; bloqueio: "Liberar"; login: "Login"). Nada volta sozinho.
+- Navegador: Microsoft Edge instalado no Windows (`channel: 'msedge'`), sem user-agent inventado: ele se apresenta como
+  ele mesmo. Tela de cada conta sorteada entre as de PC com Windows. Não trocar de navegador sem o dono: muda o "aparelho" das contas.
 - Nunca trocar o proxy de uma conta sozinho: proxy fora do ar faz a conta esperar ("proxy-fora").
 - Backup só com tudo parado (Chrome aberto trava os arquivos). Restauração nunca apaga a pasta atual.
 - Banco: mudança de estrutura só por migração nova em `supabase/migrations`, aplicada pelo MCP do Supabase.

@@ -50,6 +50,8 @@ function proxyOpt(p) {
   }
 }
 
+const BROWSER_UI_PX = 133; // barra de tarefas do Windows (48) + abas e endereço do Edge (~85)
+
 // visible: força a janela à vista (navegador manual), ignorando o modo invisível
 async function launch(account, { visible = false } = {}) {
   const conf = store.getConfig();
@@ -61,16 +63,28 @@ async function launch(account, { visible = false } = {}) {
   ];
   if (conf.muteAudio !== false) args.push('--mute-audio');
 
+  // Microsoft Edge instalado no Windows (não o Chromium do Playwright, que quase ninguém usa para ver TikTok).
+  // Sem user-agent inventado: o Edge se apresenta como ele mesmo, coerente em tudo que o site cruza.
+  // Tela da conta = monitor; a área da página desconta a barra de tarefas e a barra do navegador.
+  const scr = account.viewport || { w: 1366, h: 768 };
   const opts = {
+    channel: 'msedge',
     headless: visible ? false : !!conf.headless,
-    viewport: account.viewport ? { width: account.viewport.w, height: account.viewport.h } : { width: 1280, height: 800 },
-    userAgent: account.userAgent || undefined,
+    screen: { width: scr.w, height: scr.h },
+    viewport: { width: scr.w, height: scr.h - BROWSER_UI_PX },
     locale: 'pt-BR',
     timezoneId: 'America/Sao_Paulo',
     args,
   };
   if (account.proxy) opts.proxy = proxyOpt(account.proxy);
-  return chromium.launchPersistentContext(profileDir(account.id), opts);
+  try {
+    return await chromium.launchPersistentContext(profileDir(account.id), opts);
+  } catch (e) {
+    // Sem cair para outro navegador: trocar de navegador muda o "aparelho" da conta
+    if (/msedge|Edge|executable|distribution/i.test(e.message))
+      throw new Error(`Não consegui abrir o Microsoft Edge (${e.message.split('\n')[0]}). O robô usa o Edge instalado no Windows`);
+    throw e;
+  }
 }
 
 // Transmite a tela do navegador via CDP (Chrome DevTools Protocol)

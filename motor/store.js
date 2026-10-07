@@ -24,35 +24,17 @@ const EVENTS_DAYS = 3; // eventos carregados ao abrir
 const ALERTS_DAYS = 30; // alertas resolvidos carregados ao abrir (os abertos vêm todos)
 const MAX_PENDING_EVENTS = 5000;
 
-// Resoluções reais pareadas com o sistema operacional certo (1440x900 é exclusivo de Mac)
-const DEVICES = [
-  {
-    w: 1920,
-    h: 1080,
-    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-  },
-  {
-    w: 1366,
-    h: 768,
-    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
-  },
-  {
-    w: 1536,
-    h: 864,
-    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36 Edg/118.0.2088.46',
-  },
-  {
-    w: 1440,
-    h: 900,
-    ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-  },
-  {
-    w: 1280,
-    h: 800,
-    ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
-  },
+// Telas comuns de PC com Windows (1920x1080 é a mais comum). O navegador é o Edge do Windows e se
+// apresenta como ele mesmo: nada de identidade inventada (user-agent), que não bate com o resto e denuncia robô.
+const SCREENS = [
+  { w: 1920, h: 1080 },
+  { w: 1920, h: 1080 },
+  { w: 1366, h: 768 },
+  { w: 1536, h: 864 },
+  { w: 1600, h: 900 },
 ];
-const pickDevice = () => DEVICES[Math.floor(Math.random() * DEVICES.length)];
+const pickScreen = () => ({ ...SCREENS[Math.floor(Math.random() * SCREENS.length)] });
+const isWindowsScreen = (v) => !!v && SCREENS.some((x) => x.w === v.w && x.h === v.h);
 
 let sb = null;
 let accounts = [];
@@ -148,11 +130,14 @@ function normalize(a) {
     a.persona = human.makePersona();
     dirty.accounts.add(a.id);
   }
-  // Conta antiga sem "hardware" fixo: sorteia um e grava
-  if (!a.viewport || !a.userAgent) {
-    const dev = pickDevice();
-    a.viewport = { w: dev.w, h: dev.h };
-    a.userAgent = dev.ua;
+  // Tela da conta: sorteada uma vez entre as de PC com Windows (contas antigas podiam ter tela de Mac)
+  if (!isWindowsScreen(a.viewport)) {
+    a.viewport = pickScreen();
+    dirty.accounts.add(a.id);
+  }
+  // Identidade inventada de navegador (antiga): sai; o Edge se apresenta como ele mesmo
+  if (a.userAgent) {
+    delete a.userAgent;
     dirty.accounts.add(a.id);
   }
 }
@@ -345,12 +330,10 @@ function pushEvent(a, ev) {
 }
 
 function add(data) {
-  const dev = pickDevice();
   const a = {
     id: crypto.randomUUID(),
     startedAt: new Date().toISOString(),
-    viewport: { w: dev.w, h: dev.h },
-    userAgent: dev.ua,
+    viewport: pickScreen(), // tela do PC desta conta (fixa)
     interests: [],
     daily: {},
     attention: null,
