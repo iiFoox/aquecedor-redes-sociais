@@ -151,10 +151,22 @@ function Side() {
 }
 
 function Banners() {
-  const { config, motorOff, setConfig, run, reload } = useStore();
+  const { config, motorOff, deviceLost, relogin, setConfig, run, reload } = useStore();
   const vacation = config?.pausedUntil && config.pausedUntil > Date.now();
   return (
     <>
+      {deviceLost && !motorOff && (
+        <div className="banner" role="alert">
+          <Icon name="lock" />
+          <div className="grow">
+            <b>Este aparelho está sem login.</b> <span className="muted">{deviceLost} Enquanto isso, nenhuma conta aquece aqui.</span>
+          </div>
+          <button className="btn sm primary" onClick={relogin}>
+            <Icon name="key" />
+            Entrar de novo
+          </button>
+        </div>
+      )}
       {motorOff && (
         <div className="motor-off" role="status">
           <Icon name="bolt" />

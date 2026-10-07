@@ -10,13 +10,20 @@ const logic = require('./logic');
 const updater = require('./updater');
 
 const ROOT = path.join(__dirname, '..');
+const pkg = require('../package.json');
 const NAME = 'WarmUp Studio';
-const PANEL_PORT = 3001;
-const MOTOR_PORT = 3101;
-const PANEL_URL = `http://localhost:${PANEL_PORT}`;
+// Id do app (notificações, "Iniciar com o Windows"). Vem do pacote: uma cópia de teste tem outro id e não mexe na de verdade.
+const APP_ID = pkg.wuAppId || 'com.warmupstudio.app';
 // Instalado: dados em %APPDATA%\WarmUp Studio\data (sobrevivem às atualizações). Rodando do projeto: data/ dele.
 const DATA = process.env.WU_DATA_DIR || (app.isPackaged ? path.join(app.getPath('userData'), 'data') : path.join(ROOT, 'data'));
 const SETTINGS = path.join(app.getPath('userData'), 'app-settings.json');
+const PENDING = path.join(DATA, 'update-pending.json'); // atualização em andamento (conferida na próxima abertura)
+// Portas e endereço de atualização: os de sempre. O teste de ponta a ponta muda pelo app-settings.json da cópia de teste.
+const LOCAL = settings();
+const PANEL_PORT = Number(LOCAL.panelPort) || 3001;
+const MOTOR_PORT = Number(LOCAL.motorPort) || 3101;
+const UPDATE_BASE = LOCAL.updateBase || updater.BASE;
+const PANEL_URL = `http://localhost:${PANEL_PORT}`;
 const HIDDEN = process.argv.includes('--escondido'); // aberto pelo Windows ao ligar: começa só na bandeja
 const AUTOSTART_ARGS = ['--escondido'];
 
@@ -25,6 +32,9 @@ let tray = null;
 let quitting = false;
 let updateReady = null; // versão baixada, esperando reiniciar
 let updateFile = null; // instalador baixado e conferido
+let updateSha = null; // SHA-256 do instalador (conferido de novo antes de instalar)
+let autoWhenIdle = false; // instala sozinho assim que a janela estiver fechada e nada aberto
+let warnedLogin = false; // já avisou que o login do aparelho caiu
 let state = { color: 'cinza', tip: `${NAME}: ligando...`, info: null };
 let seen = new Set(); // avisos já notificados (conta:tipo)
 let awake = null; // powerSaveBlocker
@@ -44,6 +54,37 @@ function saveSettings(patch) {
   fs.mkdirSync(path.dirname(SETTINGS), { recursive: true });
   fs.writeFileSync(SETTINGS, JSON.stringify({ ...settings(), ...patch }, null, 2));
 }
+
+// ---------- Registro do app (data/logs/app.log): ligou, atualizou, caiu, avisou ----------
+function log(msg) {
+  try {
+    const dir = path.join(DATA, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'app.log');
+    try {
+      if (fs.statSync(file).size > 5 * 1048576) fs.renameSync(file, `${file}.old`);
+    } catch {
+      /* ainda não existe */
+    }
+    fs.appendFileSync(file, `${new Date().toLocaleString('pt-BR')}  ${msg}\n`);
+  } catch {
+    /* registro nunca derruba o app */
+  }
+}
+
+// Atualização em andamento: gravada antes de instalar, conferida na próxima abertura
+function readPending() {
+  try {
+    return JSON.parse(fs.readFileSync(PENDING, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+function writePending(p) {
+  fs.mkdirSync(path.dirname(PENDING), { recursive: true });
+  fs.writeFileSync(PENDING, JSON.stringify(p, null, 2));
+}
+const removePending = () => fs.rmSync(PENDING, { force: true });
 
 // ---------- Motor e painel (processos filhos, com o Node do próprio Electron) ----------
 function logStream(name) {
@@ -83,10 +124,12 @@ function startChild(name, script) {
     out.write(`===== ${stamp()} ${name} parou (código ${code}) =====\n`);
     out.end();
     if (quitting || children[name] !== c) return;
+    log(`O ${name} parou sozinho (código ${code}). Ligando de novo em 3 s`);
     // Caiu: liga de novo (como o PM2 fazia). 5 quedas em 2 min: para e avisa.
     c.crashes = c.crashes.filter((t) => Date.now() - t < 120000).concat(Date.now());
     if (c.crashes.length >= 5) {
       gaveUp = name;
+      log(`O ${name} parou 5 vezes em 2 min: desisti de religar (veja ${name}.log)`);
       setState('vermelho', `${NAME}: o ${name} parou várias vezes`);
       notify(`O ${name} parou várias vezes`, `Veja o registro em ${path.join(DATA, 'logs', `${name}.log`)}`);
       return;
@@ -293,6 +336,22 @@ async function poll() {
     if (!seen.has(k)) notify(`@${a.username} (${a.platform})`, a.msg, () => showWindow(`#conta/${a.id}`));
   }
   seen = now;
+  // O login do aparelho caiu (senha trocada): avisa uma vez; clicar abre o painel, que pede para entrar de novo
+  if (info.needsLogin && !warnedLogin) {
+    warnedLogin = true;
+    log('O login deste aparelho caiu: pedindo para entrar de novo no painel');
+    notify(
+      'Entre de novo no painel',
+      'O login deste aparelho caiu (a senha foi trocada?). Nenhuma conta aquece aqui até você entrar.',
+      () => showWindow(),
+    );
+  }
+  if (!info.needsLogin && warnedLogin) {
+    warnedLogin = false;
+    log('Login do aparelho de volta');
+  }
+  // Atualização pronta e nada aberto (janela fechada, sem sessão nem navegador): instala sozinha
+  if (autoWhenIdle && updateReady && logic.idleForUpdate(info, !!(win && win.isVisible()))) installUpdate({ auto: true });
   // Notebook acordado enquanto houver sessão aquecendo (a tela pode apagar; o PC não dorme sozinho)
   if (info.running > 0 && awake === null) awake = powerSaveBlocker.start('prevent-app-suspension');
   if (info.running === 0 && awake !== null) {
@@ -386,14 +445,17 @@ function sessionEnd() {
 }
 
 // ---------- Atualização (Supabase Storage, pasta pública de downloads; ver updater.js) ----------
+// Baixa sozinha. Janela aberta: pergunta. Janela fechada: instala sozinha quando nada estiver aberto (sem sessão
+// nem navegador), e o app volta escondido, como estava. Cada passo vai para o app.log. Na próxima abertura o app
+// confere se ficou na versão nova (update-pending.json); se não ficou, tenta de novo (até 3 vezes) e avisa.
 let updating = false;
-function setupUpdates() {
+function setupUpdates(retrySoon) {
   if (!app.isPackaged) return;
-  setTimeout(() => checkUpdates(false), 60000);
+  setTimeout(() => checkUpdates(false), retrySoon ? 120000 : 60000);
   setInterval(() => checkUpdates(false), 6 * 3600000);
 }
 
-// Procura e já baixa em segundo plano; quando está pronta, avisa e pergunta
+// Procura e já baixa em segundo plano
 async function checkUpdates(manual) {
   if (!app.isPackaged || updating || updateReady) {
     if (manual && updateReady) installUpdate();
@@ -401,16 +463,18 @@ async function checkUpdates(manual) {
   }
   updating = true;
   try {
-    const m = await updater.latest(app.getVersion());
+    const m = await updater.latest(app.getVersion(), UPDATE_BASE);
     if (!m) {
       if (manual) notify('Sem atualização', `Você já está na versão ${app.getVersion()}.`);
       return;
     }
+    log(`Atualização: versão ${m.version} disponível (esta é a ${app.getVersion()}). Baixando`);
     if (manual) notify('Baixando a atualização', `Versão ${m.version}. Aviso quando estiver pronta.`);
-    updateFile = await updater.download(m, path.join(app.getPath('temp'), 'warmup-studio-update'));
+    updateFile = await updater.download(m, path.join(app.getPath('temp'), `${APP_ID}-update`), () => {}, UPDATE_BASE);
+    updateSha = m.sha256;
     updateReady = m.version;
+    log(`Atualização: versão ${m.version} baixada e conferida`);
     if (tray) tray.setContextMenu(menu());
-    notify('Atualização pronta', `A versão ${m.version} foi baixada. Clique para atualizar (o app reinicia sozinho).`, installUpdate);
     if (win && win.isVisible()) {
       const r = await dialog.showMessageBox(win, {
         type: 'info',
@@ -421,33 +485,102 @@ async function checkUpdates(manual) {
         message: `A versão ${m.version} do WarmUp Studio está pronta.`,
         detail: 'As sessões em andamento fecham com segurança e o app volta sozinho. Nada se perde.',
       });
-      if (r.response === 0) installUpdate();
+      if (r.response === 0) return installUpdate();
+      log('Atualização: você escolheu "Depois". Instala sozinha quando a janela estiver fechada e nada aberto');
+    } else {
+      notify(
+        'Atualização pronta',
+        `A versão ${m.version} instala sozinha quando nenhuma conta estiver aquecendo. Clique para atualizar agora.`,
+        () => installUpdate(),
+      );
     }
+    autoWhenIdle = true;
   } catch (e) {
-    console.error('Atualização:', e.message);
+    log(`Atualização: falhou (${e.message})`);
     if (manual) notify('Não consegui atualizar', e.message);
   } finally {
     updating = false;
   }
 }
 
-async function installUpdate() {
+// opts.auto: instalação sozinha (janela fechada, nada aberto). O app volta escondido.
+async function installUpdate(opts) {
   if (!updateFile || quitting) return;
+  const auto = !!(opts && opts.auto === true);
+  const to = updateReady;
+  // O instalador ficou horas na pasta temporária: confere de novo antes de usar
+  if ((await updater.hashFile(updateFile)) !== updateSha) {
+    log('Atualização: o instalador baixado mudou ou sumiu. Baixo de novo na próxima procura');
+    updateFile = updateReady = updateSha = null;
+    autoWhenIdle = false;
+    if (tray) tray.setContextMenu(menu());
+    return;
+  }
+  const prev = readPending();
+  const attempts = prev && prev.to === to ? (prev.attempts || 1) + 1 : 1;
+  const hidden = auto || !(win && win.isVisible());
+  writePending({ from: app.getVersion(), to, at: Date.now(), attempts, hidden });
+  log(`Atualização: instalando ${app.getVersion()} → ${to} (${auto ? 'sozinha, nada aberto' : 'você pediu'}, tentativa ${attempts})`);
   quitting = true;
   setState('cinza', `${NAME}: atualizando...`);
   await stopChildren();
-  updater.install(updateFile);
+  try {
+    const pid = await updater.install(updateFile);
+    log(`Atualização: instalador aberto (pid ${pid}). Fechando o app para ele trocar os arquivos e abrir a versão ${to}`);
+  } catch (e) {
+    // O instalador nem abriu: continua nesta versão (religa motor e painel) e avisa
+    log(`Atualização: o instalador não abriu (${e.message}). Continuo na versão ${app.getVersion()}`);
+    removePending();
+    quitting = false;
+    autoWhenIdle = false;
+    startChild('motor', 'motor/index.js');
+    startChild('painel', 'painel/index.js');
+    notify('Não consegui atualizar', `O instalador não abriu (${e.message}). Tento de novo mais tarde.`);
+    return;
+  }
   app.exit(0);
+}
+
+// Abriu depois de uma atualização? Confere se ficou na versão nova. Devolve se deve começar escondido.
+function checkPending() {
+  const p = readPending();
+  const d = logic.pendingUpdate(p, app.getVersion());
+  if (!d) return { hidden: false, retry: false };
+  if (d === 'ok') {
+    log(`Atualização concluída: agora na versão ${app.getVersion()} (era ${p.from})`);
+    removePending();
+    notify('WarmUp Studio atualizado', `Agora na versão ${app.getVersion()}. Tudo continua de onde parou.`);
+    return { hidden: !!p.hidden, retry: false };
+  }
+  if (d === 'ignorar') {
+    removePending();
+    return { hidden: false, retry: false };
+  }
+  if (d === 'desistir') {
+    log(`Atualização para ${p.to}: ${p.attempts} tentativas sem sucesso. Paro de tentar sozinho`);
+    removePending();
+    notify(
+      'Não consegui atualizar sozinho',
+      'Clique com o botão direito no ícone perto do relógio → Procurar atualização. Se não der, instale de novo pelo instalador.',
+    );
+    return { hidden: false, retry: false };
+  }
+  log(`Atualização para ${p.to} não terminou (ainda na ${app.getVersion()}, tentativa ${p.attempts}). Tento de novo em 2 min`);
+  return { hidden: !!p.hidden, retry: true };
 }
 
 // ---------- Início ----------
 if (!app.requestSingleInstanceLock()) {
+  log('Já havia um WarmUp Studio aberto: esta cópia fechou e o outro mostrou a janela');
   app.quit(); // já aberto: o outro mostra a janela
 } else {
   app.on('second-instance', () => showWindow());
-  app.setAppUserModelId('com.warmupstudio.app'); // notificações com o nome do app
+  app.setAppUserModelId(APP_ID); // notificações com o nome do app
   app.whenReady().then(async () => {
+    const pending = checkPending();
+    log(`App ligou: versão ${app.getVersion()}${HIDDEN || pending.hidden ? ', escondido' : ''}`);
     if (await portBusy()) {
+      log(`A porta ${MOTOR_PORT} já está em uso (versão de terminal ligada?): app fechou`);
       await dialog.showMessageBox({
         type: 'warning',
         title: NAME,
@@ -462,13 +595,18 @@ if (!app.requestSingleInstanceLock()) {
     setState('cinza', `${NAME}: ligando...`);
     startChild('motor', 'motor/index.js');
     startChild('painel', 'painel/index.js');
-    // Primeira abertura do app instalado: liga "Iniciar com o Windows"
+    // Primeira abertura do app instalado: liga "Iniciar com o Windows". Já ligado: confere se aponta para este
+    // executável (a pasta pode ter mudado numa atualização) e corrige.
     if (app.isPackaged && settings().autostart === undefined) setAutostart(true);
-    if (!HIDDEN) showWindow();
+    else if (app.isPackaged && settings().autostart && !app.getLoginItemSettings({ args: AUTOSTART_ARGS }).openAtLogin) {
+      log('"Iniciar com o Windows" apontava para outro lugar: corrigido para este executável');
+      setAutostart(true);
+    }
+    if (!HIDDEN && !pending.hidden) showWindow();
     setInterval(poll, 10000);
     setTimeout(poll, 4000);
     watchPower();
-    setupUpdates();
+    setupUpdates(pending.retry);
   });
   // Janela fechada não fecha o app (bandeja)
   app.on('window-all-closed', () => {});
@@ -477,6 +615,7 @@ if (!app.requestSingleInstanceLock()) {
     e.preventDefault();
     if (quitting === 'stopping') return;
     quitting = 'stopping';
+    log('App fechando: encerrando motor e painel com segurança');
     setState('cinza', `${NAME}: fechando as sessões com segurança...`);
     await stopChildren();
     app.exit(0);

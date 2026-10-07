@@ -124,13 +124,16 @@ function cloudStore({ dir, now = Date.now, url = SUPABASE_URL, key = SUPABASE_PU
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return { error: 'exists' };
       return { id: data.user.id, email: data.user.email, session: sessionOut(data.session), needsConfirm: !data.session };
     },
+    // Senha trocada: o Supabase derruba os outros logins (inclusive o do aparelho). Devolve um login novo,
+    // que o painel entrega ao motor deste aparelho.
     async changePassword(email, current, next) {
       const c = pub();
       const { data, error } = await c.auth.signInWithPassword({ email, password: current });
       if (error || !data.session) return false;
       const r = await c.auth.updateUser({ password: next });
       if (r.error) throw new Error(r.error.message);
-      return true;
+      const s = await c.auth.getSession();
+      return { session: sessionOut(s.data.session || data.session) };
     },
     // "Esqueci a senha": o Supabase manda um link por e-mail que volta para redirectTo
     async sendReset(email, redirectTo) {
@@ -145,7 +148,8 @@ function cloudStore({ dir, now = Date.now, url = SUPABASE_URL, key = SUPABASE_PU
       if (s.error || !s.data.user) return null;
       const r = await c.auth.updateUser({ password });
       if (r.error) throw new Error(r.error.message);
-      return { id: s.data.user.id, email: s.data.user.email };
+      const now = await c.auth.getSession();
+      return { id: s.data.user.id, email: s.data.user.email, session: sessionOut(now.data.session || s.data.session) };
     },
     // O primeiro usuário do projeto fica com as contas antigas (sem dono). Para os outros não faz nada.
     async claimLegacy(session) {
@@ -185,7 +189,7 @@ function memoryStore({ now = Date.now } = {}) {
       const u = users.get(email);
       if (!u || u.password !== current) return false;
       u.password = next;
-      return true;
+      return { session: fakeSession(u) };
     },
     async sendReset(email) {
       if (users.has(email)) tokens.set(`rec-${email}`, email);
@@ -196,7 +200,7 @@ function memoryStore({ now = Date.now } = {}) {
       tokens.delete(access_token);
       const u = users.get(email);
       u.password = password;
-      return { id: u.id, email };
+      return { id: u.id, email, session: fakeSession(u) };
     },
     async claimLegacy(session) {
       const first = [...users.values()][0];

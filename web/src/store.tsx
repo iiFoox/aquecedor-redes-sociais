@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   api,
   ApiError,
+  expired,
   type Account,
   type BackupStatus,
   type Config,
@@ -36,6 +37,8 @@ interface Store {
   backup: BackupStatus | null;
   feed: FeedEvent[];
   motorOff: boolean;
+  deviceLost: string | null; // o aparelho está sem login (motivo); "Entrar de novo" religa
+  relogin: () => Promise<void>;
   view: View;
   accountId: string | null;
   flash: string | null; // card que acabou de bater a meta
@@ -86,6 +89,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [backup, setBackup] = useState<BackupStatus | null>(null);
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [motorOff, setMotorOff] = useState(false);
+  const [deviceLost, setDeviceLost] = useState<string | null>(null);
   const [nav, setNav] = useState(readHash);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
@@ -160,8 +164,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBackup(b);
       await loadAccounts();
       setMotorOff(false);
+      setDeviceLost(null);
     } catch (e) {
       if (e instanceof ApiError && e.motorOff) setMotorOff(true);
+      if (e instanceof ApiError && e.needsDevice) {
+        setMotorOff(false);
+        setDeviceLost(e.message);
+      }
     }
   }, [loadAccounts]);
 
@@ -187,6 +196,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       /* já estava fora */
     }
     location.replace('/login');
+  }, []);
+
+  // Entrar de novo: sai do painel e volta para o login, que entrega um login novo ao motor deste aparelho
+  const relogin = useCallback(async () => {
+    try {
+      await api('/auth/sair', 'POST', {});
+    } catch {
+      /* já estava fora */
+    }
+    expired('religar');
   }, []);
 
   // Carga inicial + atualização a cada 10 s (o tempo real cobre o resto)
@@ -256,7 +275,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         if (ev.type === 'attention' && acc && ev.attention) toast(`@${acc.username}: ${(ev.attention as { msg: string }).msg}`, 'bad');
         if (ev.type === 'backup' && ev.backup) toast(`Backup dos logins feito (${(ev.backup as { sizeMB: number }).sizeMB} MB)`);
-        if (['vacation', 'backup', 'proxies'].includes(ev.type)) reload();
+        if (['vacation', 'backup', 'proxies', 'device-login'].includes(ev.type)) reload();
         soon();
       };
     };
@@ -330,6 +349,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     me,
     setMe,
     logout,
+    relogin,
+    deviceLost,
     meta,
     accounts,
     proxies,

@@ -22,7 +22,8 @@ const AUTOSTART = path.join(
 
 // token: senha interna (motor/token.js). Só o painel a conhece.
 // deviceUser(): usuário dono deste aparelho (null = ainda ninguém entrou aqui). Os testes passam o seu.
-function createApi({ token, deviceUser = () => (cloud.ready() ? cloud.user().id : null) } = {}) {
+// deviceUser(): null também quando o login do aparelho caiu (senha trocada): o painel pede para entrar de novo
+function createApi({ token, deviceUser = () => (cloud.ready() && !cloud.needsLogin() ? cloud.user().id : null) } = {}) {
   const app = express();
 
   // Tranca: o endereço tem de ser este PC (barra truques de DNS) e o pedido tem de trazer a senha interna.
@@ -41,9 +42,12 @@ function createApi({ token, deviceUser = () => (cloud.ready() ? cloud.user().id 
     // O aparelho roda para um usuário só: quem entrou no painel tem de ser ele
     const owner = deviceUser();
     if (!owner)
-      return res
-        .status(503)
-        .json({ error: 'Este aparelho ainda não está ligado à sua conta. Entre de novo no painel.', needsDevice: true });
+      return res.status(503).json({
+        error: cloud.needsLogin()
+          ? 'O login deste aparelho caiu (a senha foi trocada?). Entre de novo no painel.'
+          : 'Este aparelho ainda não está ligado à sua conta. Entre de novo no painel.',
+        needsDevice: true,
+      });
     if (owner !== req.userId)
       return res.status(403).json({ error: 'Este aparelho está ligado a outro usuário do WarmUp Studio.', otherUser: true });
     next();

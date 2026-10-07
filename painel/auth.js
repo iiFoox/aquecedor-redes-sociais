@@ -134,6 +134,16 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     return `Muitas tentativas. Tente de novo em ${min} min.`;
   };
 
+  // Depois de trocar ou recuperar a senha: login novo para o motor deste aparelho (o antigo caiu no Supabase).
+  // Sem login novo (não deveria acontecer), ao menos tranca a chave dos logins com a senha nova.
+  async function relink(u, password) {
+    if (u.session) {
+      const r = await onLogin(u.session, u.id, password).catch(() => null);
+      if (r && !r.error && !(r.status >= 400)) return; // motor religado com o login novo
+    }
+    await onVault(u.id, { mode: 'rewrap', password }).catch(() => null);
+  }
+
   // ---------- Rotas /auth ----------
   const router = express.Router();
   router.use(express.json({ limit: '10kb' }));
@@ -230,8 +240,8 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     // Senha nova: as sessões abertas do painel neste aparelho saem
     await store.deleteUserSessions(u.id);
     for (const [id, s] of cache) if (s.userId === u.id) cache.delete(id);
-    // Este aparelho tem a chave dos logins: tranca com a senha nova
-    await onVault(u.id, { mode: 'rewrap', password: pw.data }).catch(() => null);
+    // Senha nova derruba o login do aparelho: entrega o novo ao motor (e a chave dos logins é trancada com ela)
+    await relink(u, pw.data);
     await logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
     res.json({ ok: true });
   });
@@ -267,14 +277,15 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     const r = cred.change.safeParse(req.body || {});
     if (!r.success) return res.status(400).json({ error: cred.firstError(r) });
     const { email, userId } = req.session;
-    if (!(await store.changePassword(email, r.data.current, r.data.password).catch(() => false))) {
+    const changed = await store.changePassword(email, r.data.current, r.data.password).catch(() => false);
+    if (!changed) {
       await logAttempt({ email, userId, ip: ipOf(req), userAgent: agentOf(req), ok: false, reason: 'senha' });
       return res.status(400).json({ error: 'A senha atual não confere' });
     }
     // Senha nova: encerra as outras sessões do painel; esta continua
     await store.deleteUserSessions(userId, req.session.id);
     for (const [id, s] of cache) if (s.userId === userId && id !== req.session.id) cache.delete(id);
-    await onVault(userId, { mode: 'rewrap', password: r.data.password }).catch(() => null);
+    await relink({ id: userId, session: changed.session }, r.data.password);
     await logAttempt({ email, userId, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
     res.json({ ok: true });
   });

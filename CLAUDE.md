@@ -71,11 +71,20 @@ este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma con
 - `desktop/`: o aplicativo do Windows (app 4/5). `main.js` sobe motor e painel (Node do próprio Electron,
   `ELECTRON_RUN_AS_NODE`), janela, bandeja com cor (`logic.trayState`), notificações, iniciar com o Windows,
   aparelho acordado durante sessões, bateria (<20% segura sessão nova: `motor/power.js`) e suspensão (para as sessões).
-  Instala em `%LOCALAPPDATA%Programswarmup-studio`; dados em `%APPDATA%WarmUp Studiodata`. `installer.nsh`: desinstalar tira o
-  início com o Windows (numa atualização não). Fala com o motor por `/api/_device/tray` e `/api/_device/power` (o navegador não alcança).
+  Instalador com assistente em português (pasta, atalhos na Área de Trabalho e no Menu Iniciar, "abrir no final"); instalação
+  nova vai para `%LOCALAPPDATA%\Programs\WarmUp Studio`, e as que já existem continuam na pasta delas (o NSIS lembra).
+  Dados em `%APPDATA%\WarmUp Studio\data`. `installer.nsh`: sempre "só para mim" e desinstalar tira o início com o Windows
+  (`${APP_ID}`; numa atualização não). Id do app (notificações, início com o Windows) = `wuAppId` do pacote.
+  Fala com o motor por `/api/_device/tray` e `/api/_device/power` (o navegador não alcança). Registro do app: `data/logs/app.log`.
   `updater.js`: atualização pelo bucket público `downloads`. O plano gratuito do Supabase aceita até 50 MB por arquivo:
-  o instalador vai em partes de 45 MB + `latest.json` (SHA-256 de cada parte e do todo) e é instalado em silêncio (`/S --force-run`).
+  o instalador vai em partes de 45 MB + `latest.json` (SHA-256 de cada parte e do todo) e é instalado em silêncio (`/S --force-run --updated`).
+  Janela aberta: pergunta. Janela fechada e nada aberto (sem sessão nem navegador): instala sozinha e volta escondida.
+  Antes de instalar grava `data/update-pending.json`; na volta confere a versão (`logic.pendingUpdate`), tenta de novo até 3 vezes.
   `scripts/instalar.ps1`: primeira instalação num aparelho novo (`irm .../downloads/instalar.ps1 | iex`). Ícones: `npm run icones`.
+- Login do aparelho (`motor/cloud.js`): entrar de novo no painel SUBSTITUI o login guardado (trocar ou recuperar a senha derruba
+  os outros logins no Supabase; o painel entrega o novo ao motor na hora). Login caído (`SIGNED_OUT` ou login salvo inválido):
+  `needsLogin`, a API responde `needsDevice` e o painel mostra "Entrar de novo"; o ícone fica amarelo e avisa. Sem rede ao
+  ligar: tenta de novo a cada 15 s (não pede login).
 - `scripts/`: `servico.js` (PM2 e inicialização do Windows), `restaurar.js`, `publicar.js`, `app.js`. `ecosystem.config.js`: PM2.
 - `data/`: fora do Git. `profiles/<id>` (sessões logadas), `screens/<id>` (prints), `logs/` (PM2).
 
@@ -84,6 +93,10 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
 ## Regras
 
 - O ID de uma conta e a pasta `data/profiles/<id>` nunca mudam: mudar perde o login.
+- Instalador e atualização: NUNCA testar com o id de verdade (`com.warmupstudio.app`). O NSIS acha a instalação pelo id e
+  desinstala a do dono mesmo com `/D=` em outra pasta. Testar com uma cópia de outra identidade: `-c.appId=com.warmupstudio.teste`,
+  `productName`, `win.executableName`, `nsis.shortcutName` e `extraMetadata` (`name`, `productName`, `wuAppId`, `version`) próprios,
+  e portas/servidor de atualização no `app-settings.json` dela (`panelPort`, `motorPort`, `updateBase`).
 - Testes nunca abrem o TikTok ou o Instagram. `tests/navegador.test.js` usa um Chromium de verdade com uma página local que
   imita o TikTok (toda requisição é respondida no teste): é ele que pega clique que não chega no site.
 - Falha repetida (a mesma 3x numa sessão) e sessão que vê vídeos sem curtir viram alerta no painel (`ctl.fail`, `rules.noLikeWarning`).

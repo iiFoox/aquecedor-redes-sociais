@@ -505,4 +505,5 @@ module.exports = {
   stopWatchdog,
   setLock,
   busy,
+  openBrowsers: () => Object.keys(manual).length,
 };

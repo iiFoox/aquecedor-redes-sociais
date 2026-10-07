@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const EventEmitter = require('events');
-const { createClient } = require('@supabase/supabase-js');
+const { createClient, isAuthRetryableFetchError } = require('@supabase/supabase-js');
 const dpapi = require('./dpapi');
 const { version } = require('../package.json');
 
@@ -24,10 +24,12 @@ let user = null; // { id, email }
 let device = null; // { id, name }
 let beat = null;
 let commandsChannel = null;
+// O login do aparelho caiu enquanto ele rodava (senha trocada, sessão encerrada): precisa entrar de novo no painel
+let needsLogin = false;
 
-const newClient = () =>
+const newClient = (autoRefreshToken = true) =>
   createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false },
+    auth: { persistSession: false, autoRefreshToken, detectSessionInUrl: false },
     realtime: { params: { eventsPerSecond: 20 } },
   });
 
@@ -55,48 +57,92 @@ function readSavedSession() {
   }
 }
 
-function watchAuth() {
-  client.auth.onAuthStateChange((event, session) => {
+function watchAuth(c) {
+  c.auth.onAuthStateChange((event, session) => {
+    if (c !== client) return; // conexão antiga, já trocada
     // Token renovado: guarda o novo (o antigo deixa de valer). Tempo real usa o token novo.
     if (session && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN')) {
       saveSession(session);
-      client.realtime.setAuth(session.access_token);
+      c.realtime.setAuth(session.access_token);
+      if (needsLogin) {
+        needsLogin = false;
+        hub.emit('login', { needsLogin });
+      }
+    }
+    // O Supabase recusou renovar o login (senha trocada ou sessão encerrada em outro lugar): o aparelho não
+    // consegue mais falar com o banco. Avisa (painel e ícone do relógio) para você entrar de novo.
+    if (event === 'SIGNED_OUT' && user && !needsLogin) {
+      needsLogin = true;
+      console.warn('⚠️  O login deste aparelho caiu (a senha foi trocada?). Entre de novo no painel para religar.');
+      hub.emit('login', { needsLogin });
     }
   });
 }
 
-// Liga com o login salvo deste aparelho. false = ninguém logou neste aparelho ainda (ou o login venceu).
+/**
+ * Liga com o login salvo deste aparelho. Devolve:
+ * 'ok' · 'nenhum' (ninguém entrou aqui ainda) · 'invalido' (o login salvo não vale mais: entre de novo) ·
+ * 'sem-rede' (não deu para falar com o Supabase: tente de novo daqui a pouco, o login continua guardado)
+ */
 async function resume() {
   const saved = readSavedSession();
-  if (!saved) return false;
-  client = newClient();
-  watchAuth();
-  const { data, error } = await client.auth.refreshSession({ refresh_token: saved.refresh_token });
+  if (!saved) return 'nenhum';
+  const c = newClient();
+  client = c;
+  watchAuth(c);
+  const { data, error } = await c.auth.refreshSession({ refresh_token: saved.refresh_token });
   if (error || !data.session) {
     client = null;
-    return false;
+    c.auth.stopAutoRefresh();
+    if (error && isAuthRetryableFetchError(error)) return 'sem-rede';
+    needsLogin = true;
+    console.warn(`⚠️  O login salvo deste aparelho não vale mais (${error ? error.message : 'sem sessão'}). Entre de novo no painel.`);
+    return 'invalido';
   }
   saveSession(data.session);
   // O tempo real precisa do login do usuário (sem ele, as regras do banco não deixam passar nada)
-  client.realtime.setAuth(data.session.access_token);
+  c.realtime.setAuth(data.session.access_token);
   user = { id: data.user.id, email: data.user.email };
-  return true;
+  needsLogin = false;
+  return 'ok';
 }
 
 // Login vindo do painel deste aparelho (depois que você entra). O aparelho fica ligado a esse usuário.
 async function link({ access_token, refresh_token }) {
-  const c = newClient();
-  const { data, error } = await c.auth.setSession({ access_token, refresh_token });
-  if (error || !data.user) throw new Error(`Login inválido: ${error ? error.message : 'sem usuário'}`);
+  // Confere o login com uma conexão que não renova sozinha (duas conexões renovando o mesmo login derrubam ele)
+  const probe = newClient(false);
+  const { data, error } = await probe.auth.setSession({ access_token, refresh_token });
+  if (error || !data.user || !data.session) throw new Error(`Login inválido: ${error ? error.message : 'sem usuário'}`);
   if (user && user.id !== data.user.id)
     throw Object.assign(new Error('Este aparelho já está ligado a outro usuário'), { code: 'OTHER_USER' });
-  // Mesma pessoa entrando de novo: o aparelho já roda com a conexão dele (contas e canais presos a ela)
-  if (user) return { already: true };
+  const fresh = { access_token: data.session.access_token, refresh_token: data.session.refresh_token };
+  // Mesma pessoa entrando de novo: troca o login da conexão em uso (contas e canais continuam presos a ela).
+  // Importante depois de trocar ou recuperar a senha: o Supabase derruba o login antigo do aparelho.
+  if (user && client) {
+    const r = await client.auth.setSession(fresh);
+    if (r.error || !r.data.session) throw new Error(`Login inválido: ${r.error ? r.error.message : 'sem sessão'}`);
+    saveSession(r.data.session);
+    client.realtime.setAuth(r.data.session.access_token);
+    const was = needsLogin;
+    needsLogin = false;
+    if (was) {
+      console.log('🔑 Login do aparelho renovado');
+      hub.emit('login', { needsLogin });
+    }
+    return { already: true };
+  }
+  const c = newClient();
   client = c;
-  watchAuth();
-  client.realtime.setAuth(data.session.access_token);
+  watchAuth(c);
+  const r = await c.auth.setSession(fresh);
+  if (r.error || !r.data.session) {
+    client = null;
+    throw new Error(`Login inválido: ${r.error ? r.error.message : 'sem sessão'}`);
+  }
+  c.realtime.setAuth(r.data.session.access_token);
   user = { id: data.user.id, email: data.user.email };
-  saveSession(data.session);
+  needsLogin = false;
+  saveSession(r.data.session);
   return { already: false };
 }
 
@@ -238,6 +284,7 @@ module.exports = {
   user: () => user,
   device: () => device,
   ready: () => !!(client && user && device),
+  needsLogin: () => needsLogin,
   ONLINE_MS,
   SUPABASE_URL,
   SUPABASE_PUBLISHABLE_KEY,

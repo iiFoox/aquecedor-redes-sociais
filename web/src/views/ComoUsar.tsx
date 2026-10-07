@@ -264,7 +264,14 @@ export function ComoUsar() {
             a menos que você mude isso nas Opções de energia.
           </Item>
           <Item t="Esqueci a senha.">Na tela de login, use Esqueci a senha: chega um link no seu e-mail.</Item>
-          <Item t="Como atualizo?">Sozinho: quando sai versão nova, o app baixa e pergunta “Atualizar agora”. Nada se perde.</Item>
+          <Item t="Como atualizo?">
+            Sozinho. Com a janela aberta, o app pergunta “Atualizar agora”. Com a janela fechada, instala assim que nenhuma conta estiver
+            aquecendo e volta sozinho, já logado. Nada se perde.
+          </Item>
+          <Item t="O painel pediu para entrar de novo.">
+            Acontece quando a senha é trocada ou recuperada: o login antigo do aparelho deixa de valer. Clique em Entrar de novo e use a
+            senha atual.
+          </Item>
           <Item t="Busca rápida:">Ctrl+K abre a busca: contas, telas e ações (nova conta, férias, backup, tema).</Item>
         </ul>
       ),

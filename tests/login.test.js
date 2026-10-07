@@ -312,12 +312,15 @@ test('chave dos logins: a senha do login vai para o motor; troca de senha tranca
     assert.equal(s.linked[0].password, SENHA);
     await s.post('/auth/login', { email: 'eu@exemplo.com', password: SENHA });
     assert.equal(s.linked[1].password, SENHA);
+    // Trocar a senha derruba o login do aparelho no Supabase: o painel entrega um login novo ao motor na hora
     await s.post('/auth/senha', { current: SENHA, password: 'senha nova 456' }, c);
-    assert.deepEqual(s.vaultCalls.at(-1).mode, 'rewrap');
-    assert.equal(s.vaultCalls.at(-1).password, 'senha nova 456');
+    assert.equal(s.linked.length, 3);
+    assert.equal(s.linked[2].password, 'senha nova 456');
+    assert.ok(s.linked[2].session.refresh_token, 'sem login novo para o motor');
     await s.post('/auth/esqueci', { email: 'eu@exemplo.com' });
     await s.post('/auth/nova-senha', { access_token: 'rec-eu@exemplo.com', refresh_token: 'x', password: 'senha nova 789' });
-    assert.equal(s.vaultCalls.at(-1).password, 'senha nova 789');
+    assert.equal(s.linked.at(-1).password, 'senha nova 789', 'senha recuperada não religou o motor');
+    assert.equal(s.vaultCalls.length, 0, 'religou: não precisa do caminho antigo');
   } finally {
     s.close();
   }

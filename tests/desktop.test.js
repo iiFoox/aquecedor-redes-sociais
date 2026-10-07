@@ -116,3 +116,33 @@ test('atualização: baixa as partes, confere cada uma e o instalador inteiro', 
   // Aviso de versão com nome de parte esquisito: recusa
   await assert.rejects(updater.download({ ...m, parts: [{ name: '../../x', sha256: 'a' }] }, dir), /inválido/);
 });
+
+test('bandeja: login do aparelho caído fica amarelo e diz o que fazer', () => {
+  const t = logic.trayState(info({ needsLogin: true }));
+  assert.equal(t.color, 'amarelo');
+  assert.match(t.text, /entre de novo/);
+});
+
+test('atualização sozinha: só com a janela fechada e nada aberto', () => {
+  assert.equal(logic.idleForUpdate(info(), false), true);
+  assert.equal(logic.idleForUpdate(info(), true), false, 'janela aberta: pergunta');
+  assert.equal(logic.idleForUpdate(info({ running: 1 }), false), false, 'sessão aquecendo');
+  assert.equal(logic.idleForUpdate(info({ browsers: 1 }), false), false, 'navegador de login aberto');
+  assert.equal(logic.idleForUpdate(null, false), false, 'motor sem responder');
+});
+
+test('depois de atualizar: confere a versão, tenta de novo até 3 vezes e esquece aviso velho', () => {
+  const now = Date.parse('2026-10-07T20:00:00Z');
+  const p = (o) => ({ from: '2.0.3', to: '2.0.4', at: now - 60000, attempts: 1, ...o });
+  assert.equal(logic.pendingUpdate(null, '2.0.4', now), null);
+  assert.equal(logic.pendingUpdate(p(), '2.0.4', now), 'ok');
+  assert.equal(logic.pendingUpdate(p(), '2.0.5', now), 'ok', 'já passou da esperada');
+  assert.equal(logic.pendingUpdate(p(), '2.0.3', now), 'tentar');
+  assert.equal(logic.pendingUpdate(p({ attempts: 2 }), '2.0.3', now), 'tentar');
+  assert.equal(logic.pendingUpdate(p({ attempts: 3 }), '2.0.3', now), 'desistir');
+  assert.equal(logic.pendingUpdate(p({ at: now - 3 * 86400000 }), '2.0.3', now), 'ignorar');
+});
+
+test('instalar: avisa na hora se o instalador nem abre (arquivo sumiu)', async () => {
+  await assert.rejects(updater.install(path.join(os.tmpdir(), `nao-existe-${Date.now()}.exe`)));
+});

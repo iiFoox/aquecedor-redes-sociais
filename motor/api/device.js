@@ -19,6 +19,7 @@ router.get('/_device', (req, res) => {
     email: u && u.id === req.userId ? u.email : null,
     device: d && u && u.id === req.userId ? { id: d.id, name: d.name, named: !!d.named } : null,
     vault: u && u.id === req.userId ? boot.vaultStatus() : null, // chave dos logins: ok | trancada | off
+    needsLogin: cloud.needsLogin(), // o login do aparelho caiu: entrar de novo no painel
   });
 });
 
@@ -65,11 +66,13 @@ router.get('/_device/tray', (req, res) => {
   const sessions = runner.activeSessions();
   res.json({
     linked: !!cloud.user(),
+    needsLogin: cloud.needsLogin(),
     ready,
     email: cloud.user() ? cloud.user().email : null,
     device: cloud.device() ? cloud.device().name : null,
     accounts: mine.length,
     running: Object.keys(sessions).length,
+    browsers: runner.openBrowsers(), // janelas de login/captcha abertas
     pilot: ready ? !!store.getConfig().active : false,
     power: power.hold(),
     vault: boot.vaultStatus(),

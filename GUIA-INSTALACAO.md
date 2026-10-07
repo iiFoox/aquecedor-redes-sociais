@@ -20,9 +20,10 @@ enxergam tudo pelo painel. Uma conta nunca roda em dois aparelhos ao mesmo tempo
    ```
    robocopy "C:\Users\vfbnn\.gemini\antigravity-ide\scratch\insta-warmer\data\profiles" "$env:APPDATA\WarmUp Studio\data\profiles" /E
    ```
-3. **Instale:** dê dois cliques em `release\WarmUp-Studio-Setup-2.0.3.exe` (ou use o comando do item 3, abaixo).
+3. **Instale:** dê dois cliques em `release\WarmUp-Studio-Setup-2.0.4.exe` (ou use o comando do item 3, abaixo).
    O Windows mostra "O Windows protegeu o computador" (o app não tem assinatura paga): **Mais informações → Executar assim mesmo**.
-   Instala sem pedir administrador e abre sozinho.
+   O instalador, em português, mostra a pasta (pode trocar) e cria os atalhos na Área de Trabalho e no Menu Iniciar.
+   Não pede administrador e abre o app no final.
 4. **Primeira abertura:**
    - **Criar conta** com o seu e-mail e senha. O 1º usuário do projeto fica com as contas antigas (alemdofato5 e skateanimals2).
    - Dê um **nome ao aparelho** (ex.: "PC do quarto").
@@ -57,13 +58,17 @@ enxergam tudo pelo painel. Uma conta nunca roda em dois aparelhos ao mesmo tempo
 
 1. Suba a versão em `package.json` (ex.: `"version": "2.0.1"`).
 2. `npm run publicar` (gera, confere que nenhum segredo vai junto e envia em partes para o Supabase).
-3. Os aparelhos baixam sozinhos em até 6 h e perguntam "Atualizar agora". Para não esperar: ícone → Procurar atualização.
-   Nada se perde: os dados ficam em `%APPDATA%\WarmUp Studio\data`.
+3. Os aparelhos baixam sozinhos (1 min depois de abrir e a cada 6 h). Com a janela aberta, perguntam "Atualizar agora".
+   Com a janela fechada, instalam sozinhos assim que nenhuma conta estiver aquecendo e voltam escondidos, já logados.
+   Para não esperar: ícone → Procurar atualização. Nada se perde: os dados ficam em `%APPDATA%\WarmUp Studio\data`.
 
 ## 6. Se algo der errado
 
 - **"O WarmUp Studio já está rodando neste PC pelo terminal":** `npm run desligar` na pasta do projeto e abra o app de novo.
 - **Ícone vermelho com "o motor parou várias vezes":** ícone → Abrir a pasta dos registros → `motor.log`.
+- **"Este aparelho está sem login" (faixa no painel, ícone amarelo):** acontece quando a senha é trocada ou recuperada em outro
+  lugar (o Supabase derruba os logins antigos). Clique em **Entrar de novo** e entre com a senha atual: as contas voltam a aquecer.
+- **Algo estranho numa atualização:** ícone → Abrir a pasta dos registros → `app.log` (cada passo da atualização fica anotado).
 - **"Chave trancada" em Logins na nuvem:** este aparelho ficou sem a chave dos logins (ela foi trocada em outro
   aparelho, ou a senha foi recuperada pelo "Esqueci a senha"). Clique em **Destrancar com a senha atual**. Se não abrir,
   **Tenho a senha antiga**. Último caso: **Começar chave nova** (as contas sem pasta neste aparelho pedem login de novo).

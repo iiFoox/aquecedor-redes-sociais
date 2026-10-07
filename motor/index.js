@@ -13,6 +13,9 @@ const cloud = require('./cloud');
 const boot = require('./boot');
 const { createApi } = require('./api');
 
+// O login do aparelho caiu ou voltou: o painel e o ícone do relógio ficam sabendo na hora
+cloud.hub.on('login', (ev) => runner.notify({ type: 'device-login', ...ev }));
+
 const PORT = Number(process.env.MOTOR_PORT) || 3101;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let server = null;
@@ -28,8 +31,16 @@ async function main() {
     process.exit(1);
   });
   // Login salvo deste aparelho: liga sozinho. Senão, espera você entrar no painel.
-  if (await cloud.resume()) await boot.startDevice();
-  else console.log('⏳ Entre no painel para ligar este aparelho à sua conta.');
+  // Sem internet ainda (comum logo que o Windows liga): tenta de novo a cada 15 s, sem pedir login.
+  for (let tries = 0; ; tries++) {
+    const r = await cloud.resume();
+    if (r === 'ok') return boot.startDevice();
+    if (r === 'nenhum') return console.log('⏳ Entre no painel para ligar este aparelho à sua conta.');
+    if (r === 'invalido') return console.log('⏳ Entre de novo no painel para religar este aparelho.');
+    if (tries === 0) console.log('🌐 Sem conexão com o Supabase ainda. Tentando de novo a cada 15 s...');
+    await wait(15000);
+    if (closing || boot.started() || cloud.user()) return; // você entrou no painel enquanto isso
+  }
 }
 
 // Fecha as sessões (elas gravam o histórico) e grava o que falta antes de sair

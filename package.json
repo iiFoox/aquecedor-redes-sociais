@@ -1,6 +1,6 @@
 {
   "name": "insta-warmer",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "WarmUp Studio: aquecimento de contas do TikTok e do Instagram, com painel web e Supabase",
   "private": true,
   "main": "desktop/main.js",
@@ -83,7 +83,8 @@
     ],
     "extraMetadata": {
       "main": "desktop/main.js",
-      "name": "warmup-studio"
+      "name": "warmup-studio",
+      "wuAppId": "com.warmupstudio.app"
     },
     "win": {
       "target": [
@@ -94,14 +95,25 @@
           ]
         }
       ],
-      "icon": "desktop/icons/app.png",
+      "icon": "desktop/icons/app.ico",
       "executableName": "WarmUp Studio"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
       "shortcutName": "WarmUp Studio",
+      "uninstallDisplayName": "WarmUp Studio",
+      "installerIcon": "desktop/icons/app.ico",
+      "uninstallerIcon": "desktop/icons/app.ico",
+      "installerLanguages": [
+        "pt_BR"
+      ],
+      "language": "1046",
       "artifactName": "WarmUp-Studio-Setup-${version}.${ext}",
       "include": "desktop/installer.nsh"
     },

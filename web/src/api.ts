@@ -216,9 +216,11 @@ export interface StreamEvent {
 
 export class ApiError extends Error {
   motorOff: boolean;
-  constructor(msg: string, motorOff: boolean) {
+  needsDevice: boolean; // o motor está ligado, mas o aparelho está sem login (entrar de novo religa)
+  constructor(msg: string, motorOff: boolean, needsDevice = false) {
     super(msg);
     this.motorOff = motorOff;
+    this.needsDevice = needsDevice;
   }
 }
 
@@ -239,16 +241,17 @@ export async function api<T = unknown>(url: string, method = 'GET', body?: unkno
     expired();
     throw new ApiError(data.error || 'Sessão expirada', false);
   }
-  if (!r.ok) throw new ApiError(data.error || `Erro ${r.status}`, !!data.motorOff);
+  if (!r.ok) throw new ApiError(data.error || `Erro ${r.status}`, !!data.motorOff, !!data.needsDevice);
   return data as T;
 }
 
 let leaving = false;
-export function expired() {
+// why: 'religar' = o login do aparelho caiu (a tela de login explica); senão, sessão do painel vencida
+export function expired(why: 'sessao' | 'religar' = 'sessao') {
   if (leaving) return;
   leaving = true;
   try {
-    sessionStorage.setItem('wu-expired', '1');
+    sessionStorage.setItem('wu-expired', why);
   } catch {
     /* sem armazenamento: só não mostra o aviso */
   }

@@ -7,6 +7,7 @@ const GRAVE = ['captcha', 'block'];
 // verde: tudo certo · amarelo: precisa de você (login, proxy, chave, bateria) · vermelho: captcha/bloqueio · cinza: ligando
 function trayState(info) {
   if (!info) return { color: 'cinza', text: 'ligando o motor...' };
+  if (info.needsLogin) return { color: 'amarelo', text: 'o login deste aparelho caiu: entre de novo no painel' };
   if (!info.linked) return { color: 'amarelo', text: 'entre no painel para ligar este aparelho' };
   if (!info.ready) return { color: 'cinza', text: 'carregando as contas...' };
   const grave = info.attention.filter((a) => GRAVE.includes(a.kind));
@@ -17,6 +18,22 @@ function trayState(info) {
   if (info.running) return { color: 'verde', text: `aquecendo ${info.running} conta(s)` };
   if (!info.accounts) return { color: 'verde', text: 'ligado, sem contas neste aparelho' };
   return { color: 'verde', text: info.pilot ? 'piloto automático ligado' : 'ligado (piloto automático desligado)' };
+}
+
+// Dá para atualizar sozinho agora, sem perguntar? Só com a janela fechada e nada aberto (sessão ou navegador).
+function idleForUpdate(info, windowVisible) {
+  return !!info && !windowVisible && info.running === 0 && !info.browsers;
+}
+
+// Abriu depois de uma atualização? pending = o que foi gravado antes de instalar ({ from, to, at, attempts }).
+// 'ok' (já está na versão nova) · 'tentar' (continua na antiga: tenta de novo) · 'desistir' (3 tentativas) ·
+// 'ignorar' (aviso velho demais, de mais de 2 dias)
+const MAX_UPDATE_TRIES = 3;
+function pendingUpdate(pending, version, now = Date.now()) {
+  if (!pending || !pending.to) return null;
+  if (now - (pending.at || 0) > 2 * 86400000) return 'ignorar';
+  if (!newer(pending.to, version)) return 'ok'; // versão atual >= a esperada
+  return (pending.attempts || 1) >= MAX_UPDATE_TRIES ? 'desistir' : 'tentar';
 }
 
 // Versão a é mais nova que b? ("2.1.0" > "2.0.9"; partes que faltam contam como 0)
@@ -40,4 +57,4 @@ function chunks(size, max) {
   return out;
 }
 
-module.exports = { trayState, newer, chunks };
+module.exports = { trayState, newer, chunks, idleForUpdate, pendingUpdate, MAX_UPDATE_TRIES };

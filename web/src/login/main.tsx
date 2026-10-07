@@ -22,13 +22,14 @@ const saveEmail = (e: string) => {
     /* navegador sem armazenamento: só não lembra */
   }
 };
+// Por que voltou para o login: '' (abriu normal) · 'sessao' (sessão do painel venceu) · 'religar' (login do aparelho caiu)
 const takeExpired = () => {
   try {
-    const v = sessionStorage.getItem('wu-expired');
+    const v = sessionStorage.getItem('wu-expired') || '';
     sessionStorage.removeItem('wu-expired');
-    return !!v;
+    return v === '1' ? 'sessao' : v;
   } catch {
-    return false;
+    return '';
   }
 };
 const goPanel = () => location.replace('/' + location.hash);
@@ -220,7 +221,9 @@ function Login() {
         {expired && !error && !notice && (
           <div className="auth-note" role="status">
             <Icon name="lock" />
-            Sua sessão expirou. Entre de novo para continuar de onde parou.
+            {expired === 'religar'
+              ? 'O login deste aparelho caiu (por exemplo, a senha foi trocada). Entre de novo para religar as contas.'
+              : 'Sua sessão expirou. Entre de novo para continuar de onde parou.'}
           </div>
         )}
         {notice && (
