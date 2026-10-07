@@ -377,3 +377,39 @@ test('curtida do TikTok: só conta se o coração ficou vermelho; vídeo já cur
   assert.ok(!page.events.slice(before).some((e) => e.type === 'click' || e.type === 'down'), 'clicou num vídeo já curtido');
   assert.match(logs[0], /já estava curtido/);
 });
+
+test('cursor do Playwright: anda em curva, clica num ponto variado dentro do elemento', async () => {
+  const { createCursor } = require('../motor/cursor');
+  const ev = [];
+  const page = {
+    viewportSize: () => ({ width: 1280, height: 800 }),
+    mouse: {
+      move: async (x, y) => ev.push({ t: 'move', x, y }),
+      down: async () => ev.push({ t: 'down' }),
+      up: async () => ev.push({ t: 'up' }),
+    },
+  };
+  const cursor = createCursor(page, { rng: human.makeRng(9), sleep: async () => {}, start: { x: 100, y: 100 } });
+  const box = { x: 900, y: 380, width: 48, height: 48 };
+  const hits = [];
+  for (let i = 0; i < 20; i++) {
+    const before = ev.length;
+    await cursor.click({ boundingBox: async () => box });
+    const mine = ev.slice(before);
+    assert.deepEqual(
+      mine.slice(-2).map((e) => e.t),
+      ['down', 'up'],
+    );
+    const last = mine.filter((e) => e.t === 'move').pop() || hits[hits.length - 1];
+    assert.ok(last.x >= box.x + box.width * 0.2 - 1 && last.x <= box.x + box.width * 0.8 + 1, 'clique fora do meio do botão');
+    hits.push(last);
+    await cursor.moveTo({ x: 200 + i * 10, y: 600 }); // sai do botão antes do próximo clique
+  }
+  assert.ok(new Set(hits.map((h) => `${Math.round(h.x)},${Math.round(h.y)}`)).size > 12, 'sempre o mesmo pixel');
+  // Movimento longo passa por vários pontos (curva), não pula direto
+  const before = ev.length;
+  await cursor.moveTo({ x: 1200, y: 100 });
+  assert.ok(ev.length - before > 20);
+  // Elemento sem posição: erro claro em vez de clique no lugar errado
+  await assert.rejects(cursor.click({ boundingBox: async () => null }), /fora da tela/);
+});

@@ -35,15 +35,15 @@ const isFatal = (e) => e instanceof StopError || e instanceof AbortError;
  * opts (o simulador troca tudo isso por versões falsas):
  *  - persona: personalidade da conta (human.makePersona). Sem ela, usa valores médios.
  *  - mood: humor do dia (human.dayMood)
- *  - rng: sorteio. clock: { now, sleep }. cursor: cursor do mouse (padrão: ghost-cursor).
+ *  - rng: sorteio. clock: { now, sleep }. cursor: cursor do mouse (padrão: motor/cursor.js).
  */
 function createBot(page, ctl, opts = {}) {
   const rng = opts.rng || Math.random;
   const clock = opts.clock || realClock;
   const persona = opts.persona || null;
   const mood = opts.mood || null;
-  const cursor = opts.cursor || require('ghost-cursor').createCursor(page);
   const pos = { x: rand(400, 800, rng), y: rand(250, 550, rng) };
+  const cursor = opts.cursor || require('./cursor').createCursor(page, { rng, sleep: clock.sleep, start: { ...pos } });
   const vp = () => page.viewportSize() || { width: 1280, height: 800 };
   const r = (a, b) => rand(a, b, rng);
   let fatigue = 1.0;
@@ -88,7 +88,7 @@ function createBot(page, ctl, opts = {}) {
     await hold(ms, label, 'watch');
   }
 
-  // Movimento de mouse gerado pelo ghost-cursor (curvas com aceleração e leve erro no alvo)
+  // Movimento de mouse em curva, com aceleração e às vezes passando do alvo (motor/cursor.js)
   async function moveTo(x, y) {
     await cursor.moveTo({ x, y });
     pos.x = x;
@@ -112,8 +112,9 @@ function createBot(page, ctl, opts = {}) {
 
   async function click(el, scroll = true) {
     if (scroll) await el.scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
-    // O ghost-cursor faz a curva até o alvo, passa um pouco e corrige antes de clicar
+    // O cursor faz a curva até um ponto variado do elemento, mira e clica
     await cursor.click(el);
+    if (cursor.position) Object.assign(pos, cursor.position);
     return true;
   }
 
