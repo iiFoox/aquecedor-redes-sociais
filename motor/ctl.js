@@ -35,9 +35,12 @@ function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
     priority: (act) => rules.activityPriority(act, plan, done()),
     missing: (labels) => rules.missingText(plan, done(), labels),
     // Sessão terminou? Todas as metas batidas (ignorando as inalcançáveis nesta sessão), ou a parte do dia
-    // que esta sessão devia cobrir (target < 1: sessão curta da rotina; o resto fica para a próxima)
+    // que esta sessão devia cobrir (target < 1: sessão curta da rotina; o resto fica para a próxima).
+    // A parte vale para CADA meta (37% dos vídeos, 37% das curtidas...), não para a média: pela média,
+    // a única visita de perfil do dia sozinha já valia 33% e a sessão acabava em 1 minuto.
     goalsDone: (skip = []) =>
-      goalKeys.every((k) => skip.includes(k) || left(k) <= 0) || (target < 1 && rules.completion(plan, done()) >= target),
+      goalKeys.every((k) => skip.includes(k) || left(k) <= 0) ||
+      (target < 1 && goalKeys.every((k) => skip.includes(k) || (done()[k] || 0) >= Math.round(plan[k] * target))),
     target,
     stalled: () => now() - state.lastProgress > STALL_MS,
     status(text, ms) {

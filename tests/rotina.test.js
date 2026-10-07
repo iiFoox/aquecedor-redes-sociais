@@ -118,6 +118,21 @@ test('agendador: espera a sessão planejada e não abre colado em outra conta', 
   assert.ok(gaps.size > 2, 'espaçamento igual para todas as contas');
 });
 
+test('sessão curta da rotina cobre a parte dela de cada meta, não da média (caso do perfil único)', () => {
+  // Caso real: 1ª sessão do dia (37%), plano com 1 perfil. Perfil + 3 vídeos + 1 curtida dava 43% de média
+  // e a sessão acabava em 50 s. Agora precisa de ~37% de cada meta.
+  const done = { profile: 1, watch: 3, like: 1 };
+  const state = { stop: false, stats: {}, startedAt: 0, endsAt: 1e12, lastProgress: 0, lastBeat: 0 };
+  const hooks = { status() {}, action() {}, log() {}, alert() {} };
+  const plan = { minutes: 12, watch: 29, like: 5, follow: 0, profile: 1, search: 0 };
+  const ctl = createCtl({ state, plan, done: () => done, hooks, target: 0.37, now: () => 0 });
+  assert.equal(ctl.goalsDone(), false);
+  done.watch = 11;
+  assert.equal(ctl.goalsDone(), false); // faltam curtidas: 37% de 5 = 2
+  done.like = 2;
+  assert.equal(ctl.goalsDone(), true);
+});
+
 test('sessão curta da rotina para quando cobre a parte dela do dia', () => {
   const done = { watch: 0, like: 0 };
   const state = { stop: false, stats: {}, startedAt: 0, endsAt: 1e12, lastProgress: 0, lastBeat: 0 };
