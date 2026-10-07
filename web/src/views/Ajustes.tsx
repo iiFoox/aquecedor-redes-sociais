@@ -1,5 +1,6 @@
 // Ajustes: conta do painel, tema, navegador das sessões, motor (PM2 e inicialização) e backup dos logins.
 import { api, type Config } from '../api.ts';
+import { Aparelhos } from '../components/Aparelho.tsx';
 import { ContaPainel } from '../components/ContaPainel.tsx';
 import { Icon } from '../components/Icon.tsx';
 import { duration } from '../lib/format.ts';
@@ -29,6 +30,7 @@ export function Ajustes() {
     <div className="set-grid">
       <div className="stack">
         <ContaPainel />
+        <Aparelhos />
         <section className="panel">
           <h2>Aparência</h2>
           <div className="set-row">

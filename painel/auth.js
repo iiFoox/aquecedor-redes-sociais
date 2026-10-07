@@ -51,7 +51,8 @@ function sameOrigin(req) {
  * store: authStore (supabaseStore ou memoryStore). now: relógio (os testes avançam o tempo).
  * secure: cookie só em https.
  */
-function createAuth({ store, now = Date.now, secure = false }) {
+// onLogin(session, userId): entrega o login do Supabase ao motor deste aparelho (painel/index.js). Devolve a situação do aparelho.
+function createAuth({ store, now = Date.now, secure = false, onLogin = async () => null }) {
   const cache = new Map(); // id (hash) -> sessão; evita ir ao banco a cada pedido
   // Hora da tentativa pelo relógio do painel (o relógio do banco pode estar uns segundos adiantado)
   const logAttempt = (a) => store.logAttempt({ ...a, t: now() });
@@ -66,12 +67,13 @@ function createAuth({ store, now = Date.now, secure = false }) {
     res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? '; Secure' : ''}`);
   }
 
-  async function startSession(req, res, userId, persistent) {
+  async function startSession(req, res, userId, persistent, email = null) {
     const code = crypto.randomBytes(32).toString('base64url');
     const t = now();
     const s = {
       id: hash(code),
       userId,
+      email,
       persistent,
       lastSeen: t,
       expiresAt: t + (persistent ? REMEMBER_MS : SHORT_MS),
@@ -146,6 +148,18 @@ function createAuth({ store, now = Date.now, secure = false }) {
     res.json({ logged: !!s, signup: !!settings.signup && isLoopback(req) });
   });
 
+  // Entrou (login ou cadastro): sessão do painel + o login do Supabase vai para o motor deste aparelho
+  async function enter(req, res, u, persistent, reason) {
+    await startSession(req, res, u.id, persistent, u.email);
+    await logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason });
+    let device = null;
+    if (u.session) {
+      await store.claimLegacy(u.session).catch((e) => console.error(`⚠️  Contas antigas: ${e.message}`));
+      device = await onLogin(u.session, u.id).catch((e) => ({ error: e.message }));
+    }
+    return device;
+  }
+
   router.post('/login', async (req, res) => {
     const ip = ipOf(req);
     const lock = await lockedFor(ip);
@@ -162,11 +176,10 @@ function createAuth({ store, now = Date.now, secure = false }) {
       res.status(401).json({ error: 'E-mail ou senha incorretos' });
     };
     if (!r.success) return wrong(null);
-    const userId = await store.verify(r.data.email, r.data.password).catch(() => null);
-    if (!userId) return wrong(r.data.email);
-    await startSession(req, res, userId, r.data.remember);
-    await logAttempt({ email: r.data.email, userId, ip, userAgent: agentOf(req), ok: true, reason: 'ok' });
-    res.json({ ok: true });
+    const u = await store.verify(r.data.email, r.data.password).catch(() => null);
+    if (!u) return wrong(r.data.email);
+    const device = await enter(req, res, u, r.data.remember, 'ok');
+    res.json({ ok: true, device });
   });
 
   // Cadastro: só deste PC e com o cadastro liberado em Ajustes
@@ -179,14 +192,45 @@ function createAuth({ store, now = Date.now, secure = false }) {
     }
     const r = cred.signup.safeParse(req.body || {});
     if (!r.success) return res.status(400).json({ error: cred.firstError(r) });
-    const first = (await store.countUsers()) === 0;
-    const u = await store.createUser(r.data.email, r.data.password);
+    const u = await store.signup(r.data.email, r.data.password);
     if (u.error === 'exists') return res.status(409).json({ error: 'Já existe uma conta com esse e-mail. Entre pelo login.' });
     if (u.error) return res.status(500).json({ error: `Não consegui criar a conta: ${u.error}` });
-    if (first) await store.claimOrphans(u.id);
-    await startSession(req, res, u.id, false);
-    await logAttempt({ email: r.data.email, userId: u.id, ip, userAgent: agentOf(req), ok: true, reason: 'cadastro' });
-    res.json({ ok: true, first });
+    await logAttempt({ email: u.email, userId: u.id, ip, userAgent: agentOf(req), ok: true, reason: 'cadastro' });
+    // Supabase com confirmação de e-mail ligada: entra depois de clicar no link do e-mail
+    if (u.needsConfirm) return res.json({ ok: true, confirm: true, message: `Enviamos um link para ${u.email}. Confirme e depois entre.` });
+    const device = await enter(req, res, u, false, 'ok');
+    res.json({ ok: true, device });
+  });
+
+  // Esqueci a senha: o Supabase manda um link por e-mail que abre /nova-senha neste painel.
+  // Responde igual exista ou não o e-mail (não revela quem tem conta).
+  router.post('/esqueci', async (req, res) => {
+    const r = cred.email.safeParse((req.body || {}).email || '');
+    if (!r.success) return res.status(400).json({ error: 'E-mail inválido' });
+    try {
+      await store.sendReset(r.data, `${req.headers.origin || `http://${req.headers.host}`}/nova-senha`);
+    } catch (e) {
+      if (e.status === 429) return res.status(429).json({ error: e.message });
+      console.error(`⚠️  Recuperação de senha: ${e.message}`);
+    }
+    await logAttempt({ email: r.data, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'esqueci' });
+    res.json({ ok: true, message: 'Se esse e-mail tiver conta, chega um link para criar uma senha nova.' });
+  });
+
+  // Senha nova pelo link do e-mail (o link traz os códigos de recuperação)
+  router.post('/nova-senha', async (req, res) => {
+    const b = req.body || {};
+    const pw = cred.password.safeParse(b.password || '');
+    if (!pw.success) return res.status(400).json({ error: cred.firstError(pw) });
+    if (typeof b.access_token !== 'string' || typeof b.refresh_token !== 'string')
+      return res.status(400).json({ error: 'Link inválido. Peça outro em "Esqueci a senha".' });
+    const u = await store.resetWithTokens({ access_token: b.access_token, refresh_token: b.refresh_token }, pw.data).catch(() => null);
+    if (!u) return res.status(400).json({ error: 'Link vencido ou já usado. Peça outro em "Esqueci a senha".' });
+    // Senha nova: as sessões abertas do painel neste aparelho saem
+    await store.deleteUserSessions(u.id);
+    for (const [id, s] of cache) if (s.userId === u.id) cache.delete(id);
+    await logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
+    res.json({ ok: true });
   });
 
   // Daqui para baixo: só logado
@@ -197,18 +241,15 @@ function createAuth({ store, now = Date.now, secure = false }) {
   });
 
   router.get('/eu', async (req, res) => {
-    const u = await store.user(req.session.userId);
-    if (!u) return res.status(401).json({ error: 'Usuário não existe mais', auth: false });
     const settings = await store.getSettings();
-    res.json({ id: u.id, email: u.email, signup: !!settings.signup, persistent: req.session.persistent });
+    res.json({ id: req.session.userId, email: req.session.email, signup: !!settings.signup, persistent: req.session.persistent });
   });
 
   router.post('/sair', async (req, res) => {
     cache.delete(req.session.id);
     await store.deleteSession(req.session.id);
-    const u = await store.user(req.session.userId);
     await logAttempt({
-      email: u && u.email,
+      email: req.session.email,
       userId: req.session.userId,
       ip: ipOf(req),
       userAgent: agentOf(req),
@@ -222,29 +263,20 @@ function createAuth({ store, now = Date.now, secure = false }) {
   router.post('/senha', async (req, res) => {
     const r = cred.change.safeParse(req.body || {});
     if (!r.success) return res.status(400).json({ error: cred.firstError(r) });
-    const u = await store.user(req.session.userId);
-    if (!u || !(await store.verify(u.email, r.data.current))) {
-      await logAttempt({
-        email: u && u.email,
-        userId: req.session.userId,
-        ip: ipOf(req),
-        userAgent: agentOf(req),
-        ok: false,
-        reason: 'senha',
-      });
+    const { email, userId } = req.session;
+    if (!(await store.changePassword(email, r.data.current, r.data.password).catch(() => false))) {
+      await logAttempt({ email, userId, ip: ipOf(req), userAgent: agentOf(req), ok: false, reason: 'senha' });
       return res.status(400).json({ error: 'A senha atual não confere' });
     }
-    await store.setPassword(u.id, r.data.password);
-    // Senha nova: encerra as outras sessões (outros aparelhos); esta continua
-    await store.deleteUserSessions(u.id, req.session.id);
-    for (const [id, s] of cache) if (s.userId === u.id && id !== req.session.id) cache.delete(id);
-    await logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
+    // Senha nova: encerra as outras sessões do painel; esta continua
+    await store.deleteUserSessions(userId, req.session.id);
+    for (const [id, s] of cache) if (s.userId === userId && id !== req.session.id) cache.delete(id);
+    await logAttempt({ email, userId, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
     res.json({ ok: true });
   });
 
   router.get('/acessos', async (req, res) => {
-    const u = await store.user(req.session.userId);
-    res.json(await store.recentAttempts(req.session.userId, u ? u.email : '', 10));
+    res.json(await store.recentAttempts(req.session.userId, req.session.email, 10));
   });
 
   router.put('/cadastro-liberado', async (req, res) => {

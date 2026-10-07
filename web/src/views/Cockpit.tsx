@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import type { Account, Config, Meta } from '../api.ts';
 import { AccountActions, AttentionBox, GoalChips, Journey, Ring, StatePill, Strip } from '../components/bits.tsx';
+import { DeviceTag } from '../components/Aparelho.tsx';
 import { Icon, PlatformBadge } from '../components/Icon.tsx';
 import {
   agendaRange,
@@ -203,6 +204,7 @@ export function AccountCard({ a, meta, now }: { a: Account; meta: Meta; now: num
         </div>
         <StatePill a={a} />
       </div>
+      <DeviceTag a={a} />
       <Journey a={a} meta={meta} />
       <div className="goals">
         <div className="g-top">

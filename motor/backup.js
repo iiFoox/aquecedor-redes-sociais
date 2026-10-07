@@ -11,7 +11,7 @@ const rules = require('./rules');
 
 const BACKUP_AT = '04:00';
 const KEEP = 7;
-const DATA = path.join(__dirname, '..', 'data');
+const { DATA } = require('./paths');
 const PREFIX = 'warmup-perfis-';
 
 // Pastas de cache do Chrome: recriadas sozinhas, não vale guardar (são ~95% do tamanho)
@@ -93,7 +93,7 @@ async function run() {
   try {
     fs.mkdirSync(dir, { recursive: true });
     // Lista de qual pasta é qual conta, para a restauração saber o que está trazendo de volta
-    const accounts = store.all().map((a) => ({ id: a.id, platform: a.platform, username: a.username }));
+    const accounts = store.mine().map((a) => ({ id: a.id, platform: a.platform, username: a.username }));
     fs.writeFileSync(listFile, JSON.stringify({ at: new Date().toISOString(), accounts }, null, 2));
     await tar(['-czf', tmp, ...EXCLUDE.flatMap((x) => ['--exclude', x]), '-C', DATA, 'contas.json', 'profiles']);
     fs.renameSync(tmp, path.join(dir, name));

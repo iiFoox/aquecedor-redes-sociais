@@ -2,7 +2,9 @@
 // Se o motor cair ou reiniciar, o painel continua no ar e avisa que o motor está voltando.
 const path = require('path');
 const { createAuth } = require('./auth');
-const { supabaseStore } = require('./authStore');
+const http = require('http');
+const { cloudStore } = require('./authStore');
+const motorToken = require('../motor/token');
 const { createPainel } = require('./app');
 
 try {
@@ -14,13 +16,44 @@ try {
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '127.0.0.1';
 const MOTOR_PORT = Number(process.env.MOTOR_PORT) || 3101;
-const { SUPABASE_URL, SUPABASE_KEY } = process.env;
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('❌ Faltam SUPABASE_URL e SUPABASE_KEY no .env (o login do painel usa o Supabase).');
-  process.exit(1);
+
+// Entrega ao motor deste aparelho o login do Supabase de quem acabou de entrar (o aparelho passa a rodar como ele)
+function linkDevice(session, userId) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(session);
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: MOTOR_PORT,
+        path: '/api/_device/link',
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+          [motorToken.HEADER]: motorToken.read() || '',
+          'x-wu-user': userId,
+        },
+        timeout: 60000,
+      },
+      (res) => {
+        let s = '';
+        res.on('data', (d) => (s += d));
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, ...JSON.parse(s) });
+          } catch {
+            resolve({ status: res.statusCode });
+          }
+        });
+      },
+    );
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('O motor não respondeu')));
+    req.end(body);
+  });
 }
 
-const auth = createAuth({ store: supabaseStore({ url: SUPABASE_URL, key: SUPABASE_KEY }) });
+const auth = createAuth({ store: cloudStore({ dir: path.join(require('../motor/paths').DATA, 'painel') }), onLogin: linkDevice });
 const app = createPainel({ auth, dist: path.join(__dirname, '..', 'web', 'dist'), motorPort: MOTOR_PORT });
 
 if (process.env.PANEL_PASSWORD) console.warn('ℹ️  PANEL_PASSWORD não é mais usada: o painel agora tem tela de login.');

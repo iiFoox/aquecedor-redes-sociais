@@ -41,7 +41,9 @@ async function setup() {
     res.end(JSON.stringify({ path: req.url, method: req.method, headers: req.headers }));
   });
   await new Promise((r) => motor.listen(0, '127.0.0.1', r));
-  const auth = createAuth({ store, now: clock.now });
+  // Entrega do login ao motor: guarda o que recebeu
+  const linked = [];
+  const auth = createAuth({ store, now: clock.now, onLogin: async (session, userId) => (linked.push({ session, userId }), { ok: true }) });
   const app = createPainel({ auth, dist: fakeDist(), motorPort: motor.address().port, readToken: () => 'senha-interna' });
   const server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
@@ -77,7 +79,7 @@ async function setup() {
     server.close();
     motor.close();
   };
-  return { req, post, cookieOf, store, clock, close, origin };
+  return { req, post, cookieOf, store, clock, close, origin, linked };
 }
 
 const SENHA = 'senha forte 123';
@@ -110,17 +112,15 @@ test('cadastro e login: cookie httpOnly; "Manter conectado" dura 30 dias; o prim
   try {
     const cad = await s.post('/auth/cadastro', { email: 'Eu@Exemplo.com', password: SENHA });
     assert.equal(cad.status, 200);
-    assert.equal(cad.json.first, true);
     assert.match(cad.setCookie, /HttpOnly/);
     assert.match(cad.setCookie, /SameSite=Lax/);
     assert.doesNotMatch(cad.setCookie, /Max-Age/); // sem "Manter conectado": some ao fechar o navegador
     const me = s.store._users.get('eu@exemplo.com');
     assert.equal(s.store._orphans.claimedBy, me.id);
     // Senha não fica em lugar nenhum do registro de acessos
-    assert.ok(!JSON.stringify(s.store._attempts).includes(SENHA));
+    assert.ok(!JSON.stringify(s.store._attempts.list()).includes(SENHA));
 
-    const segundo = await s.post('/auth/cadastro', { email: 'outro@exemplo.com', password: SENHA });
-    assert.equal(segundo.json.first, false);
+    assert.equal((await s.post('/auth/cadastro', { email: 'outro@exemplo.com', password: SENHA })).status, 200);
     assert.equal(s.store._orphans.claimedBy, me.id, 'o segundo usuário pegou as contas do primeiro');
     assert.equal((await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA })).status, 409);
     assert.equal((await s.post('/auth/cadastro', { email: 'x@exemplo.com', password: 'curta' })).status, 400);
@@ -237,6 +237,60 @@ test('cadastro: dá para fechar em Ajustes', async () => {
     assert.equal(off.status, 200);
     assert.equal((await s.req('/auth/estado')).json.signup, false);
     assert.equal((await s.post('/auth/cadastro', { email: 'novo@exemplo.com', password: SENHA })).status, 403);
+  } finally {
+    s.close();
+  }
+});
+
+test('entrar entrega o login do Supabase ao motor deste aparelho', async () => {
+  const s = await setup();
+  try {
+    await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA });
+    const me = s.store._users.get('eu@exemplo.com');
+    assert.equal(s.linked.length, 1);
+    assert.equal(s.linked[0].userId, me.id);
+    assert.equal(s.linked[0].session.refresh_token, `renova-${me.id}`);
+    const r = await s.post('/auth/login', { email: 'eu@exemplo.com', password: SENHA });
+    assert.deepEqual(r.json.device, { ok: true });
+    assert.equal(s.linked.length, 2);
+  } finally {
+    s.close();
+  }
+});
+
+test('cadastro com confirmação de e-mail ligada: não entra até confirmar', async () => {
+  const s = await setup();
+  try {
+    s.store._confirm = true;
+    const r = await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.confirm, true);
+    assert.match(r.json.message, /Confirme/);
+    assert.equal(r.setCookie, null, 'entrou sem confirmar o e-mail');
+    assert.equal(s.linked.length, 0);
+    assert.equal((await s.post('/auth/login', { email: 'eu@exemplo.com', password: SENHA })).status, 401);
+  } finally {
+    s.close();
+  }
+});
+
+test('esqueci a senha: resposta igual com ou sem conta; o link do e-mail troca a senha uma vez só', async () => {
+  const s = await setup();
+  try {
+    const c = s.cookieOf(await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA }));
+    const comConta = await s.post('/auth/esqueci', { email: 'eu@exemplo.com' });
+    const semConta = await s.post('/auth/esqueci', { email: 'ninguem@exemplo.com' });
+    assert.equal(comConta.status, 200);
+    assert.equal(comConta.json.message, semConta.json.message);
+    assert.equal((await s.post('/auth/esqueci', { email: 'nao-e-email' })).status, 400);
+    const tokens = { access_token: 'rec-eu@exemplo.com', refresh_token: 'x' };
+    assert.equal((await s.post('/auth/nova-senha', { ...tokens, password: 'curta' })).status, 400);
+    assert.equal((await s.post('/auth/nova-senha', { ...tokens, password: 'senha nova 789' })).status, 200);
+    assert.equal((await s.post('/auth/nova-senha', { ...tokens, password: 'outra senha 111' })).status, 400, 'o link valeu duas vezes');
+    assert.equal((await s.req('/api/x', { cookie: c })).status, 401, 'a sessão aberta continuou depois da senha nova');
+    assert.equal((await s.post('/auth/login', { email: 'eu@exemplo.com', password: SENHA })).status, 401);
+    assert.equal((await s.post('/auth/login', { email: 'eu@exemplo.com', password: 'senha nova 789' })).status, 200);
+    assert.equal((await s.req('/nova-senha')).status, 200, 'a página do link precisa abrir sem login');
   } finally {
     s.close();
   }

@@ -28,6 +28,7 @@ import {
   when,
 } from '../lib/format.ts';
 import { useStore } from '../store.tsx';
+import { DeviceBar } from '../components/Aparelho.tsx';
 import { useNow } from './Cockpit.tsx';
 
 // Tela do navegador da sessão, transmitida pelo motor (quadros JPEG)
@@ -42,6 +43,17 @@ function LiveScreen({ a }: { a: Account }) {
     return () => es.close();
   }, [a.id, on]);
   const now = useNow(1000);
+  // Conta de outro aparelho: a tela ao vivo fica lá; aqui, o que o robô está fazendo
+  if (on && !a.mine)
+    return (
+      <div className="screen">
+        <div className="screen-msg">
+          <Icon name="window" />
+          <b>{a.live ? `Aquecendo em ${a.deviceName || 'outro aparelho'}` : 'Navegador aberto no outro aparelho'}</b>
+          <span>{a.live ? a.live.status : 'A tela ao vivo aparece no aparelho dono da conta.'}</span>
+        </div>
+      </div>
+    );
   if (on)
     return (
       <>
@@ -378,6 +390,7 @@ export function Conta() {
           </button>
         </div>
       </div>
+      <DeviceBar a={a} />
       {a.attention && (
         <div style={{ marginBottom: 14 }}>
           <AttentionBox a={a} />

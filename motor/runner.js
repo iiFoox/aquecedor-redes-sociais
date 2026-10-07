@@ -22,8 +22,9 @@ const lastFrames = {}; // id -> último quadro (base64 jpeg)
 let lock = null; // motivo do bloqueio (ex.: backup dos perfis em andamento)
 
 const emit = (ev) => hub.emit('event', { t: Date.now(), ...ev });
-const profileDir = (id) => path.join(__dirname, '..', 'data', 'profiles', id);
-const screensDir = (id) => path.join(__dirname, '..', 'data', 'screens', id);
+const { DATA } = require('./paths');
+const profileDir = (id) => path.join(DATA, 'profiles', id);
+const screensDir = (id) => path.join(DATA, 'screens', id);
 const KEEP_SCREENS = 30; // prints guardados por conta
 
 // Vigia: sessão sem nenhum sinal por 15 min, ou 5 min além do teto de segurança, está travada

@@ -33,7 +33,7 @@ async function tick(now = new Date()) {
   if (!config.active || (config.pausedUntil && now.getTime() < config.pausedUntil)) return;
   const backupHold = backup.hold(now);
 
-  for (const acc of store.all()) {
+  for (const acc of store.mine()) {
     if (running() >= config.max) break;
     const p = platforms[acc.platform];
     if (!p) continue;
@@ -84,12 +84,12 @@ async function checkProxies() {
     });
     if (before === 'offline' && r.ok) {
       console.log(`[proxies] ${rules.proxyHost(p.url)} voltou`);
-      for (const a of store.all().filter((x) => x.proxy === p.url))
+      for (const a of store.mine().filter((x) => x.proxy === p.url))
         store.clearAttention(a.id, `O proxy ${rules.proxyHost(p.url)} voltou`, ['proxy']);
     }
     if (before !== 'offline' && !r.ok) {
       console.warn(`[proxies] ${rules.proxyHost(p.url)} caiu: ${r.error}`);
-      for (const a of store.all().filter((x) => x.proxy === p.url)) {
+      for (const a of store.mine().filter((x) => x.proxy === p.url)) {
         store.addAlert(a.id, 'warn', `O proxy ${rules.proxyHost(p.url)} não respondeu (${r.error}). A conta espera ele voltar`, 'proxy');
       }
     }

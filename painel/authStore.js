@@ -1,211 +1,209 @@
-// Onde o login guarda as coisas. supabaseStore: o de verdade (Supabase Auth + tabelas panel_sessions e
-// login_attempts + config "painel"). memoryStore: igual, em memória, para os testes (não cria usuário de verdade).
+// Onde o login do painel guarda as coisas.
+// cloudStore: o de verdade. Usuários no Supabase Auth (chave PÚBLICA: entrar, criar conta, trocar e recuperar senha);
+//   sessões do painel, registro de acessos e ajustes do painel em arquivos deste aparelho (data/painel/).
+// memoryStore: igual, em memória, para os testes (não cria usuário de verdade).
+const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = require('../motor/supabase-config');
 
-function supabaseStore({ url, key }) {
-  const opts = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
-  const sb = createClient(url, key, opts);
-  const fail = (what, error) => {
-    if (error) throw new Error(`${what}: ${error.message}`);
-  };
+const MAX_ATTEMPTS = 300; // acessos guardados
+
+// Arquivo JSON deste aparelho (gravação atômica: escreve ao lado e troca)
+function jsonFile(file, empty) {
+  let cache = null;
   return {
-    // Confere e-mail e senha no Supabase Auth. Devolve o id do usuário ou null. Os tokens do Supabase são descartados:
-    // quem segura o login é a sessão do painel (cookie httpOnly).
-    async verify(email, password) {
-      const c = createClient(url, key, opts);
-      const { data, error } = await c.auth.signInWithPassword({ email, password });
-      if (error || !data.user) return null;
-      return data.user.id;
+    read() {
+      if (cache) return cache;
+      try {
+        cache = JSON.parse(fs.readFileSync(file, 'utf8'));
+      } catch {
+        cache = typeof empty === 'function' ? empty() : structuredClone(empty);
+      }
+      return cache;
     },
-    async createUser(email, password) {
-      const { data, error } = await sb.auth.admin.createUser({ email, password, email_confirm: true });
-      if (error) return { error: /already|registered|exists/i.test(error.message) ? 'exists' : error.message };
-      return { id: data.user.id };
+    write(v) {
+      cache = v;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file + '.tmp', JSON.stringify(v), { mode: 0o600 });
+      fs.renameSync(file + '.tmp', file);
     },
-    async setPassword(userId, password) {
-      const { error } = await sb.auth.admin.updateUserById(userId, { password });
-      fail('trocar a senha', error);
-    },
-    async user(userId) {
-      const { data, error } = await sb.auth.admin.getUserById(userId);
-      if (error || !data.user) return null;
-      return { id: data.user.id, email: data.user.email };
-    },
-    async countUsers() {
-      const { data, error } = await sb.auth.admin.listUsers({ page: 1, perPage: 1 });
-      fail('contar usuários', error);
-      return data.total ?? data.users.length;
-    },
-    // Primeiro usuário: fica com as contas e proxies que já existiam (sem dono)
-    async claimOrphans(userId) {
-      const a = await sb.from('accounts').update({ owner_id: userId }).is('owner_id', null);
-      fail('passar as contas', a.error);
-      const p = await sb.from('proxies').update({ owner_id: userId }).is('owner_id', null);
-      fail('passar os proxies', p.error);
-    },
+  };
+}
+
+// Parte local (sessões, acessos, ajustes): igual nos dois stores
+function localParts({ now, files }) {
+  const sessions = files ? jsonFile(files.sessions, {}) : { v: {}, read: () => sessions.v, write: (x) => (sessions.v = x) };
+  const attempts = files ? jsonFile(files.attempts, []) : { v: [], read: () => attempts.v, write: (x) => (attempts.v = x) };
+  const settings = files
+    ? jsonFile(files.settings, { signup: true })
+    : { v: { signup: true }, read: () => settings.v, write: (x) => (settings.v = x) };
+  return {
+    // Para os testes: ver e limpar as sessões, ver os acessos
+    _sessions: { keys: () => Object.keys(sessions.read()), clear: () => sessions.write({}) },
+    _attempts: { list: () => attempts.read() },
     async insertSession(s) {
-      const { error } = await sb.from('panel_sessions').insert({
-        id: s.id,
-        user_id: s.userId,
-        expires_at: new Date(s.expiresAt).toISOString(),
-        last_seen: new Date(s.lastSeen).toISOString(),
-        persistent: s.persistent,
-        ip: s.ip,
-        user_agent: s.userAgent,
-      });
-      fail('gravar a sessão', error);
+      const all = sessions.read();
+      all[s.id] = s;
+      sessions.write(all);
     },
     async getSession(id) {
-      const { data, error } = await sb.from('panel_sessions').select('*').eq('id', id).maybeSingle();
-      fail('ler a sessão', error);
-      if (!data) return null;
-      return {
-        id: data.id,
-        userId: data.user_id,
-        expiresAt: Date.parse(data.expires_at),
-        lastSeen: Date.parse(data.last_seen),
-        persistent: data.persistent,
-      };
+      const s = sessions.read()[id];
+      return s ? { ...s } : null;
     },
     async touchSession(id, lastSeen, expiresAt) {
-      const { error } = await sb
-        .from('panel_sessions')
-        .update({ last_seen: new Date(lastSeen).toISOString(), expires_at: new Date(expiresAt).toISOString() })
-        .eq('id', id);
-      fail('renovar a sessão', error);
+      const all = sessions.read();
+      if (all[id]) Object.assign(all[id], { lastSeen, expiresAt });
+      sessions.write(all);
     },
     async deleteSession(id) {
-      fail('encerrar a sessão', (await sb.from('panel_sessions').delete().eq('id', id)).error);
+      const all = sessions.read();
+      delete all[id];
+      sessions.write(all);
     },
     async deleteUserSessions(userId, exceptId = null) {
-      let q = sb.from('panel_sessions').delete().eq('user_id', userId);
-      if (exceptId) q = q.neq('id', exceptId);
-      fail('encerrar as sessões', (await q).error);
-      // Faxina: sessões vencidas de todo mundo
-      await sb.from('panel_sessions').delete().lt('expires_at', new Date().toISOString());
+      const all = sessions.read();
+      const t = now();
+      for (const [id, s] of Object.entries(all)) if ((s.userId === userId && id !== exceptId) || s.expiresAt <= t) delete all[id];
+      sessions.write(all);
     },
     async logAttempt(a) {
-      const { error } = await sb.from('login_attempts').insert({
-        ...(a.t ? { t: new Date(a.t).toISOString() } : {}),
-        email: a.email || null,
-        user_id: a.userId || null,
-        ip: a.ip || null,
-        user_agent: a.userAgent || null,
-        ok: a.ok,
-        reason: a.reason,
-      });
-      if (error) console.error(`⚠️  Não consegui registrar o acesso: ${error.message}`);
+      const list = attempts.read();
+      list.push({ ...a, t: a.t ?? now() });
+      attempts.write(list.slice(-MAX_ATTEMPTS));
     },
-    // Erros de senha deste IP desde `since` (ms), do mais antigo para o mais novo
     async failuresSince(ip, since) {
-      const { data, error } = await sb
-        .from('login_attempts')
-        .select('t')
-        .eq('ip', ip)
-        .eq('reason', 'senha')
-        .gte('t', new Date(since).toISOString())
-        .order('t', { ascending: true });
-      fail('ler as tentativas', error);
-      return data.map((r) => Date.parse(r.t));
+      return attempts
+        .read()
+        .filter((a) => a.ip === ip && a.reason === 'senha' && a.t >= since)
+        .map((a) => a.t);
     },
-    // Acessos deste usuário: os dele e as tentativas erradas com o e-mail dele (alguém tentando entrar).
-    // Duas consultas em vez de um filtro "or" montado com texto (nada do usuário vira parte da consulta).
     async recentAttempts(userId, email, n = 10) {
-      const cols = 'id, t, ip, user_agent, ok, reason';
-      const [a, b] = await Promise.all([
-        sb.from('login_attempts').select(cols).eq('user_id', userId).order('t', { ascending: false }).limit(n),
-        sb.from('login_attempts').select(cols).eq('email', email).order('t', { ascending: false }).limit(n),
-      ]);
-      fail('ler os acessos', a.error || b.error);
-      const rows = new Map([...a.data, ...b.data].map((r) => [r.id, r]));
-      return [...rows.values()]
-        .sort((x, y) => Date.parse(y.t) - Date.parse(x.t))
-        .slice(0, n)
-        .map((r) => ({ t: Date.parse(r.t), ip: r.ip, userAgent: r.user_agent, ok: r.ok, reason: r.reason }));
+      return attempts
+        .read()
+        .filter((a) => a.userId === userId || (email && a.email === email))
+        .slice(-n)
+        .reverse()
+        .map(({ t, ip, userAgent, ok, reason }) => ({ t, ip, userAgent, ok, reason }));
     },
     async getSettings() {
-      const { data, error } = await sb.from('config').select('data').eq('id', 'painel').maybeSingle();
-      fail('ler os ajustes do painel', error);
-      return { signup: true, ...((data && data.data) || {}) };
+      return { signup: true, ...settings.read() };
     },
     async setSettings(patch) {
-      const cur = await this.getSettings();
-      fail('salvar os ajustes do painel', (await sb.from('config').upsert({ id: 'painel', data: { ...cur, ...patch } })).error);
+      settings.write({ ...settings.read(), ...patch });
+    },
+  };
+}
+
+const AUTH_OPTS = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, flowType: 'implicit' } };
+const sessionOut = (s) => (s ? { access_token: s.access_token, refresh_token: s.refresh_token } : null);
+
+function cloudStore({ dir, now = Date.now, url = SUPABASE_URL, key = SUPABASE_PUBLISHABLE_KEY }) {
+  const pub = () => createClient(url, key, AUTH_OPTS);
+  return {
+    ...localParts({
+      now,
+      files: {
+        sessions: path.join(dir, 'sessoes.json'),
+        attempts: path.join(dir, 'acessos.json'),
+        settings: path.join(dir, 'ajustes.json'),
+      },
+    }),
+    // E-mail e senha certos: { id, email, session } (a sessão vai para o motor deste aparelho). Errados: null.
+    async verify(email, password) {
+      const { data, error } = await pub().auth.signInWithPassword({ email, password });
+      if (error || !data.user) return null;
+      return { id: data.user.id, email: data.user.email, session: sessionOut(data.session) };
+    },
+    // Cria no Supabase Auth. Com confirmação de e-mail ligada no Supabase, a sessão só vem depois de confirmar.
+    async signup(email, password) {
+      const { data, error } = await pub().auth.signUp({ email, password });
+      if (error) return { error: /already|registered|exists/i.test(error.message) ? 'exists' : error.message };
+      // Supabase devolve usuário "falso" (sem identidades) quando o e-mail já existe e a confirmação está ligada
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return { error: 'exists' };
+      return { id: data.user.id, email: data.user.email, session: sessionOut(data.session), needsConfirm: !data.session };
+    },
+    async changePassword(email, current, next) {
+      const c = pub();
+      const { data, error } = await c.auth.signInWithPassword({ email, password: current });
+      if (error || !data.session) return false;
+      const r = await c.auth.updateUser({ password: next });
+      if (r.error) throw new Error(r.error.message);
+      return true;
+    },
+    // "Esqueci a senha": o Supabase manda um link por e-mail que volta para redirectTo
+    async sendReset(email, redirectTo) {
+      const { error } = await pub().auth.resetPasswordForEmail(email, { redirectTo });
+      if (error && !/rate|seconds/i.test(error.message)) throw new Error(error.message);
+      if (error) throw Object.assign(new Error('Muitos pedidos seguidos. Espere um pouco e tente de novo.'), { status: 429 });
+    },
+    // Senha nova vinda do link do e-mail (tokens de recuperação)
+    async resetWithTokens({ access_token, refresh_token }, password) {
+      const c = pub();
+      const s = await c.auth.setSession({ access_token, refresh_token });
+      if (s.error || !s.data.user) return null;
+      const r = await c.auth.updateUser({ password });
+      if (r.error) throw new Error(r.error.message);
+      return { id: s.data.user.id, email: s.data.user.email };
+    },
+    // O primeiro usuário do projeto fica com as contas antigas (sem dono). Para os outros não faz nada.
+    async claimLegacy(session) {
+      const c = pub();
+      await c.auth.setSession(session);
+      const { data, error } = await c.rpc('claim_legacy_accounts');
+      if (error) throw new Error(error.message);
+      return data || 0;
     },
   };
 }
 
 function memoryStore({ now = Date.now } = {}) {
-  const users = new Map(); // email -> { id, email, password }
-  const sessions = new Map();
-  const attempts = [];
-  let settings = { signup: true };
+  const users = new Map(); // email -> { id, email, password, confirmed }
   const orphans = { claimedBy: null };
+  const tokens = new Map(); // token de recuperação -> email
+  const fakeSession = (u) => ({ access_token: `acesso-${u.id}`, refresh_token: `renova-${u.id}` });
+  const base = localParts({ now });
   return {
+    ...base,
     _users: users,
-    _sessions: sessions,
-    _attempts: attempts,
     _orphans: orphans,
+    _tokens: tokens,
+    _confirm: false, // true = simula Supabase com confirmação de e-mail ligada
     async verify(email, password) {
       const u = users.get(email);
-      return u && u.password === password ? u.id : null;
+      if (!u || u.password !== password || !u.confirmed) return null;
+      return { id: u.id, email, session: fakeSession(u) };
     },
-    async createUser(email, password) {
+    async signup(email, password) {
       if (users.has(email)) return { error: 'exists' };
-      const id = crypto.randomUUID();
-      users.set(email, { id, email, password });
-      return { id };
+      const u = { id: crypto.randomUUID(), email, password, confirmed: !this._confirm };
+      users.set(email, u);
+      return { id: u.id, email, session: u.confirmed ? fakeSession(u) : null, needsConfirm: !u.confirmed };
     },
-    async setPassword(userId, password) {
-      for (const u of users.values()) if (u.id === userId) u.password = password;
+    async changePassword(email, current, next) {
+      const u = users.get(email);
+      if (!u || u.password !== current) return false;
+      u.password = next;
+      return true;
     },
-    async user(userId) {
-      for (const u of users.values()) if (u.id === userId) return { id: u.id, email: u.email };
-      return null;
+    async sendReset(email) {
+      if (users.has(email)) tokens.set(`rec-${email}`, email);
     },
-    async countUsers() {
-      return users.size;
+    async resetWithTokens({ access_token }, password) {
+      const email = tokens.get(access_token);
+      if (!email) return null;
+      tokens.delete(access_token);
+      const u = users.get(email);
+      u.password = password;
+      return { id: u.id, email };
     },
-    async claimOrphans(userId) {
-      orphans.claimedBy = userId;
-    },
-    async insertSession(s) {
-      sessions.set(s.id, { ...s });
-    },
-    async getSession(id) {
-      const s = sessions.get(id);
-      return s ? { ...s } : null;
-    },
-    async touchSession(id, lastSeen, expiresAt) {
-      const s = sessions.get(id);
-      if (s) Object.assign(s, { lastSeen, expiresAt });
-    },
-    async deleteSession(id) {
-      sessions.delete(id);
-    },
-    async deleteUserSessions(userId, exceptId = null) {
-      for (const [id, s] of sessions) if (s.userId === userId && id !== exceptId) sessions.delete(id);
-    },
-    async logAttempt(a) {
-      attempts.push({ ...a, t: a.t ?? now() });
-    },
-    async failuresSince(ip, since) {
-      return attempts.filter((a) => a.ip === ip && a.reason === 'senha' && a.t >= since).map((a) => a.t);
-    },
-    async recentAttempts(userId, email, n = 10) {
-      return attempts
-        .filter((a) => a.userId === userId || a.email === email)
-        .slice(-n)
-        .reverse();
-    },
-    async getSettings() {
-      return { ...settings };
-    },
-    async setSettings(patch) {
-      settings = { ...settings, ...patch };
+    async claimLegacy(session) {
+      const first = [...users.values()][0];
+      if (first && session.access_token === `acesso-${first.id}` && !orphans.claimedBy) orphans.claimedBy = first.id;
+      return 0;
     },
   };
 }
 
-module.exports = { supabaseStore, memoryStore };
+module.exports = { cloudStore, memoryStore };

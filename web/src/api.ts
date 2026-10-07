@@ -69,6 +69,27 @@ export interface Account {
   loginOpen: boolean;
   browserPurpose: 'login' | 'captcha' | null;
   live: Live | null;
+  mine: boolean; // roda neste aparelho
+  deviceId: string | null;
+  deviceName: string | null;
+  deviceOnline: boolean;
+}
+
+// Aparelhos do usuário (cada um roda as próprias contas)
+export interface Device {
+  id: string;
+  name: string;
+  lastSeen: number;
+  online: boolean;
+  appVersion: string | null;
+  current: boolean;
+}
+export interface DeviceInfo {
+  linked: boolean;
+  ready: boolean;
+  mine: boolean;
+  email: string | null;
+  device: { id: string; name: string } | null;
 }
 
 export interface FeedEvent {

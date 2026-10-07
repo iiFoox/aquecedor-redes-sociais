@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const FILE = path.join(__dirname, '..', 'data', 'motor.token');
+const FILE = path.join(require('./paths').DATA, 'motor.token');
 const HEADER = 'x-motor-token';
 
 function create(file = FILE) {

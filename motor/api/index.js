@@ -6,6 +6,7 @@ const express = require('express');
 const store = require('../store');
 const motorToken = require('../token');
 const runner = require('../runner');
+const cloud = require('../cloud');
 const { version } = require('../../package.json');
 
 // Atalho criado por "npm run autostart:ligar"
@@ -20,7 +21,8 @@ const AUTOSTART = path.join(
 );
 
 // token: senha interna (motor/token.js). Só o painel a conhece.
-function createApi({ token } = {}) {
+// deviceUser(): usuário dono deste aparelho (null = ainda ninguém entrou aqui). Os testes passam o seu.
+function createApi({ token, deviceUser = () => (cloud.ready() ? cloud.user().id : null) } = {}) {
   const app = express();
 
   // Tranca: o endereço tem de ser este PC (barra truques de DNS) e o pedido tem de trazer a senha interna.
@@ -35,15 +37,16 @@ function createApi({ token } = {}) {
     // Quem está logado no painel (o painel sempre manda, sobrescrevendo o que vier do navegador)
     req.userId = String(req.headers['x-wu-user'] || '');
     if (!req.userId) return res.status(401).json({ error: 'Sem usuário do painel', auth: false });
+    if (req.path.startsWith('/api/_device') || req.path === '/api/meta') return next();
+    // O aparelho roda para um usuário só: quem entrou no painel tem de ser ele
+    const owner = deviceUser();
+    if (!owner)
+      return res
+        .status(503)
+        .json({ error: 'Este aparelho ainda não está ligado à sua conta. Entre de novo no painel.', needsDevice: true });
+    if (owner !== req.userId)
+      return res.status(403).json({ error: 'Este aparelho está ligado a outro usuário do WarmUp Studio.', otherUser: true });
     next();
-  });
-  // Contas e proxies que ganharam dono por fora (cadastro, "npm run usuario")
-  app.use((req, res, next) => {
-    if (req.path === '/api/health') return next();
-    store
-      .refreshOwners()
-      .catch(() => {})
-      .finally(next);
   });
   app.use(express.json({ limit: '200kb' }));
 
@@ -68,7 +71,7 @@ function createApi({ token } = {}) {
       tz: require('../rules').TZ,
     });
   });
-  app.use('/api', require('./accounts'), require('./proxies'), require('./config'), require('./stream'));
+  app.use('/api', require('./device'), require('./accounts'), require('./proxies'), require('./config'), require('./stream'));
   app.use('/api', (_, res) => res.status(404).json({ error: 'Rota não encontrada' }));
 
   // JSON quebrado no corpo vira 400; o resto, 500 com a causa no terminal

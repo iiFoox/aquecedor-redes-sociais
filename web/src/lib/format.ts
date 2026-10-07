@@ -153,6 +153,8 @@ export const SCHEDULE_LABEL: Record<string, string> = {
   iniciar: 'Na fila para iniciar',
   rodando: 'Aquecendo',
   'navegador-aberto': 'Navegador aberto',
+  'aparelho-desligado': 'Aparelho dono desligado',
+  'sem-aparelho': 'Escolha onde ela roda',
 };
 
 // Quando a próxima sessão desta conta deve abrir (só se ela ainda tem o que fazer hoje)
@@ -223,6 +225,7 @@ const ACCESS_LABEL: Record<string, string> = {
   'cadastro-recusado': 'Cadastro recusado',
   sair: 'Saiu',
   'troca-senha': 'Trocou a senha',
+  esqueci: 'Pediu link de senha nova',
 };
 export const accessLabel = (reason: string) => ACCESS_LABEL[reason] || reason;
 

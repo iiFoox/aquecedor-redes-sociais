@@ -16,7 +16,7 @@ try {
 }
 const backup = require('../motor/backup');
 
-const DATA = path.join(__dirname, '..', 'data');
+const { DATA } = require('../motor/paths');
 const PROFILES = path.join(DATA, 'profiles');
 const MOTOR_PORT = Number(process.env.MOTOR_PORT) || 3101;
 const stampNow = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

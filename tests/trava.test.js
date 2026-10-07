@@ -12,7 +12,8 @@ const { createApi } = require('../motor/api');
 const TOKEN = 'a'.repeat(64);
 
 async function motor() {
-  const server = createApi({ token: TOKEN }).listen(0, '127.0.0.1');
+  // Aparelho do usuário u1 (no app, quem entrou no painel deste aparelho)
+  const server = createApi({ token: TOKEN, deviceUser: () => 'u1' }).listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
   const { port } = server.address();
   const request = ({ path: p = '/api/accounts', method = 'GET', headers = {}, body, user = 'u1', token = TOKEN } = {}) =>
@@ -111,7 +112,10 @@ test('separação: cada usuário vê e mexe só nas próprias contas, proxies, e
     const nova = await m.request({ method: 'POST', body: { platform: 'tiktok', username: 'nova_conta', proxy: '', interests: [] } });
     assert.equal(nova.status, 200);
     assert.equal(store.get(nova.json.id).ownerId, 'u1');
-    assert.ok(!(await m.request({ user: 'u2' })).json.some((a) => a.username === 'nova_conta'));
+    // Outro usuário do WarmUp Studio não usa o motor deste aparelho
+    const outro = await m.request({ user: 'u2' });
+    assert.equal(outro.status, 403);
+    assert.equal(outro.json.otherUser, true);
     store.remove(nova.json.id);
   } finally {
     m.close();

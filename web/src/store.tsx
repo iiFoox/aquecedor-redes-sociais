@@ -59,6 +59,7 @@ interface Store {
     patch: (a: Account, body: Record<string, unknown>, ok?: string) => Promise<unknown>;
     remove: (a: Account) => Promise<unknown>;
     backupNow: () => Promise<unknown>;
+    claim: (a: Account) => Promise<unknown>;
   };
 }
 
@@ -272,7 +273,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async <T,>(fn: () => Promise<T>, ok?: string) => {
       try {
         const r = await fn();
-        if (ok) toast(ok);
+        // Conta de outro aparelho: a ação vira pedido para ele (a resposta diz para onde foi)
+        const q = r as { queued?: boolean; message?: string } | undefined;
+        if (q && q.queued && q.message) toast(q.message);
+        else if (ok) toast(ok);
         loadAccounts().catch(() => {});
         return r;
       } catch (e) {
@@ -309,13 +313,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }, ok),
       remove: (a: Account) =>
         run(async () => {
-          await api(`/api/accounts/${a.id}`, 'DELETE');
+          const r = await api(`/api/accounts/${a.id}`, 'DELETE');
           go('cockpit');
+          return r;
         }, `@${a.username} removida`),
       backupNow: () =>
         run(async () => {
           setBackup(await api<BackupStatus>('/api/backup', 'POST'));
         }, 'Backup dos logins feito'),
+      claim: (a: Account) => run(() => api(`/api/accounts/${a.id}/claim`, 'POST'), `@${a.username} agora roda neste aparelho`),
     }),
     [run, go],
   );

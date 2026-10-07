@@ -66,8 +66,11 @@ test('tela de login no navegador: página certa depois de entrar, cookie invisí
 
     // Sair e entrar de novo (senha errada mostra erro; o e-mail fica lembrado)
     await page.evaluate(() => fetch('/auth/sair', { method: 'POST' }));
-    await page.goto(`${base}/#rotina`);
-    await page.waitForSelector('#senha');
+    await page.goto(`${base}/?depois-de-sair=1#rotina`); // endereço novo: só trocar o # não recarregaria a página
+    await page.waitForSelector('#senha').catch(async (e) => {
+      await page.screenshot({ path: require('path').join(require('os').tmpdir(), 'falha-login.png') });
+      throw new Error(e.message + ' | url: ' + page.url());
+    });
     assert.equal(await page.inputValue('#email'), 'eu@exemplo.com');
     await page.fill('#senha', 'errada 999');
     await page.click('button[type=submit]');

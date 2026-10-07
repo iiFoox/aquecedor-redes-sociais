@@ -10,7 +10,7 @@ const USER_HEADER = 'x-wu-user';
 
 // Arquivos que a tela de login usa (lidos do login.html gerado): só eles abrem sem login
 function loginAssets(dist) {
-  const out = new Set(['/login', '/cadastro', '/favicon.svg', '/favicon.ico']);
+  const out = new Set(['/login', '/cadastro', '/nova-senha', '/favicon.svg', '/favicon.ico']);
   try {
     const html = fs.readFileSync(path.join(dist, 'login.html'), 'utf8');
     for (const m of html.matchAll(/(?:src|href)="(\/[^"]+)"/g)) out.add(m[1]);
@@ -37,6 +37,8 @@ function createPainel({ auth, dist, motorPort, readToken = motorToken.read }) {
   };
   app.get('/login', loginPage);
   app.get('/cadastro', loginPage);
+  // Link do e-mail de "esqueci a senha": abre a tela de login no modo "senha nova" (mesmo se já estiver logado)
+  app.get('/nova-senha', (req, res) => res.sendFile(path.join(dist, 'login.html')));
 
   // Repassa a requisição para o motor, sem ler o corpo (funciona também para o tempo real).
   // Leva a senha interna e quem está logado; nunca repassa cabeçalhos com esses nomes vindos do navegador.

@@ -9,8 +9,8 @@ try {
 
 const store = require('./store');
 const runner = require('./runner');
-const scheduler = require('./scheduler');
-const backup = require('./backup');
+const cloud = require('./cloud');
+const boot = require('./boot');
 const { createApi } = require('./api');
 
 const PORT = Number(process.env.MOTOR_PORT) || 3101;
@@ -19,7 +19,6 @@ let server = null;
 let closing = false;
 
 async function main() {
-  await store.init();
   // Senha interna nova a cada vez que o motor liga (o painel lê de data/motor.token)
   server = createApi({ token: require('./token').create() }).listen(PORT, '127.0.0.1', () =>
     console.log(`⚙️  Motor pronto em 127.0.0.1:${PORT}`),
@@ -28,9 +27,9 @@ async function main() {
     console.error(`❌ O motor não conseguiu usar a porta ${PORT}: ${e.message}`);
     process.exit(1);
   });
-  scheduler.start();
-  runner.startWatchdog();
-  backup.start();
+  // Login salvo deste aparelho: liga sozinho. Senão, espera você entrar no painel.
+  if (await cloud.resume()) await boot.startDevice();
+  else console.log('⏳ Entre no painel para ligar este aparelho à sua conta.');
 }
 
 // Fecha as sessões (elas gravam o histórico) e grava o que falta antes de sair
@@ -38,9 +37,7 @@ async function shutdown(reason, code = 0) {
   if (closing) return;
   closing = true;
   console.log(`\n💾 Encerrando o motor (${reason}): fechando sessões e salvando no Supabase...`);
-  scheduler.stop();
-  backup.stop();
-  runner.stopWatchdog();
+  boot.stopAll();
   if (server) server.close();
   await Promise.race([runner.closeAll(), wait(20000)]);
   await Promise.race([store.flush(), wait(8000)]);

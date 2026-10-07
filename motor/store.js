@@ -1,12 +1,15 @@
-// Estado do app em memória + gravação no Supabase.
-// Contas, proxies e config ficam em tabelas com uma coluna JSON "data".
-// Eventos, alertas e sessões ficam em tabelas próprias (events, alerts, sessions).
+// Estado do app em memória + gravação no Supabase, como o usuário dono (regras por dono no banco).
+// Contas e proxies ficam em tabelas com uma coluna JSON "data"; eventos, alertas e sessões em tabelas próprias.
+// Este aparelho carrega TODAS as contas do usuário, mas só roda e só grava as dele (device_id = este aparelho).
+// As dos outros aparelhos chegam pelo tempo real (somente leitura aqui).
 // Tudo é gravado em lote, 1,5 s depois da última mudança.
 const crypto = require('crypto');
-const { createClient } = require('@supabase/supabase-js');
+const EventEmitter = require('events');
 const rules = require('./rules');
 const human = require('./human');
 
+// Configuração: piloto e férias valem para o usuário (todos os aparelhos); o resto é de cada aparelho.
+const USER_KEYS = ['active', 'pausedUntil', 'pausedFrom'];
 const DEFAULT_CONFIG = {
   active: false,
   start: '08:00',
@@ -37,6 +40,10 @@ const pickScreen = () => ({ ...SCREENS[Math.floor(Math.random() * SCREENS.length
 const isWindowsScreen = (v) => !!v && SCREENS.some((x) => x.w === v.w && x.h === v.h);
 
 let sb = null;
+let userId = null;
+let deviceId = null; // null = sem aparelho (testes, simulador): todas as contas contam como deste aparelho
+let channel = null;
+const changes = new EventEmitter(); // mudanças vindas de outros aparelhos (o runner repassa ao painel)
 let accounts = [];
 let proxies = [];
 let config = { ...DEFAULT_CONFIG };
@@ -55,19 +62,13 @@ function check(label, r) {
   console.error(`❌ Supabase [${label}]: ${e.code || ''} ${e.message}${e.hint ? ` | dica: ${e.hint}` : ''}`);
   if (e.code === 'PGRST205' || e.code === '42P01') console.error('   → Falta uma tabela. Aplique as migrações de supabase/migrations.');
   if (e.code === 'PGRST204' || e.code === '42703') console.error('   → Falta uma coluna. Aplique as migrações de supabase/migrations.');
-  if (e.code === '42501') console.error('   → Sem permissão. O .env precisa da chave secreta (sb_secret_...), não da anon.');
+  if (e.code === '42501') console.error('   → Sem permissão: o registro não é deste usuário (regras por dono).');
   return false;
 }
 
-function connect() {
-  const { SUPABASE_URL, SUPABASE_KEY } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('Faltam SUPABASE_URL e SUPABASE_KEY no .env (modelo em .env.example).');
-  const payload = Buffer.from(SUPABASE_KEY.split('.')[1] || '', 'base64').toString();
-  if (SUPABASE_KEY.startsWith('sb_publishable_') || /"role":"anon"/.test(payload)) {
-    console.warn('⚠️  SUPABASE_KEY é a chave pública (anon). O banco está fechado para ela: use a chave secreta.');
-  }
-  sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
-}
+// Conta que roda neste aparelho (sem aparelho definido, todas)
+const isMine = (a) => !deviceId || (a && a.deviceId === deviceId);
+const mine = () => accounts.filter(isMine);
 
 // Lê tudo, de 1000 em 1000 (limite de linhas por pedido do Supabase)
 async function fetchAll(build, label) {
@@ -86,8 +87,16 @@ const dropNulls = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => 
 // Linha do banco → objeto em memória. As listas antigas dentro do JSON (events, alerts, history)
 // são ignoradas: agora moram nas tabelas próprias (a cópia original ficou na coluna "legacy").
 function accountFromRow(row) {
-  const { events, alerts, history, live, loginOpen, ownerId, ...data } = row.data || {};
-  return { ...data, id: row.id, platform: row.platform, username: row.username, ownerId: row.owner_id || null };
+  const { events, alerts, history, live, loginOpen, ownerId, deviceId: _d, remoteStatus, ...data } = row.data || {};
+  return {
+    ...data,
+    id: row.id,
+    platform: row.platform,
+    username: row.username,
+    ownerId: row.owner_id || null,
+    deviceId: row.device_id || null,
+    remoteStatus: row.status || null, // o que o aparelho dono está fazendo agora (contas de outros aparelhos)
+  };
 }
 const eventFromRow = (r) => dropNulls({ t: Date.parse(r.t), kind: r.kind, action: r.action, level: r.level, msg: r.msg, detail: r.detail });
 const alertFromRow = (r) => ({
@@ -125,37 +134,48 @@ function normalize(a) {
   a.events = [];
   a.alerts = [];
   a.history = [];
+  // Só o aparelho dono ajeita e grava a conta (as dos outros aparelhos ficam como vieram)
+  const fix = () => isMine(a) && dirty.accounts.add(a.id);
   // Conta sem personalidade (criada antes dela existir): sorteia uma vez e grava
   if (!a.persona) {
     a.persona = human.makePersona();
-    dirty.accounts.add(a.id);
+    fix();
   }
   // Tela da conta: sorteada uma vez entre as de PC com Windows (contas antigas podiam ter tela de Mac)
   if (!isWindowsScreen(a.viewport)) {
     a.viewport = pickScreen();
-    dirty.accounts.add(a.id);
+    fix();
   }
   // Identidade inventada de navegador (antiga): sai; o Edge se apresenta como ele mesmo
   if (a.userAgent) {
     delete a.userAgent;
-    dirty.accounts.add(a.id);
+    fix();
   }
 }
 
-async function init() {
-  connect();
+// client: Supabase com o login do usuário (cloud.js). user/device: quem é o dono e qual é este aparelho.
+async function init({ client, user, device }) {
+  sb = client;
+  userId = user.id;
+  deviceId = device.id;
   console.log('🔄 Carregando dados do Supabase...');
   const evSince = iso(Date.now() - EVENTS_DAYS * 86400000);
   const alSince = iso(Date.now() - ALERTS_DAYS * 86400000);
   const [accRows, prxRows, cfg, evRows, alRows, seRows] = await Promise.all([
-    fetchAll(() => sb.from('accounts').select('id, platform, username, data, owner_id').order('id'), 'contas'),
+    fetchAll(() => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status').order('id'), 'contas'),
     fetchAll(() => sb.from('proxies').select('id, url, status, ms, data, owner_id').order('id'), 'proxies'),
-    sb.from('config').select('data').eq('id', 'main').maybeSingle(),
+    Promise.all([
+      sb.from('user_config').select('data').maybeSingle(),
+      sb.from('devices').select('config').eq('id', deviceId).maybeSingle(),
+    ]).then(([u, d]) => ({
+      error: u.error || d.error,
+      data: { user: (u.data && u.data.data) || {}, device: (d.data && d.data.config) || {} },
+    })),
     fetchAll(() => sb.from('events').select('*').gte('t', evSince).order('t').order('id'), 'eventos'),
     fetchAll(() => sb.from('alerts').select('*').or(`resolved_at.is.null,t.gte."${alSince}"`).order('t').order('id'), 'alertas'),
     fetchAll(() => sb.from('sessions').select('*').order('ended_at').order('id'), 'sessões'),
   ]);
-  if (!check('ler config', cfg)) throw new Error('não foi possível ler a config');
+  if (!check('ler configuração', cfg)) throw new Error('não foi possível ler a configuração');
 
   accounts = accRows.map(accountFromRow);
   accounts.forEach(normalize);
@@ -170,11 +190,100 @@ async function init() {
   }
 
   proxies = prxRows.map((r) => ({ ...(r.data || {}), id: r.id, url: r.url, status: r.status, ms: r.ms, ownerId: r.owner_id || null }));
-  const saved = (cfg.data && cfg.data.data) || {};
+  const saved = { ...cfg.data.device, ...cfg.data.user };
   config = { ...DEFAULT_CONFIG, ...Object.fromEntries(Object.entries(saved).filter(([k]) => CONFIG_KEYS.includes(k))) };
-  if (Object.keys(saved).some((k) => !CONFIG_KEYS.includes(k))) dirty.config = true; // limpa campos que não existem mais
-  if (dirty.accounts.size || dirty.config) schedule();
-  console.log(`✅ ${accounts.length} conta(s), ${proxies.length} proxy(s) carregados`);
+  if (dirty.accounts.size) schedule();
+  subscribe();
+  console.log(`✅ ${accounts.length} conta(s) (${mine().length} neste aparelho), ${proxies.length} proxy(s) carregados`);
+}
+
+// ---------- Tempo real: o que os outros aparelhos mudam ----------
+
+function subscribe() {
+  if (channel) sb.removeChannel(channel);
+  const remote = (id) => {
+    const a = get(id);
+    return a && !isMine(a) ? a : null;
+  };
+  channel = sb
+    .channel(`dados-${deviceId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'accounts' }, (p) => {
+      if (p.eventType === 'DELETE') {
+        const a = get(p.old.id);
+        if (a && !isMine(a)) {
+          accounts = accounts.filter((x) => x.id !== a.id);
+          changes.emit('event', { type: 'remote', id: a.id });
+        }
+        return;
+      }
+      const row = p.new;
+      const cur = get(row.id);
+      const next = accountFromRow(row);
+      if (cur && isMine(cur)) {
+        // Conta deste aparelho: o que vem do banco é eco do que gravamos. Só importa se ela foi para outro aparelho.
+        if (next.deviceId !== deviceId) {
+          cur.deviceId = next.deviceId;
+          changes.emit('lost', cur);
+        }
+        return;
+      }
+      if (cur) {
+        Object.assign(cur, next, { events: cur.events, alerts: cur.alerts, history: cur.history });
+        // Veio para este aparelho ("trazer a conta para cá" aceito pelo aparelho antigo)
+        if (isMine(cur)) changes.emit('gained', cur);
+      } else {
+        const a = { ...next };
+        normalize(a);
+        accounts.push(a);
+      }
+      changes.emit('event', { type: 'remote', id: row.id });
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'events' }, (p) => {
+      const a = remote(p.new.account_id);
+      if (!a) return;
+      const e = eventFromRow(p.new);
+      a.events.push(e);
+      if (a.events.length > KEEP.events) a.events.shift();
+      if (e.kind === 'action') {
+        const d = (a.daily[rules.localDate(new Date(e.t))] = a.daily[rules.localDate(new Date(e.t))] || {});
+        d[e.action] = (d[e.action] || 0) + 1;
+      }
+      changes.emit('event', { type: e.kind, id: a.id, action: e.action, detail: e.detail, msg: e.msg, level: e.level, t: e.t });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, (p) => {
+      if (p.eventType === 'DELETE') return;
+      const a = remote(p.new.account_id);
+      if (!a) return;
+      const x = alertFromRow(p.new);
+      const i = a.alerts.findIndex((y) => y.id === x.id);
+      if (i >= 0) a.alerts[i] = x;
+      else a.alerts.push(x);
+      changes.emit('event', { type: 'remote', id: a.id });
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sessions' }, (p) => {
+      const a = remote(p.new.account_id);
+      if (!a) return;
+      a.history.push(sessionFromRow(p.new));
+      if (a.history.length > KEEP.history) a.history.shift();
+      changes.emit('event', { type: 'session', id: a.id, running: false });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'proxies' }, () => changes.emit('event', { type: 'proxies' }))
+    .subscribe();
+}
+
+// Recarrega as contas (ex.: as antigas acabaram de ganhar dono). Mantém o que está em memória das deste aparelho.
+async function reloadAccounts() {
+  const rows = await fetchAll(
+    () => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status').order('id'),
+    'contas',
+  );
+  for (const row of rows) {
+    if (get(row.id)) continue;
+    const a = accountFromRow(row);
+    normalize(a);
+    accounts.push(a);
+  }
+  return accounts.length;
 }
 
 // ---------- Gravação ----------
@@ -186,6 +295,7 @@ function schedule() {
   timer = setTimeout(flush, 1500);
 }
 function touch(id) {
+  if (!isMine(get(id))) return; // conta de outro aparelho: quem grava é o dono dela
   dirty.accounts.add(id);
   schedule();
 }
@@ -201,11 +311,10 @@ function flush() {
 // owner_id só vai junto quando a conta tem dono: o dono de uma conta sem dono é gravado por fora
 // (cadastro do 1º usuário ou "npm run usuario"), e o motor não pode sobrescrever com vazio.
 function accountToRow(a) {
-  const { live, loginOpen, id, platform, username, events, alerts, history, ownerId, ...data } = a;
-  return ownerId ? { id, platform, username, data, owner_id: ownerId } : { id, platform, username, data };
+  const { live, loginOpen, id, platform, username, events, alerts, history, ownerId, deviceId: dev, remoteStatus, ...data } = a;
+  return { id, platform, username, data, owner_id: ownerId || userId, device_id: dev || deviceId };
 }
-const proxyToRow = ({ id, url, status, ms, ownerId, ...rest }) =>
-  ownerId ? { id, url, status, ms, data: rest, owner_id: ownerId } : { id, url, status, ms, data: rest };
+const proxyToRow = ({ id, url, status, ms, ownerId, ...rest }) => ({ id, url, status, ms, data: rest, owner_id: ownerId || userId });
 const alertToRow = (x, accountId) => ({
   id: x.id,
   account_id: accountId,
@@ -229,18 +338,14 @@ async function doFlush() {
     // 2) Contas antes dos eventos (os eventos apontam para a conta)
     const accIds = [...dirty.accounts];
     dirty.accounts.clear();
-    // Em dois lotes (com e sem dono): num lote só, a coluna owner_id iria vazia para as contas sem dono
-    const rows = accounts.filter((a) => accIds.includes(a.id)).map(accountToRow);
-    for (const batch of [rows.filter((r) => r.owner_id), rows.filter((r) => !r.owner_id)]) {
-      if (batch.length && !check('salvar contas', await sb.from('accounts').upsert(batch))) accIds.forEach((i) => dirty.accounts.add(i));
-    }
+    // Só as contas deste aparelho (as dos outros são gravadas pelo aparelho dono delas)
+    const rows = accounts.filter((a) => accIds.includes(a.id) && isMine(a)).map(accountToRow);
+    if (rows.length && !check('salvar contas', await sb.from('accounts').upsert(rows))) accIds.forEach((i) => dirty.accounts.add(i));
 
     if (dirty.proxies) {
       dirty.proxies = false;
       const prows = proxies.map(proxyToRow);
-      for (const batch of [prows.filter((r) => r.owner_id), prows.filter((r) => !r.owner_id)]) {
-        if (batch.length && !check('salvar proxies', await sb.from('proxies').upsert(batch))) dirty.proxies = true;
-      }
+      if (prows.length && !check('salvar proxies', await sb.from('proxies').upsert(prows))) dirty.proxies = true;
     }
 
     const alive = new Set(accounts.map((a) => a.id));
@@ -264,7 +369,15 @@ async function doFlush() {
 
     if (dirty.config) {
       dirty.config = false;
-      if (!check('salvar config', await sb.from('config').upsert({ id: 'main', data: config }))) dirty.config = true;
+      const part = (keys) => Object.fromEntries(Object.entries(config).filter(([k]) => keys(k)));
+      const u = await sb
+        .from('user_config')
+        .upsert({ owner_id: userId, data: part((k) => USER_KEYS.includes(k)), updated_at: iso(Date.now()) });
+      const d = await sb
+        .from('devices')
+        .update({ config: part((k) => !USER_KEYS.includes(k)) })
+        .eq('id', deviceId);
+      if (!check('salvar configuração', u) || !check('salvar configuração do aparelho', d)) dirty.config = true;
     }
   } catch (e) {
     console.error('Erro ao sincronizar com o Supabase:', e.message);
@@ -312,10 +425,10 @@ function slotsOf(a, gen) {
   return slots;
 }
 
-// Último início de sessão de qualquer conta hoje (para contas não abrirem em horários casados)
+// Último início de sessão de qualquer conta deste aparelho hoje (para contas não abrirem em horários casados)
 function lastStartAny(running = []) {
   let last = 0;
-  for (const a of accounts) {
+  for (const a of mine()) {
     const h = a.history[a.history.length - 1];
     if (h && h.startedAt) last = Math.max(last, Date.parse(h.startedAt));
   }
@@ -342,6 +455,8 @@ function pushEvent(a, ev) {
 function add(data) {
   const a = {
     id: crypto.randomUUID(),
+    ownerId: userId,
+    deviceId, // a conta roda no aparelho em que foi cadastrada
     startedAt: new Date().toISOString(),
     viewport: pickScreen(), // tela do PC desta conta (fixa)
     interests: [],
@@ -509,35 +624,50 @@ function updateProxy(id, updates) {
 
 const getConfig = () => config;
 
-// ---------- Dono (cada usuário do painel vê só o que é dele) ----------
+// ---------- Dono e aparelho ----------
 
-// Contas e proxies sem dono podem ganhar dono por fora (cadastro do 1º usuário, "npm run usuario"):
-// relê do banco, no máximo a cada 5 s, só os que ainda estão sem dono.
-let ownersCheckedAt = 0;
-async function refreshOwners() {
-  const accIds = accounts.filter((a) => !a.ownerId).map((a) => a.id);
-  const prxIds = proxies.filter((p) => !p.ownerId).map((p) => p.id);
-  if ((!accIds.length && !prxIds.length) || Date.now() - ownersCheckedAt < 5000 || !sb) return;
-  ownersCheckedAt = Date.now();
-  const [a, p] = await Promise.all([
-    accIds.length ? sb.from('accounts').select('id, owner_id').in('id', accIds).not('owner_id', 'is', null) : { data: [] },
-    prxIds.length ? sb.from('proxies').select('id, owner_id').in('id', prxIds).not('owner_id', 'is', null) : { data: [] },
-  ]);
-  for (const r of a.data || []) {
-    const acc = accounts.find((x) => x.id === r.id);
-    if (acc) acc.ownerId = r.owner_id;
-  }
-  for (const r of p.data || []) {
-    const px = proxies.find((x) => x.id === r.id);
-    if (px) px.ownerId = r.owner_id;
-  }
-}
-const accountsOf = (userId) => accounts.filter((a) => a.ownerId && a.ownerId === userId);
-const proxiesOf = (userId) => proxies.filter((p) => p.ownerId && p.ownerId === userId);
-const ownsAccount = (userId, id) => {
+// Contas e proxies do usuário (sem aparelho definido, testes: filtra pelo dono gravado em memória)
+const accountsOf = (uid) => accounts.filter((a) => a.ownerId && a.ownerId === uid);
+const proxiesOf = (uid) => proxies.filter((p) => p.ownerId && p.ownerId === uid);
+const ownsAccount = (uid, id) => {
   const a = get(id);
-  return !!(a && a.ownerId && a.ownerId === userId);
+  return !!(a && a.ownerId && a.ownerId === uid);
 };
+
+// Some da memória sem apagar do banco (conta apagada direto no banco, ou que deixou de ser visível)
+function forget(id) {
+  accounts = accounts.filter((a) => a.id !== id);
+  dirty.accounts.delete(id);
+}
+
+// "Rodar neste aparelho": a conta passa a ser deste aparelho (grava o device_id; o login vem na etapa dos logins)
+async function claimAccount(id) {
+  const a = get(id);
+  if (!a) return null;
+  a.deviceId = deviceId;
+  if (sb) {
+    const r = await sb.from('accounts').update({ device_id: deviceId }).eq('id', id);
+    if (!check('trazer a conta', r)) throw new Error('Não consegui trazer a conta para este aparelho');
+  }
+  touch(id);
+  return a;
+}
+
+// Conta deste aparelho vai para outro (o outro aparelho pediu): só troca o device_id; quem roda passa a ser o outro
+async function releaseAccount(id, toDevice) {
+  const a = get(id);
+  if (!a) return;
+  await flush();
+  a.deviceId = toDevice;
+  if (sb) await sb.from('accounts').update({ device_id: toDevice, lease_device: null, lease_until: null }).eq('id', id);
+}
+
+// O que o robô está fazendo agora na conta (os outros aparelhos leem da coluna status)
+async function publishStatus(id, status) {
+  if (!sb || !isMine(get(id))) return;
+  const r = await sb.from('accounts').update({ status }).eq('id', id);
+  check('publicar o status', r);
+}
 
 // ---------- Férias ----------
 
@@ -554,7 +684,7 @@ function endVacation(now = Date.now()) {
   if (!config.pausedUntil && !config.pausedFrom) return [];
   const days = config.pausedFrom ? rules.vacationDays(config.pausedFrom, now) : [];
   const moved = [];
-  for (const a of accounts) {
+  for (const a of mine()) {
     const { startedAt, skipped } = rules.shiftStart(a.startedAt, days);
     if (!skipped) continue;
     a.startedAt = startedAt;
@@ -596,7 +726,16 @@ module.exports = {
   clearAttention,
   addSession,
   recentEvents,
-  refreshOwners,
+  reloadAccounts,
+  claimAccount,
+  releaseAccount,
+  forget,
+  publishStatus,
+  isMine,
+  mine,
+  changes,
+  deviceId: () => deviceId,
+  userId: () => userId,
   accountsOf,
   proxiesOf,
   ownsAccount,
