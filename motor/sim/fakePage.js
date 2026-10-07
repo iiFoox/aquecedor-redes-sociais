@@ -17,6 +17,8 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
   const caption = () => (interests.length && rng() < nicheRate ? `vídeo sobre ${pick(interests)}` : pick(CAPTIONS));
 
   let typed = '';
+  let liked = false; // o vídeo da tela está curtido? (vale até passar de vídeo)
+  const LIKE = /like-icon/;
   const el = (sel, i) => ({
     sel,
     // O vídeo ocupa o meio da tela, o painel de comentários a direita; o resto são botões pequenos
@@ -30,6 +32,7 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
           : { x: 560 + i * 8, y: 180 + i * 60, width: 48, height: 48 },
     scrollIntoViewIfNeeded: async () => {},
     inputValue: async () => typed,
+    getAttribute: async (name) => (name === 'aria-pressed' && LIKE.test(sel) ? String(liked) : null),
     isVisible: async () => !PROBLEM.test(sel),
     textContent: async () => caption(),
   });
@@ -45,6 +48,7 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     url: () => url,
     async goto(u) {
       url = u;
+      liked = false;
       events.push({ type: 'goto', url: u });
     },
     viewportSize: () => ({ width: W, height: H }),
@@ -54,6 +58,7 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     keyboard: {
       press: async (key) => {
         events.push({ type: 'key', key });
+        if (/Arrow(Down|Up)/.test(key)) liked = false;
         if (key === 'Backspace') typed = typed.slice(0, -1);
         else if (/^(Control|Meta)\+a$/i.test(key)) typed = '';
         else if (key === 'Enter' && typed) {
@@ -69,7 +74,10 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     mouse: {
       wheel: async (_x, dy) => events.push({ type: 'wheel', dy }),
       click: async () => events.push({ type: 'click' }),
-      down: async (o = {}) => events.push({ type: 'down', count: o.clickCount || 1 }),
+      down: async (o = {}) => {
+        events.push({ type: 'down', count: o.clickCount || 1 });
+        if (o.clickCount === 2) liked = true; // dois cliques no vídeo curtem (nunca descurtem)
+      },
       up: async (o = {}) => events.push({ type: 'up', count: o.clickCount || 1 }),
       move: async () => {},
     },
@@ -80,6 +88,7 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     // O cursor falso avisa a página do clique, e a página reage como o site faria
     _clicked(e) {
       events.push({ type: 'click', sel: e.sel });
+      if (LIKE.test(e.sel)) liked = !liked; // o coração alterna
       if (/avatar|uniqueid|author/.test(e.sel)) url = 'https://www.tiktok.com/@criador_exemplo';
       else if (/video\//.test(e.sel)) url = 'https://www.tiktok.com/@criador_exemplo/video/1';
     },

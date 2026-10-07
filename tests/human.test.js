@@ -345,3 +345,35 @@ test('comentários do TikTok: rola com o mouse em cima do painel e fecha no X ou
   assert.ok(opened > 3, `abriu comentários ${opened} vezes`);
   assert.ok(scrolled > 0 && scrolled < opened, `rolou ${scrolled} de ${opened}: deveria rolar às vezes, não sempre`);
 });
+
+test('curtida do TikTok: só conta se o coração ficou vermelho; vídeo já curtido não é clicado', async () => {
+  const { simulateSession } = require('../motor/sim/simulate');
+  const tiktok = require('../motor/platforms/tiktok');
+  for (let seed = 1; seed <= 10; seed++) {
+    const today = {};
+    const r = await simulateSession({
+      account: { platform: 'tiktok', username: 't', interests: [], persona: { ...human.makePersona(seed), doubleTap: seed % 2 } },
+      platform: tiktok,
+      plan: { minutes: 20, watch: 25, like: 6, follow: 0, profile: 0, search: 0 },
+      today,
+      clock: createFakeClock(Date.parse('2026-10-08T15:00:00-03:00')),
+      rng: human.makeRng(seed),
+    });
+    // Cada curtida contada corresponde a um clique ou toque duplo, e nenhuma ação descurtiu
+    const taps = r.events.filter((e) => e.type === 'down' && e.count === 2).length;
+    const icons = r.events.filter((e) => e.type === 'click' && /like-icon/.test(e.sel || '')).length;
+    assert.equal(today.like || 0, taps + icons, `semente ${seed}`);
+    assert.ok((today.like || 0) <= Math.ceil(6 * 1.2));
+  }
+  // Vídeo já curtido: não clica nem conta
+  const { bot, page } = fakeBot(2);
+  await page._clicked({ sel: '[data-e2e="like-icon"]' }); // alguém já curtiu
+  const logs = [];
+  const ctl = { ...bot, log: (m) => logs.push(m), action: () => assert.fail('não deveria contar') };
+  const before = page.events.length;
+  const tk = require('../motor/platforms/tiktok');
+  assert.equal(typeof tk._likeVideo, 'function');
+  assert.equal(await tk._likeVideo(bot, ctl, '[data-e2e="like-icon"]', 'teste'), false);
+  assert.ok(!page.events.slice(before).some((e) => e.type === 'click' || e.type === 'down'), 'clicou num vídeo já curtido');
+  assert.match(logs[0], /já estava curtido/);
+});

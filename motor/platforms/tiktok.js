@@ -84,9 +84,29 @@ async function detectProblem(page) {
 }
 
 // Curte o vídeo da tela (dois cliques no vídeo ou coração, pela personalidade) e registra
+// O coração do vídeo da tela diz se ele está curtido: aria-pressed "true" (vermelho) ou "false".
+// null = não deu para ler (aí vale o clique, como antes).
+async function likedState(bot, icon) {
+  const [el] = await bot.visible(icon);
+  if (!el) return null;
+  const v = await el.getAttribute('aria-pressed').catch(() => null);
+  return v === 'true' ? true : v === 'false' ? false : null;
+}
+
+// Curte o vídeo da tela (dois cliques no vídeo ou coração, pela personalidade) e só conta se pegou.
+// Vídeo já curtido: não clica (o coração descurtiria) e não conta.
 async function likeVideo(bot, ctl, icon, detail) {
+  if ((await likedState(bot, icon)) === true) {
+    ctl.log('Este vídeo já estava curtido, seguindo sem clicar');
+    return false;
+  }
   const how = await bot.likeVideo(icon);
   if (!how) return false;
+  await bot.wait(500, 1200);
+  if ((await likedState(bot, icon)) === false) {
+    ctl.log(how === 'tap' ? 'Os dois cliques não curtiram o vídeo' : 'A curtida não pegou', 'warn');
+    return false;
+  }
   ctl.action('like', how === 'tap' ? `${detail} (dois cliques)` : detail);
   return true;
 }
@@ -361,4 +381,5 @@ module.exports = {
   },
   detectProblem,
   run,
+  _likeVideo: likeVideo, // para os testes
 };
