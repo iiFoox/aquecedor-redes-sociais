@@ -29,6 +29,9 @@ function launch(name, file) {
   return child;
 }
 
+// Painel desatualizado ou ainda não gerado: gera antes de subir
+require('./scripts/build-web').build();
+
 const children = [launch('motor', 'motor/index.js'), launch('painel', 'painel/index.js')];
 
 process.on('SIGINT', () => {

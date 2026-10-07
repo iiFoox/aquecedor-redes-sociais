@@ -4,13 +4,17 @@ const store = require('../store');
 const runner = require('../runner');
 const rules = require('../rules');
 const platforms = require('../platforms');
-const { PHASES, READY_DAY, phaseFor } = require('../platforms/phases');
+const { PHASES, READY_DAY, CHECKLIST, phaseFor } = require('../platforms/phases');
 const { body, schemas } = require('../validate');
 const backup = require('../backup');
 
 const router = express.Router();
 
 const alertOut = (x) => ({ t: x.t, lastT: x.lastT, count: x.count, level: x.level, kind: x.kind, msg: x.msg, resolved: !!x.resolvedAt });
+
+const MONTH_MS = 30 * 86400000;
+const GRAVE = ['captcha', 'block'];
+const OK_RESULTS = ['ok', 'limit'];
 
 const proxyOf = (a) => (a.proxy ? store.allProxies().find((p) => p.url === a.proxy) : null);
 
@@ -58,6 +62,21 @@ function summarize(a, full = false) {
     warmProgress: Math.min(100, Math.round(((day - 1) / (READY_DAY - 1)) * 100)),
     health: rules.computeHealth(a),
     sessions: a.history.length,
+    nextAfter: a.nextAfter || null,
+    checklist: a.checklist || {},
+    // Últimos 60 dias (meta batida por dia), sessões de hoje (agenda) e números de 30 dias (análises)
+    days: rules.dayHistory(a, 60),
+    todaySessions: rules.sessionsToday(a.history),
+    month: (() => {
+      const since = Date.now() - MONTH_MS;
+      const ran = a.history.filter((h) => Date.parse(h.date) >= since);
+      return {
+        sessions: ran.length,
+        ok: ran.filter((h) => OK_RESULTS.includes(h.result)).length,
+        grave: a.alerts.filter((x) => x.t >= since && GRAVE.includes(x.kind)).length,
+      };
+    })(),
+    lastScreen: runner.listScreens(a.id)[0] || null,
     alerts: a.alerts.slice(-5).reverse().map(alertOut),
     loginOpen: runner.isBrowserOpen(a.id),
     browserPurpose: runner.browserPurpose(a.id),
@@ -68,7 +87,6 @@ function summarize(a, full = false) {
   if (full) {
     out.events = a.events.slice(-150).reverse();
     out.history = a.history.slice(-30).reverse();
-    out.daily = store.lastDays(a, 14);
     out.alerts = a.alerts.slice(-20).reverse().map(alertOut);
     out.screens = runner.listScreens(a.id).slice(0, 12);
     out.proxyUrl = a.proxy || ''; // só no detalhe, para o seletor de proxy (o painel é local)
@@ -87,6 +105,7 @@ router.get('/meta', (_, res) => {
   res.json({
     phases: PHASES,
     readyDay: READY_DAY,
+    checklist: CHECKLIST,
     platforms: Object.fromEntries(Object.entries(platforms).map(([k, p]) => [k, { name: p.name, actions: p.actions, plans: p.plans }])),
   });
 });
@@ -105,12 +124,21 @@ router.post('/accounts', body(schemas.newAccount), (req, res) => {
   store.ensureProxy(url);
   const acc = store.add({ platform, username, proxy: url, interests });
   store.addLog(acc.id, `Conta adicionada (${platforms[platform].name}). Dia 1 do aquecimento`);
+  // Conta nova ainda não tem login: o piloto espera em vez de abrir o navegador à toa
+  store.setAttention(acc.id, 'login', 'Conta nova: clique em "Login" e entre na conta.');
   res.json(summarize(acc));
 });
 
 // Muda proxy, interesses ou janela de horário da conta
 router.patch('/accounts/:id', account, body(schemas.accountPatch), (req, res) => {
   const patch = { ...req.body };
+  if (patch.checklist) {
+    const before = req.account.checklist || {};
+    patch.checklist = { ...before, ...patch.checklist };
+    const complete = CHECKLIST.every((c) => patch.checklist[c.key]);
+    if (complete && !CHECKLIST.every((c) => before[c.key]))
+      store.addLog(req.account.id, 'Checklist "conta pronta" completo: pode começar a postar');
+  }
   if ('proxy' in patch) {
     if (runner.getSession(req.account.id) || runner.isBrowserOpen(req.account.id)) {
       return res.status(409).json({ error: 'Feche a sessão ou o navegador desta conta antes de trocar o proxy' });

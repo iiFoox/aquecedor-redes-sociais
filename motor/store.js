@@ -447,16 +447,6 @@ function addSession(id, session) {
   touch(id);
 }
 
-function lastDays(a, n) {
-  const today = rules.localDate();
-  const out = [];
-  for (let i = n - 1; i >= 0; i--) {
-    const date = rules.addDays(today, -i);
-    out.push({ date, ...(a.daily[date] || {}) });
-  }
-  return out;
-}
-
 function recentEvents(limit = 60) {
   return accounts
     .flatMap((a) => a.events.slice(-limit).map((e) => ({ ...e, id: a.id, username: a.username, platform: a.platform })))
@@ -548,7 +538,6 @@ module.exports = {
   setAttention,
   clearAttention,
   addSession,
-  lastDays,
   recentEvents,
   allProxies,
   addProxy,

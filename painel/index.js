@@ -1,4 +1,4 @@
-// Painel: serve o site e repassa /api para o motor.
+// Painel: serve o site (web/dist) e repassa /api para o motor.
 // Se o motor cair ou reiniciar, o painel continua no ar e avisa que o motor está voltando.
 const path = require('path');
 const http = require('http');
@@ -47,7 +47,15 @@ app.use('/api', (req, res) => {
   req.pipe(up);
 });
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// Painel gerado (npm run build). As outras rotas caem no index.html.
+const DIST = path.join(__dirname, '..', 'web', 'dist');
+app.use(express.static(DIST));
+app.get('*', (_, res) => {
+  res.sendFile(path.join(DIST, 'index.html'), (err) => {
+    if (err && !res.headersSent)
+      res.status(503).send('O painel ainda não foi gerado. Rode "npm run build" (o npm start faz isso sozinho).');
+  });
+});
 
 if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !PANEL_PASSWORD) {
   console.warn('⚠️  Painel aberto na rede SEM senha. Defina PANEL_PASSWORD no .env.');

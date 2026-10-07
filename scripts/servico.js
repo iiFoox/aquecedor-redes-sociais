@@ -39,6 +39,7 @@ function rotateLogs() {
 const commands = {
   ligar() {
     rotateLogs();
+    require('./build-web').build();
     const code = pm2('start', path.join(ROOT, 'ecosystem.config.js'));
     if (code === 0) console.log('\n✅ WarmUp Studio ligado em segundo plano. Painel: http://localhost:3001');
     return code;

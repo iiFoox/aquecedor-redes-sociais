@@ -152,6 +152,33 @@ function computeHealth(a, now = new Date()) {
   };
 }
 
+// Histórico dos últimos n dias, do mais antigo para hoje: quanto da meta foi batido em cada dia.
+// completion null = dia antes do cadastro ou sem plano sorteado (a conta não aqueceu).
+function dayHistory(a, n, now = new Date()) {
+  const today = localDate(now);
+  const start = localDate(new Date(a.startedAt));
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const date = addDays(today, -i);
+    const d = a.daily[date] || {};
+    const { plan, sessions = 0, minutes = 0, vacation = false, ...done } = d;
+    out.push({ date, completion: date < start || !plan ? null : completion(plan, done), sessions, minutes, vacation: !!vacation });
+  }
+  return out;
+}
+
+// Sessões que terminaram hoje, para a agenda do dia: { start, end, result } em ms
+function sessionsToday(history, now = new Date()) {
+  const today = localDate(now);
+  return history
+    .filter((h) => localDate(new Date(h.date)) === today)
+    .map((h) => {
+      const end = Date.parse(h.date);
+      const start = h.startedAt ? Date.parse(h.startedAt) : end - (h.minutes || 0) * 60000;
+      return { start, end, result: h.result };
+    });
+}
+
 // Quando a mesma conta pode abrir a próxima sessão (intervalo sorteado a cada vez)
 const nextAfter = (endedAt, rand = Math.random) => endedAt + Math.round(GAP_MIN + rand() * (GAP_MAX - GAP_MIN)) * 60000;
 
@@ -258,6 +285,8 @@ module.exports = {
   kindFromMsg,
   mergeAlert,
   computeHealth,
+  dayHistory,
+  sessionsToday,
   nextAfter,
   legacyGap,
   vacationDays,

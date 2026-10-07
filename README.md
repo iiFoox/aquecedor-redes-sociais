@@ -10,7 +10,7 @@ cp .env.example .env   # preencha com a URL e a chave SECRETA do Supabase
 npm start
 ```
 
-Painel em http://localhost:3001. O `npm start` sobe dois programas:
+Painel em http://localhost:3001 (o `npm start` gera o painel antes, se precisar). Ele sobe dois programas:
 
 - **motor**: o robô (navegadores, agendador e banco). Só aceita conexões desta máquina.
 - **painel**: o site. Se o motor cair ou reiniciar, o painel continua no ar e avisa.
@@ -53,12 +53,20 @@ Use **ou** `npm start` **ou** `npm run ligar`, nunca os dois ao mesmo tempo (as 
 - Estrutura: `supabase/schema-base.sql` e depois as migrações de `supabase/migrations`, em ordem.
 - MCP: configurado em `.mcp.json`. No Claude Code, rode `/mcp` → supabase → Authenticate.
 
+## O painel
+
+- **Cockpit**: quem está aquecendo, metas de hoje, quem espera você, próxima sessão, agenda do dia, cards e alertas.
+- **Conta**: tela ao vivo, metas, sessões, jornada, saúde, ajustes (horário, proxy, interesses), checklist “conta pronta”
+  (libera no dia 22), calendário, prints e eventos.
+- **Rotina**, **Proxies**, **Análises** e **Ajustes**. `Ctrl+K` abre a busca de contas, telas e ações.
+- **Nova conta** em 3 passos: conta e proxy, login (janela no PC) e interesses.
+
 ## Desenvolvimento
 
 ```
-npm test        # testes
-npm run lint    # ESLint
-npm run format  # Prettier
+npm run dev:web    # painel com recarga automática (localhost:5173), com o motor ligado
+npm run check      # ESLint + TypeScript + testes
+npm run format     # Prettier
 ```
 
 ## Login das contas

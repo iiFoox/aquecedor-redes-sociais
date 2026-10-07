@@ -1,6 +1,6 @@
 {
   "name": "insta-warmer",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "WarmUp Studio: aquecimento de contas do TikTok e do Instagram, com painel web e Supabase",
   "private": true,
   "main": "start.js",
@@ -11,6 +11,8 @@
     "start": "node start.js",
     "motor": "node motor/index.js",
     "painel": "node painel/index.js",
+    "build": "node scripts/build-web.js --force",
+    "dev:web": "vite --config web/vite.config.mts",
     "ligar": "node scripts/servico.js ligar",
     "desligar": "node scripts/servico.js desligar",
     "reiniciar": "node scripts/servico.js reiniciar",
@@ -22,8 +24,9 @@
     "test": "node --test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "check": "npm run lint && npm test",
-    "postinstall": "npx playwright install chromium"
+    "check": "npm run lint && npm run typecheck && npm test",
+    "postinstall": "npx playwright install chromium",
+    "typecheck": "tsc -p web/tsconfig.json"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
@@ -37,9 +40,16 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
-    "prettier": "^3.9.9"
+    "prettier": "^3.9.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3"
   }
 }

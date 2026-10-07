@@ -1,5 +1,6 @@
 // Validação de tudo que entra na API do motor. Campos desconhecidos são descartados.
 const { z } = require('zod');
+const { CHECKLIST } = require('./platforms/phases');
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const PROXY_URL = /^(https?|socks5):\/\/\S+:\d{2,5}\/?$/i;
@@ -44,9 +45,19 @@ const accountWindow = z
   .strip()
   .nullable();
 
+// Checklist "conta pronta": { foto: true, bio: false, ... } só com os itens conhecidos
+const checklist = z
+  .record(z.boolean())
+  .refine((o) => Object.keys(o).every((k) => CHECKLIST.some((c) => c.key === k)), 'Item de checklist desconhecido');
+
 const accountPatch = z
   // .optional() de fora: campo ausente fica de fora (não vira proxy vazio nem lista vazia)
-  .object({ window: accountWindow.optional(), proxy: accountProxy.optional(), interests: interests.optional() })
+  .object({
+    window: accountWindow.optional(),
+    proxy: accountProxy.optional(),
+    interests: interests.optional(),
+    checklist: checklist.optional(),
+  })
   .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)));
 
 // Férias: a data em que você volta (as contas voltam a aquecer à 00:00 desse dia)

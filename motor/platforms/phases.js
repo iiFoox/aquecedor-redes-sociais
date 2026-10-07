@@ -37,7 +37,16 @@ const PHASES = [
 ];
 
 const READY_DAY = 22;
+
+// Checklist "conta pronta": o que fazer no perfil antes de começar a postar (libera no dia 22)
+const CHECKLIST = [
+  { key: 'foto', label: 'Foto de perfil' },
+  { key: 'bio', label: 'Bio com o nicho e uma chamada' },
+  { key: 'link', label: 'Link na bio' },
+  { key: 'posts', label: '3 primeiros posts' },
+  { key: 'destaques', label: '2 destaques fixos (ou vídeos fixados no TikTok)' },
+];
 const phaseFor = (day) => PHASES.find((p) => day >= p.from && day <= p.to) || PHASES[PHASES.length - 1];
 const phaseIndex = (day) => PHASES.indexOf(phaseFor(day));
 
-module.exports = { PHASES, READY_DAY, phaseFor, phaseIndex };
+module.exports = { PHASES, READY_DAY, CHECKLIST, phaseFor, phaseIndex };

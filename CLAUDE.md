@@ -11,7 +11,10 @@ cp .env.example .env   # SUPABASE_URL + chave SECRETA do Supabase
 npm start              # motor + painel no terminal; painel em http://localhost:3001
 npm run ligar          # o mesmo em segundo plano pelo PM2 (desligar / status / logs / autostart:ligar)
 npm run restaurar      # restaura data/profiles de um backup (motor desligado)
-npm test               # testes (node:test)
+npm run build          # gera o painel (web/dist); npm start e npm run ligar fazem isso sozinhos
+npm run dev:web        # painel com recarga automática em http://localhost:5173 (precisa do motor ligado)
+npm test               # testes (node:test, inclusive os .ts do painel)
+npm run typecheck      # TypeScript do painel
 npm run lint           # ESLint
 npm run format         # Prettier
 ```
@@ -26,8 +29,10 @@ npm run format         # Prettier
   - `backup.js`: backup diário dos perfis (04:00, sem cache, 7 últimos). `proxycheck.js`: teste de proxy sem navegador.
   - `platforms/`: TikTok e Instagram. Cada atividade declara as metas que conta (`produces`) e as que adianta (`advances`).
   - `api/`: rotas. `validate.js`: validação (zod) de tudo que entra.
-- `painel/`: serve `public/` e repassa `/api` ao motor. Se o motor cair, o painel continua no ar.
-- `public/`: front atual (será trocado na fase 3).
+- `painel/`: serve `web/dist` e repassa `/api` ao motor. Se o motor cair, o painel continua no ar.
+- `web/`: o painel (React + TypeScript + Vite). `src/store.tsx` (dados, tempo real, ações), `src/views/` (telas),
+  `src/components/`, `src/lib/format.ts` (funções puras, testadas em `tests/web-format.test.ts`). Estilos em `src/styles.css`,
+  com tokens de cor no `:root` e tema claro/escuro. Responsivo: funciona no celular, sem app instalável.
 - `supabase/`: `schema-base.sql` + `migrations/` (em ordem).
 - `scripts/`: `servico.js` (PM2 e inicialização do Windows) e `restaurar.js`. `ecosystem.config.js`: PM2.
 - `data/`: fora do Git. `profiles/<id>` (sessões logadas), `screens/<id>` (prints), `logs/` (PM2).
