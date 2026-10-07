@@ -144,3 +144,40 @@ test('simulador: horários mudam de um dia para o outro e o dia sempre fecha a m
   for (const d of Object.values(r.daily))
     if (d.plan) assert.notEqual(rules.dayStatus(tiktok.activities, d.plan, d, { interests: ['IA'] }), 'pending');
 });
+
+test('prioridade: o que falta no dia manda na escolha da atividade', () => {
+  // O caso do print: vídeos batidos (35/34), faltam 6 curtidas e 1 perfil
+  const plan = { minutes: 12, watch: 34, like: 6, follow: 0, profile: 1, search: 0 };
+  const done = { watch: 35 };
+  const g = tiktok.activities;
+  const fyp = rules.activityPriority(g.fyp, plan, done);
+  const profile = rules.activityPriority(g.profile, plan, done);
+  assert.equal(profile, 1); // falta 100% dos perfis e não passa nada do plano
+  assert.equal(fyp, 0.25); // só curtidas faltam por ali, e cada vídeo a mais passa do plano
+  assert.ok(profile > fyp * 2);
+  // Nada falta que a atividade adiante: prioridade zero
+  assert.equal(rules.activityPriority(g.profile, plan, { ...done, profile: 1 }), 0);
+  // Começo do dia: o Para Você adianta vídeos e curtidas (as duas metas inteiras)
+  assert.equal(rules.activityPriority(g.fyp, plan, {}), 2);
+  assert.equal(rules.missingText(plan, done, tiktok.actions), '6 curtidas, 1 perfis visitados');
+});
+
+test('sessão com vídeos já batidos vai atrás das curtidas e do perfil sem passar do teto', async () => {
+  const { simulateSession } = require('../motor/sim/simulate');
+  const { createFakeClock } = require('../motor/sim/fakePage');
+  for (let seed = 1; seed <= 20; seed++) {
+    const plan = { minutes: 12, watch: 34, like: 6, follow: 0, profile: 1, search: 0 };
+    const today = { watch: 35 };
+    const r = await simulateSession({
+      account: { platform: 'tiktok', username: 't', interests: [], persona: human.makePersona(seed) },
+      platform: tiktok,
+      plan,
+      today,
+      clock: createFakeClock(Date.parse('2026-10-08T15:00:00-03:00')),
+      rng: human.makeRng(seed),
+    });
+    assert.equal(today.profile, 1, `semente ${seed}: perfil ficou para trás (${r.reason})`);
+    assert.ok(today.watch <= Math.ceil(34 * rules.GOAL_CAP), `semente ${seed}: ${today.watch} vídeos`);
+    assert.ok(today.like >= 6 || r.reason === 'limit', `semente ${seed}: ${today.like} curtidas (${r.reason})`);
+  }
+});

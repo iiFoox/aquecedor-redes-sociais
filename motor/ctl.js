@@ -27,6 +27,9 @@ function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
     capped: (k) => rules.isCapped(plan, done(), k),
     allowed: (act, acc) => rules.activityAllowed(act, plan, done(), acc),
     useful: (act) => rules.activityUseful(act, plan, done()),
+    // Peso da atividade pelo que falta no dia (rules.activityPriority)
+    priority: (act) => rules.activityPriority(act, plan, done()),
+    missing: (labels) => rules.missingText(plan, done(), labels),
     // Sessão terminou? Todas as metas batidas (ignorando as inalcançáveis nesta sessão), ou a parte do dia
     // que esta sessão devia cobrir (target < 1: sessão curta da rotina; o resto fica para a próxima)
     goalsDone: (skip = []) =>

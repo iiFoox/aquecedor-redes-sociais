@@ -45,6 +45,13 @@ const ACTIVITY_GOALS = {
   profile: { produces: ['profile'], advances: ['profile', 'follow'] },
 };
 
+// Continua a rodada (mais um vídeo)? Só se ainda tem tempo, não bateu o teto de vídeos, a atividade
+// ainda adianta alguma meta que falta e a sessão não cumpriu a parte dela do dia.
+const keepGoing = (ctl, act) => ctl.timeLeft() > 0 && !ctl.capped('watch') && ctl.useful(ACTIVITY_GOALS[act]) && !ctl.goalsDone();
+
+// Gosto de base de cada atividade (variedade); quem decide mesmo é o que falta no dia
+const BASE_WEIGHT = { fyp: 1.5, search: 1, profile: 1 };
+
 // Tempo assistido: depende da duração do vídeo, do nicho e da paciência da conta (human.watchPlan)
 const WATCH_NOTE = { skip: ' (pulando)', half: ' (até a metade)', full: ' (inteiro)', loop: ' (revendo, sinal de interesse)' };
 const watchFor = (bot, niche, duration = null) =>
@@ -168,7 +175,7 @@ const ACTIVITIES = {
   async fyp({ page, bot, ctl, account }) {
     if (!page.url().includes('/foryou')) await bot.goto(HOME, 'Abrindo o Para Você');
     const n = bot.rand(5, 12);
-    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('watch'); i++) {
+    for (let i = 1; i <= n && keepGoing(ctl, 'fyp'); i++) {
       // Legenda para checar o nicho (timeout de 1 s pra não travar)
       const desc = await page
         .locator('[data-e2e="video-desc"]')
@@ -236,7 +243,7 @@ const ACTIVITIES = {
     }
     await bot.pause('load', 'Abrindo o vídeo');
     const n = bot.rand(3, 6);
-    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('watch'); i++) {
+    for (let i = 1; i <= n && keepGoing(ctl, 'search'); i++) {
       // Veio de uma busca do nicho: conta como conteúdo do nicho
       const info = await bot.videoInfo();
       const { ms, outcome } = watchFor(bot, true, info ? info.duration : null);
@@ -321,20 +328,17 @@ async function run({ page, bot, ctl, account }) {
     if (ctl.timeLeft() <= 0) return 'cap';
     if (ctl.stalled()) return 'stall';
 
-    const needFyp = ctl.left('watch') > 0 || ctl.left('like') > 0 || ctl.left('follow') > 0;
-    // Pesos guiados pelo que falta: se o Para Você já bateu, prioriza as metas restantes
+    // Prioridade pelo que FALTA no dia (ctl.priority) vezes o gosto de base de cada atividade
     const opts = [];
-    if (can('fyp')) opts.push(['fyp', needFyp ? 5 : 0.5]);
-    if (can('search')) opts.push(['search', needFyp ? 2 : 4]);
-    if (can('profile')) opts.push(['profile', ctl.left('follow') > 0 ? 2 : needFyp ? 1.5 : 4]);
+    for (const a of Object.keys(ACTIVITY_GOALS)) if (can(a)) opts.push([a, BASE_WEIGHT[a] * ctl.priority(ACTIVITY_GOALS[a])]);
     // O que falta só sairia passando do teto de 120% do plano: encerra em vez de forçar
     if (!opts.length) return 'limit';
-    // Distração: nunca duas vezes seguidas e só depois do intervalo sorteado desta sessão
-    if (last !== 'afk' && bot.now() - lastAfk > afkGap) opts.push(['afk', 0.5]);
+    // Distração: nunca duas vezes seguidas e só depois do intervalo sorteado desta sessão (~6% das escolhas)
+    if (last !== 'afk' && bot.now() - lastAfk > afkGap) opts.push(['afk', 0.06 * opts.reduce((s, [, w]) => s + w, 0)]);
     const act = bot.weighted(opts);
     last = act;
     if (act === 'afk') lastAfk = bot.now();
-    ctl.log(`Próxima atividade: ${ACT_LABEL[act]}`);
+    ctl.log(`Próxima atividade: ${ACT_LABEL[act]} · falta: ${ctl.missing(ACTIONS)}`);
     let ok = false;
     try {
       ok = await ACTIVITIES[act]({ page, bot, ctl, account });

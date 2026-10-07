@@ -68,6 +68,27 @@ function activityUseful(act, plan, done) {
   return act.advances.some((k) => (plan[k] || 0) - (done[k] || 0) > 0);
 }
 
+// Prioridade de uma atividade pelo que FALTA na meta do dia: soma a parte que falta de cada meta
+// que ela adianta (6 de 6 curtidas faltando = 1; 1 de 4 perfis = 0,25). Se ela também contaria uma
+// meta já batida (ex.: mais vídeos quando os vídeos já fecharam), vale 1/4: ainda pode ser o único
+// caminho até o que falta, mas perde para quem vai direto ao ponto. 0 = não adianta nada.
+const OVERSHOOT_WEIGHT = 0.25;
+function activityPriority(act, plan, done) {
+  let need = 0;
+  for (const k of act.advances) if (plan[k] > 0) need += Math.max(0, plan[k] - (done[k] || 0)) / plan[k];
+  if (!need) return 0;
+  const over = act.produces.some((k) => plan[k] > 0 && (done[k] || 0) >= plan[k]);
+  return need * (over ? OVERSHOOT_WEIGHT : 1);
+}
+
+// O que falta hoje, em texto: "6 curtidas, 1 perfis visitados"
+function missingText(plan, done, labels = {}) {
+  return Object.keys(plan)
+    .filter((k) => k !== 'minutes' && plan[k] - (done[k] || 0) > 0)
+    .map((k) => `${plan[k] - (done[k] || 0)} ${(labels[k] || k).toLowerCase()}`)
+    .join(', ');
+}
+
 // Ainda dá para avançar alguma meta hoje sem passar do teto?
 function canProgress(activities, plan, done, account) {
   return Object.values(activities).some((a) => activityAllowed(a, plan, done, account) && activityUseful(a, plan, done));
@@ -379,6 +400,9 @@ module.exports = {
   completion,
   activityAllowed,
   activityUseful,
+  activityPriority,
+  missingText,
+  OVERSHOOT_WEIGHT,
   canProgress,
   dayStatus,
   inWindow,

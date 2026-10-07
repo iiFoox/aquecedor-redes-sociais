@@ -46,6 +46,8 @@ const ACTIVITY_GOALS = {
   reels: { produces: ['reel'], advances: ['reel', 'like'] },
   explore: { produces: ['explore'], advances: ['explore', 'like', 'follow'] },
 };
+// Gosto de base de cada atividade (variedade); quem decide mesmo é o que falta no dia
+const BASE_WEIGHT = { feed: 1.3, stories: 1, reels: 1, explore: 1 };
 // Nome da meta que cada atividade usa no controle de falhas desta sessão
 const SKIP_KEY = { stories: 'story', reels: 'reel', explore: 'explore' };
 
@@ -158,7 +160,8 @@ const ACTIVITIES = {
     await bot.goto(`${HOME}reels/`, 'Abrindo Reels');
     // Se a meta de reels já bateu mas faltam curtidas, assiste alguns mesmo assim
     const n = ctl.left('reel') > 0 ? Math.min(ctl.left('reel'), bot.rand(3, 6)) : bot.rand(2, 4);
-    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('reel'); i++) {
+    // Para quando não sobra nada que os reels adiantem (ou a sessão cumpriu a parte dela do dia)
+    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('reel') && ctl.useful(ACTIVITY_GOALS.reels) && !ctl.goalsDone(); i++) {
       const text = await page
         .locator('main span[dir="auto"], main h1')
         .first()
@@ -279,19 +282,17 @@ async function run({ page, bot, ctl, account }) {
     if (ctl.timeLeft() <= 0) return 'cap';
     if (ctl.stalled()) return 'stall';
 
+    // Prioridade pelo que FALTA no dia (ctl.priority) vezes o gosto de base de cada atividade
     const opts = [];
-    if (can('feed')) opts.push(['feed', 3]);
-    if (can('stories')) opts.push(['stories', 2]);
-    if (can('reels')) opts.push(['reels', ctl.left('reel') > 0 ? 2 : 1]);
-    if (can('explore')) opts.push(['explore', 2]);
+    for (const a of Object.keys(ACTIVITY_GOALS)) if (can(a)) opts.push([a, BASE_WEIGHT[a] * ctl.priority(ACTIVITY_GOALS[a])]);
     // O que falta só sairia passando do teto de 120% do plano: encerra em vez de forçar
     if (!opts.length) return 'limit';
-    // Distração: nunca duas vezes seguidas e só depois do intervalo sorteado desta sessão
-    if (last !== 'afk' && bot.now() - lastAfk > afkGap) opts.push(['afk', 0.5]);
+    // Distração: nunca duas vezes seguidas e só depois do intervalo sorteado desta sessão (~6% das escolhas)
+    if (last !== 'afk' && bot.now() - lastAfk > afkGap) opts.push(['afk', 0.06 * opts.reduce((s, [, w]) => s + w, 0)]);
     const act = bot.weighted(opts);
     last = act;
     if (act === 'afk') lastAfk = bot.now();
-    ctl.log(`Próxima atividade: ${ACT_LABEL[act]}`);
+    ctl.log(`Próxima atividade: ${ACT_LABEL[act]} · falta: ${ctl.missing(ACTIONS)}`);
     let ok = false;
     try {
       ok = await ACTIVITIES[act]({ page, bot, ctl, account });
