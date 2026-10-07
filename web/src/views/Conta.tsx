@@ -19,6 +19,7 @@ import {
   missing,
   pct,
   RESULT_LABEL,
+  resultLabel,
   resultClass,
   SCHEDULE_LABEL,
   shotInfo,
@@ -430,7 +431,7 @@ export function Conta() {
                         <td>{String(s.minutes).replace('.', ',')} min</td>
                         <td>{pct(s.completion || 0)}%</td>
                         <td>
-                          <span className={`res ${resultClass(s.result)}`}>{RESULT_LABEL[s.result] || s.result}</span>{' '}
+                          <span className={`res ${resultClass(s.result)}`}>{resultLabel(s)}</span>{' '}
                           {s.screenshot && (
                             <a className="link" href={`/api/accounts/${a.id}/screens/${s.screenshot}`} target="_blank" rel="noopener">
                               <Icon name="image" />

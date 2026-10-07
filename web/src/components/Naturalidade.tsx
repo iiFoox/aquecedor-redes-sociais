@@ -1,7 +1,7 @@
 // Card "Naturalidade": a personalidade da conta e como foram os tempos da última sessão
 // (pausas e tempo por vídeo). Pessoas reais têm muitas pausas curtas e algumas bem longas.
 import type { AccountFull, Persona, Timing } from '../api.ts';
-import { RESULT_LABEL, ddmm, hhmm } from '../lib/format.ts';
+import { resultLabel, ddmm, hhmm } from '../lib/format.ts';
 
 const fmt = (ms: number) =>
   ms >= 60000 ? `${(ms / 60000).toFixed(1).replace('.', ',')} min` : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0).replace('.', ',')} s`;
@@ -95,7 +95,7 @@ export function Naturalidade({ full }: { full: AccountFull }) {
           {last && last.timing ? (
             <>
               <div className="eyebrow">
-                Sessão de {ddmm(last.date.slice(0, 10))} às {hhmm(Date.parse(last.date))} · {RESULT_LABEL[last.result] || last.result}
+                Sessão de {ddmm(last.date.slice(0, 10))} às {hhmm(Date.parse(last.date))} · {resultLabel(last)}
               </div>
               {last.timing.pause && <Histogram t={last.timing.pause} title="Pausas" aria="Distribuição das pausas da última sessão" />}
               {last.timing.watch && (

@@ -122,6 +122,12 @@ export const RESULT_LABEL: Record<string, string> = {
   watchdog: 'Travou',
   running: 'Rodando',
 };
+// Texto do resultado de uma sessão. Sessão da rotina que fez a parte dela do dia (e não o dia todo): "Parte do dia"
+export function resultLabel(s: { result: string; completion?: number }) {
+  if (s.result === 'ok' && (s.completion ?? 1) < 1) return 'Parte do dia';
+  return RESULT_LABEL[s.result] || s.result;
+}
+
 export function resultClass(r: string) {
   if (r === 'ok' || r === 'limit') return 'ok';
   if (r === 'stopped') return 'stopped';

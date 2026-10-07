@@ -82,3 +82,9 @@ test('print: hora do nome do arquivo (UTC) e o tipo do problema', () => {
   assert.equal(s.at, Date.parse('2026-10-07T03:00:19Z'));
   assert.equal(s.tag, 'captcha');
 });
+
+test('sessão da rotina que fez a parte dela aparece como "Parte do dia"', () => {
+  assert.equal(f.resultLabel({ result: 'ok', completion: 0.43 }), 'Parte do dia');
+  assert.equal(f.resultLabel({ result: 'ok', completion: 1 }), 'Concluída');
+  assert.equal(f.resultLabel({ result: 'captcha', completion: 0.2 }), 'Captcha');
+});

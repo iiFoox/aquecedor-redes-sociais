@@ -144,7 +144,9 @@ function mergeAlert(alerts, next) {
 /**
  * Saúde (0-100):
  *  - 40 pts consistência (dias com sessão nos últimos 7 dias)
- *  - 30 pts cumprimento das metas (média das últimas 3 sessões que chegaram a rodar)
+ *  - 30 pts cumprimento das metas: média dos últimos 3 dias que já acabaram (o dia todo, não cada sessão: com a
+ *    rotina, a 1ª sessão do dia cobre só parte dele e não é meta perdida). Conta nova, sem dia anterior: o dia de
+ *    hoje comparado com a parte que as sessões feitas deviam cobrir.
  *  - 30 pts segurança (perde pontos com captcha, bloqueio e erro da semana).
  * Falta de login e proxy fora do ar não contam: não são sinais da plataforma contra a conta.
  */
@@ -164,8 +166,23 @@ function computeHealth(a, now = new Date()) {
   }
   const consistency = total ? active / total : 0;
 
-  const recent = ran.slice(-3);
-  const comp = recent.reduce((s, h) => s + (h.completion || 0), 0) / recent.length;
+  const days = [];
+  for (let i = 1; i <= 7 && days.length < 3; i++) {
+    const d = a.daily[addDays(today, -i)];
+    if (d && d.plan && d.sessions && !d.vacation) days.push(completion(d.plan, d));
+  }
+  let comp;
+  if (days.length) comp = days.reduce((s, x) => s + x, 0) / days.length;
+  else {
+    const t = a.daily[today] || {};
+    const slots = t.slots || [];
+    const slot = slots[Math.min(t.sessions || 0, slots.length) - 1];
+    if (t.plan && t.sessions) comp = Math.min(1, completion(t.plan, t) / (slot ? slot.target : 1));
+    else {
+      const recent = ran.slice(-3);
+      comp = recent.reduce((s, h) => s + (h.completion || 0), 0) / recent.length;
+    }
+  }
 
   const weekAgo = now.getTime() - 7 * DAY_MS;
   const penalty = (a.alerts || [])

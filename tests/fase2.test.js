@@ -83,6 +83,30 @@ test('férias não derrubam a consistência da saúde', () => {
   assert.equal(rules.computeHealth(vac, now).consistency, 100);
 });
 
+test('saúde: metas pelo dia inteiro, não por sessão (a 1ª sessão da rotina cobre só parte do dia)', () => {
+  const now = at('2026-10-07T11:00:00-03:00');
+  const plan = { watch: 29, like: 5, profile: 1 };
+  // Conta nova: 1ª sessão (37% do dia) fez a parte dela; não é meta perdida
+  const novo = {
+    startedAt: '2026-10-07T12:00:00Z',
+    history: [{ result: 'ok', completion: 0.43 }],
+    alerts: [],
+    daily: { '2026-10-07': { plan, sessions: 1, watch: 11, like: 2, profile: 1, slots: [{ target: 0.37 }, { target: 1 }] } },
+  };
+  assert.equal(rules.computeHealth(novo, now).completion, 100);
+  // Com dias anteriores: média dos últimos dias que acabaram
+  const antigo = {
+    ...novo,
+    startedAt: '2026-10-01T12:00:00Z',
+    daily: {
+      ...novo.daily,
+      '2026-10-06': { plan, sessions: 2, watch: 29, like: 5, profile: 1 },
+      '2026-10-05': { plan, sessions: 2, watch: 29, like: 0, profile: 1 },
+    },
+  };
+  assert.equal(rules.computeHealth(antigo, now).completion, 83); // (100% + 67%) / 2
+});
+
 test('proxy fora do ar não derruba a saúde', () => {
   const now = at('2026-10-06T23:00:00-03:00');
   const a = {
