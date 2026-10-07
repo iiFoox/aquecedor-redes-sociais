@@ -197,9 +197,14 @@ async function startSession(account) {
     killed: null,
   });
 
+  // Parte do dia que esta sessão cobre (rotina): sessões de tamanhos diferentes; a última fecha 100%
+  const slots = store.slotsOf(account, platform.planForDay);
+  const slot = slots[store.todayOf(id).sessions || 0];
+  const target = slot ? slot.target : 1;
   const ctl = createCtl({
     state: s,
     plan,
+    target,
     done: () => store.todayOf(id),
     hooks: {
       status: (text, until) => emit({ type: 'status', id, text, until }),
@@ -254,7 +259,9 @@ async function run(account, platform, s, ctl) {
     const bot = createBot(page, ctl, { persona: account.persona, mood: human.dayMood(account.persona, rules.localDate()) });
     bot.guard = () => guard(page, platform, account);
     const reason = await platform.run({ page, bot, ctl, plan: s.plan, account });
-    if (reason === 'goals') ctl.log('Todas as metas do dia foram batidas ✔');
+    if (reason === 'goals' && rules.completion(s.plan, store.todayOf(account.id)) < 1)
+      ctl.log(`Parte desta sessão feita (${Math.round(ctl.target * 100)}% do dia). O resto fica para a próxima sessão ✔`);
+    else if (reason === 'goals') ctl.log('Todas as metas do dia foram batidas ✔');
     else if (reason === 'limit') {
       result = 'limit';
       ctl.log('O que falta passaria de 120% do plano do dia. Encerrando sem forçar; o resto fica para amanhã', 'warn');

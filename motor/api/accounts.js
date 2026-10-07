@@ -32,6 +32,8 @@ function scheduleReason(a, p, plan, today) {
     plan,
     today,
     activities: p.activities,
+    slots: () => store.slotsOf(a, p.planForDay),
+    lastStartAny: store.lastStartAny(Object.values(runner.activeSessions()).map((x) => x.startedAt)),
   });
 }
 
@@ -63,6 +65,8 @@ function summarize(a, full = false) {
     health: rules.computeHealth(a),
     sessions: a.history.length,
     nextAfter: a.nextAfter || null,
+    // Rotina de hoje: horários planejados e quanto da meta cada sessão cobre
+    slots: (a.daily[store.localDate()] || {}).slots || [],
     checklist: a.checklist || {},
     // Últimos 60 dias (meta batida por dia), sessões de hoje (agenda) e números de 30 dias (análises)
     days: rules.dayHistory(a, 60),

@@ -45,6 +45,16 @@ test('janela que passa da meia-noite vira dois trechos; agenda mostra o dia todo
 
 test('próxima sessão só para contas que ainda têm o que fazer', () => {
   const now = 1_000_000;
+  const slots = [
+    { at: now - 5000, target: 0.4 },
+    { at: now + 90000, target: 1 },
+  ];
+  assert.equal(f.nextSessionAt({ schedule: 'agendada', nextAfter: null, slots, today: { sessions: 1 } }, now), now + 90000);
+  assert.equal(f.nextSessionAt({ schedule: 'espacamento', nextAfter: null }, now), now);
+  // Rotina: só as sessões que faltam, com duração proporcional à parte do dia
+  const up = f.upcomingSlots({ slots, today: { sessions: 1 }, plan: { minutes: 20 } });
+  assert.equal(up.length, 1);
+  assert.equal(up[0].minutes, Math.round(20 * 0.6 * 1.3));
   assert.equal(f.nextSessionAt({ schedule: 'intervalo', nextAfter: now + 5000 }, now), now + 5000);
   assert.equal(f.nextSessionAt({ schedule: 'iniciar', nextAfter: null }, now), now);
   assert.equal(f.nextSessionAt({ schedule: 'meta-batida', nextAfter: now + 5000 }, now), null);

@@ -1,12 +1,13 @@
 // Regras do aquecimento: datas, metas, saúde, alertas e a decisão do agendador.
 // Nada aqui fala com o banco ou com o navegador, então tudo pode ser testado.
 
+const human = require('./human');
+
 const TZ = process.env.APP_TZ || 'America/Sao_Paulo';
 const DAY_MS = 86400000;
 const GOAL_CAP = 1.2; // nenhuma meta passa de 120% do plano do dia
 const ALERT_GROUP_MS = 30 * 60000; // alerta igual dentro de 30 min vira o mesmo ("4×")
-const GAP_MIN = 45; // intervalo entre sessões da mesma conta, em minutos
-const GAP_MAX = 90;
+const GAP_MIN = 45; // intervalo antigo (contas sem "nextAfter"), em minutos
 
 const dateFmt = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -182,8 +183,98 @@ function sessionsToday(history, now = new Date()) {
 // Teto de segurança da sessão, em minutos: 2,5x o tempo estimado do plano, entre 30 e 90 min
 const sessionCap = (plan) => Math.min(90, Math.max(30, Math.round((plan.minutes || 15) * 2.5)));
 
-// Quando a mesma conta pode abrir a próxima sessão (intervalo sorteado a cada vez)
-const nextAfter = (endedAt, rand = Math.random) => endedAt + Math.round(GAP_MIN + rand() * (GAP_MAX - GAP_MIN)) * 60000;
+// Descanso mínimo depois de uma sessão, antes da próxima da mesma conta: cauda longa
+// (mediana de 50 min, quase sempre entre 30 min e 2 h, raramente até 3 h). Antes era 45–90 min uniforme.
+const nextAfter = (endedAt, rand = Math.random) => endedAt + Math.round(human.bounded(rand, 50, 0.45, 30, 180)) * 60000;
+
+// ---------- Rotina do dia ----------
+
+const MIN_SLOT_GAP = 45; // minutos entre o começo de duas sessões planejadas
+// Dia da semana da data 'AAAA-MM-DD' (0 = domingo)
+const weekdayOf = (date) => new Date(`${date}T12:00:00Z`).getUTCDay();
+const isWeekend = (date) => [0, 6].includes(weekdayOf(date));
+
+/**
+ * Sessões planejadas para o dia: horários (perto do horário preferido da conta, dentro da janela)
+ * e quanto da meta do dia cada uma cobre (sessões de tamanhos diferentes; a última fecha 100%).
+ *  - Quantas: 1 a 4, conforme o tamanho do plano (plano curto = menos sessões). Fim de semana: menos e mais tarde.
+ *  - notBefore: não planeja nada antes disso (conta criada ou motor ligado no meio do dia).
+ * Devolve [{ at (ms), target (0..1) }] em ordem.
+ */
+function planSlots({ date, window, persona, planMinutes = 15, rng = Math.random, notBefore = 0 }) {
+  const ws = toMinutes(window.start);
+  const we = toMinutes(window.end);
+  const len = (we - ws + 1440) % 1440 || 1440; // janela em minutos (pode passar da meia-noite)
+  const dayStart = Date.parse(`${date}T00:00:00Z`) - offsetMinutes(date) * 60000; // meia-noite no fuso do app
+  const weekend = isWeekend(date);
+
+  // Quantas sessões
+  const maxN = Math.max(1, Math.min(4, Math.round(planMinutes / 7)));
+  const r = rng();
+  let n = weekend ? (r < 0.3 ? 1 : r < 0.75 ? 2 : 3) : r < 0.35 ? 2 : r < 0.8 ? 3 : 4;
+  n = Math.min(n, maxN);
+
+  // Pico da conta dentro da janela (fim de semana: uma hora mais tarde)
+  const peakMin = ((persona ? persona.peak : 20) + (weekend ? 1 : 0)) * 60;
+  let peakOff = (peakMin - ws + 1440) % 1440;
+  if (peakOff > len) peakOff = peakOff - len < 1440 - peakOff ? len * 0.85 : len * 0.15;
+  const sd = (persona ? persona.spread : 2.5) * 60;
+  const earliest = notBefore ? Math.max(0, Math.ceil((notBefore - (dayStart + ws * 60000)) / 60000)) : 0;
+  const latest = len - 20; // nada começa nos últimos 20 min da janela
+
+  let offs = [];
+  for (; n >= 1 && !offs.length; n--) {
+    for (let tries = 0; tries < 40; tries++) {
+      const cand = [];
+      for (let i = 0; i < n; i++) {
+        // Metade em volta do pico, metade espalhada pela janela (ninguém usa só num horário)
+        let v = rng() < 0.6 ? peakOff + sd * normalish(rng) : earliest + rng() * Math.max(0, latest - earliest);
+        for (let k = 0; k < 4 && (v < earliest || v > latest); k++) v = earliest + rng() * Math.max(0, latest - earliest);
+        cand.push(Math.min(latest, Math.max(earliest, v)));
+      }
+      cand.sort((a, b) => a - b);
+      if (cand.every((v, i) => i === 0 || v - cand[i - 1] >= MIN_SLOT_GAP + 1)) {
+        offs = cand;
+        break;
+      }
+    }
+  }
+  if (!offs.length) offs = [Math.min(latest, Math.max(earliest, 0))]; // janela curta demais: uma sessão só
+
+  // Quanto da meta cada sessão cobre: partes de tamanhos sorteados (mín. 15%), acumuladas até 100%
+  const parts = offs.map(() => Math.max(0.15, human.lognormal(rng, 1, 0.6)));
+  const total = parts.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  return offs.map((off, i) => {
+    acc += parts[i] / total;
+    const minute = (ws + Math.round(off)) % 1440;
+    const crossesMidnight = ws + Math.round(off) >= 1440;
+    return {
+      at: dayStart + (crossesMidnight ? 1440 : 0) * 60000 + minute * 60000 + Math.floor(rng() * 60000),
+      target: i === offs.length - 1 ? 1 : Math.round(acc * 100) / 100,
+    };
+  });
+}
+
+// Normal aproximada (soma de 3 uniformes), entre -3 e 3
+const normalish = (rng) => (rng() + rng() + rng() - 1.5) * 2;
+
+// Minutos que o fuso do app está à frente de UTC na data (ex.: -180 em São Paulo)
+function offsetMinutes(date) {
+  const noon = new Date(`${date}T12:00:00Z`);
+  return localMinutes(noon) - 12 * 60 + (localDate(noon) === date ? 0 : localDate(noon) > date ? 1440 : -1440);
+}
+
+// Rotina do dia: planejada uma vez por data e guardada em daily[data].slots
+function ensureSlots(daily, date, gen) {
+  const d = (daily[date] = daily[date] || {});
+  if (d.slots) return { slots: d.slots, created: false };
+  d.slots = gen();
+  return { slots: d.slots, created: true };
+}
+
+// Espaço mínimo entre o começo de sessões de contas diferentes: 4 a 14 min, sorteado por conta e por dia
+const spacingMs = (account, date) => (4 + (human.hashSeed(`${account.id}:${date}`) % 11)) * 60000;
 
 // Intervalo antigo, para contas que ainda não têm "nextAfter" gravado
 const legacyGap = (id) => (GAP_MIN + (String(id).charCodeAt(0) % 45)) * 60000;
@@ -239,7 +330,8 @@ function pickProxy(proxies, accounts) {
 /**
  * Decide se o agendador inicia uma sessão desta conta agora. Devolve o motivo:
  * 'iniciar' ou o que impede. ctx: { now, config, runningCount, running, browserOpen, backupHold, proxyDown,
- * plan (objeto ou função), today, activities }
+ * plan (objeto ou função), today, activities, slots (rotina do dia, opcional), lastStartAny (último início
+ * de sessão de qualquer conta, ms) }
  */
 function decide(account, ctx) {
   const { now, config } = ctx;
@@ -257,12 +349,18 @@ function decide(account, ctx) {
   const status = dayStatus(ctx.activities, plan, ctx.today, account);
   if (status === 'done') return 'meta-batida';
   if (status === 'limit') return 'limite-do-plano';
+  // Rotina do dia: a próxima sessão planejada ainda não chegou
+  const slots = typeof ctx.slots === 'function' ? ctx.slots() : ctx.slots;
+  const slot = slots && slots[ctx.today.sessions || 0];
+  if (slot && now.getTime() < slot.at) return 'agendada';
   if (account.nextAfter) {
     if (now.getTime() < account.nextAfter) return 'intervalo';
   } else {
     const last = (account.history || [])[account.history.length - 1];
     if (last && now.getTime() - Date.parse(last.date) < legacyGap(account.id)) return 'intervalo';
   }
+  // Outra conta acabou de abrir: espera um pouco para não abrirem em horários casados
+  if (ctx.lastStartAny && now.getTime() - ctx.lastStartAny < spacingMs(account, localDate(now))) return 'espacamento';
   return 'iniciar';
 }
 
@@ -292,6 +390,11 @@ module.exports = {
   sessionsToday,
   sessionCap,
   nextAfter,
+  planSlots,
+  ensureSlots,
+  spacingMs,
+  isWeekend,
+  offsetMinutes,
   legacyGap,
   vacationDays,
   shiftStart,

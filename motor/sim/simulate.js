@@ -15,7 +15,7 @@ function startOfDay(ms) {
 }
 
 // Uma sessão simulada: mesmo ctl e mesmo bot da sessão real, mas com página e relógio falsos
-async function simulateSession({ account, platform, plan, today, clock, rng }) {
+async function simulateSession({ account, platform, plan, today, clock, rng, target = 1 }) {
   const start = clock.now();
   const state = {
     stop: false,
@@ -29,6 +29,7 @@ async function simulateSession({ account, platform, plan, today, clock, rng }) {
   const ctl = createCtl({
     state,
     plan,
+    target,
     done: () => today,
     now: clock.now,
     hooks: {
@@ -100,6 +101,18 @@ async function simulate({ account, days = 3, from = startOfDay(Date.now() + DAY)
       plan: () => rules.ensurePlan(acc.daily, date, rules.dayOf(acc, now), (d) => platform.planForDay(d, rng)).plan,
       today,
       activities: platform.activities,
+      // Rotina do dia, igual ao motor: planejada na primeira olhada dentro da janela
+      slots: () =>
+        rules.ensureSlots(acc.daily, date, () =>
+          rules.planSlots({
+            date,
+            window: rules.windowOf(acc, cfg),
+            persona: acc.persona,
+            planMinutes: today.plan.minutes,
+            rng,
+            notBefore: now.getTime(),
+          }),
+        ).slots,
     });
     if (reason !== 'iniciar') {
       clock.advance(60000); // o agendador olha de minuto em minuto
@@ -107,13 +120,23 @@ async function simulate({ account, days = 3, from = startOfDay(Date.now() + DAY)
     }
     clock.advance(Math.floor(rng() * 15000)); // atraso de 0 a 15 s antes de abrir
     const plan = today.plan;
-    const s = await simulateSession({ account: acc, platform, plan, today, clock, rng });
+    const slot = (today.slots || [])[today.sessions || 0];
+    const s = await simulateSession({ account: acc, platform, plan, today, clock, rng, target: slot ? slot.target : 1 });
     const minutes = +((s.end - s.start) / 60000).toFixed(1);
     today.sessions = (today.sessions || 0) + 1;
     today.minutes = +((today.minutes || 0) + minutes).toFixed(1);
     acc.history.push({ date: new Date(s.end).toISOString(), startedAt: new Date(s.start).toISOString(), result: 'ok', minutes });
     acc.nextAfter = rules.nextAfter(s.end, rng);
-    sessions.push({ ...s, date, day: rules.dayOf(acc, new Date(s.start)), plan, done: { ...today }, minutes });
+    sessions.push({
+      ...s,
+      date,
+      day: rules.dayOf(acc, new Date(s.start)),
+      plan,
+      done: { ...today },
+      minutes,
+      target: slot ? slot.target : 1,
+      completion: rules.completion(plan, today),
+    });
     clock.advance(60000);
   }
   return { account: acc, sessions, daily: acc.daily };

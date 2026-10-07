@@ -73,7 +73,10 @@ async function main() {
       .filter((k) => k !== 'minutes' && (s.plan[k] > 0 || s.done[k] > 0))
       .map((k) => `${k} ${s.done[k] || 0}/${s.plan[k]}`)
       .join(' · ');
-    console.log(`  ${s.date} dia ${s.day}  ${hhmm(s.start)}–${hhmm(s.end)} (${s.minutes} min, ${s.reason})  ${done}`);
+    const dow = new Date(`${s.date}T12:00:00Z`).toLocaleDateString('pt-BR', { weekday: 'short', timeZone: 'UTC' });
+    console.log(
+      `  ${s.date} ${dow} dia ${s.day}  ${hhmm(s.start)}–${hhmm(s.end)} (${s.minutes} min) meta do dia ${Math.round(s.completion * 100)}%  ${done}`,
+    );
   }
   const all = (k) => r.sessions.flatMap((s) => s.samples[k] || []);
   for (const [k, title] of [

@@ -141,17 +141,40 @@ export const SCHEDULE_LABEL: Record<string, string> = {
   'limite-simultaneo': 'Esperando vaga',
   'meta-batida': 'Meta de hoje batida',
   'limite-do-plano': 'Limite de 120% do plano',
-  intervalo: 'Intervalo entre sessões',
+  intervalo: 'Descansando entre sessões',
+  agendada: 'Próxima sessão agendada',
+  espacamento: 'Esperando outra conta começar',
   iniciar: 'Na fila para iniciar',
   rodando: 'Aquecendo',
   'navegador-aberto': 'Navegador aberto',
 };
 
 // Quando a próxima sessão desta conta deve abrir (só se ela ainda tem o que fazer hoje)
-export function nextSessionAt(a: { schedule: string; nextAfter: number | null }, now: number) {
-  if (a.schedule === 'iniciar' || a.schedule === 'limite-simultaneo') return now;
+export function nextSessionAt(
+  a: { schedule: string; nextAfter: number | null; slots?: { at: number }[]; today?: Record<string, number> },
+  now: number,
+) {
+  if (a.schedule === 'iniciar' || a.schedule === 'limite-simultaneo' || a.schedule === 'espacamento') return now;
   if (a.schedule === 'intervalo') return Math.max(now, a.nextAfter || now);
+  if (a.schedule === 'agendada') {
+    const slot = (a.slots || [])[(a.today && a.today.sessions) || 0];
+    return slot ? Math.max(now, slot.at, a.nextAfter || 0) : null;
+  }
   return null;
+}
+
+// Sessões da rotina de hoje que ainda não aconteceram, com a duração estimada de cada uma (min)
+export function upcomingSlots(a: {
+  slots?: { at: number; target: number }[];
+  today?: Record<string, number>;
+  plan: Record<string, number>;
+}) {
+  const slots = a.slots || [];
+  const done = (a.today && a.today.sessions) || 0;
+  return slots.slice(done).map((s, i) => {
+    const prev = done + i > 0 ? slots[done + i - 1].target : 0;
+    return { at: s.at, minutes: Math.max(4, Math.round((a.plan.minutes || 15) * (s.target - prev) * 1.3)) };
+  });
 }
 
 // Texto de um evento do feed

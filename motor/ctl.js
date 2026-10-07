@@ -10,7 +10,7 @@ const STALL_MS = 10 * 60000; // 10 min sem progresso nas metas = travou
  * now(): relógio (o simulador passa um relógio falso).
  * hooks: { status(text, until), action(type, detail), log(msg, level), alert(level, msg, kind) }
  */
-function createCtl({ state, plan, done, now = Date.now, hooks }) {
+function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
   const goalKeys = Object.keys(plan).filter((k) => k !== 'minutes' && plan[k] > 0);
   const left = (k) => (plan[k] || 0) - (done()[k] || 0);
   state.samples = state.samples || {};
@@ -27,8 +27,11 @@ function createCtl({ state, plan, done, now = Date.now, hooks }) {
     capped: (k) => rules.isCapped(plan, done(), k),
     allowed: (act, acc) => rules.activityAllowed(act, plan, done(), acc),
     useful: (act) => rules.activityUseful(act, plan, done()),
-    // Todas as metas batidas? (ignora metas marcadas como inalcançáveis nesta sessão)
-    goalsDone: (skip = []) => goalKeys.every((k) => skip.includes(k) || left(k) <= 0),
+    // Sessão terminou? Todas as metas batidas (ignorando as inalcançáveis nesta sessão), ou a parte do dia
+    // que esta sessão devia cobrir (target < 1: sessão curta da rotina; o resto fica para a próxima)
+    goalsDone: (skip = []) =>
+      goalKeys.every((k) => skip.includes(k) || left(k) <= 0) || (target < 1 && rules.completion(plan, done()) >= target),
+    target,
     stalled: () => now() - state.lastProgress > STALL_MS,
     status(text, ms) {
       state.lastBeat = now();

@@ -304,6 +304,29 @@ function planOf(a, gen) {
   return plan;
 }
 
+// Rotina do dia (horários e tamanho de cada sessão), planejada uma vez por data.
+// Só planeja depois que o plano do dia existe; nada antes de agora (motor ligado no meio do dia).
+function slotsOf(a, gen) {
+  const date = rules.localDate();
+  const plan = planOf(a, gen);
+  const { slots, created } = rules.ensureSlots(a.daily, date, () =>
+    rules.planSlots({ date, window: rules.windowOf(a, config), persona: a.persona, planMinutes: plan.minutes, notBefore: Date.now() }),
+  );
+  if (created) touch(a.id);
+  return slots;
+}
+
+// Último início de sessão de qualquer conta hoje (para contas não abrirem em horários casados)
+function lastStartAny(running = []) {
+  let last = 0;
+  for (const a of accounts) {
+    const h = a.history[a.history.length - 1];
+    if (h && h.startedAt) last = Math.max(last, Date.parse(h.startedAt));
+  }
+  for (const t of running) last = Math.max(last, t);
+  return last || null;
+}
+
 function pushEvent(a, ev) {
   const e = { t: Date.now(), ...ev };
   a.events.push(e);
@@ -537,6 +560,8 @@ module.exports = {
   dayOf,
   todayOf,
   planOf,
+  slotsOf,
+  lastStartAny,
   add,
   remove,
   recordAction,

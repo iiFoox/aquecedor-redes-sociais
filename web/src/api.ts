@@ -59,6 +59,7 @@ export interface Account {
   health: { score: number; consistency: number; completion: number; safety: number; label: string; nodata?: boolean };
   sessions: number;
   nextAfter: number | null;
+  slots: { at: number; target: number }[]; // rotina de hoje
   checklist: Record<string, boolean>;
   days: DayInfo[];
   todaySessions: { start: number; end: number; result: string }[];

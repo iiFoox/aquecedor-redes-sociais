@@ -16,6 +16,7 @@ import {
   plural,
   resultClass,
   SCHEDULE_LABEL,
+  upcomingSlots,
   streak,
   when,
   windowSegments,
@@ -140,13 +141,27 @@ function Agenda({ now }: { now: number }) {
                 title={`${hhmm(a.live.startedAt)}–agora`}
               />
             )}
-            {!a.live && next !== null && config.active && (
-              <span
-                className="ag-blk planned"
-                style={{ left: `${X(m(next))}%`, width: `${Math.max(1, X(m(next) + (a.plan.minutes || 15)) - X(m(next)))}%` }}
-                title={`${hhmm(next)} · próxima sessão prevista`}
-              />
-            )}
+            {config.active &&
+              a.dayStatus === 'pending' &&
+              (a.slots && a.slots.length
+                ? upcomingSlots(a)
+                    .filter((_s, i) => !(a.live && i === 0))
+                    .map((s) => (
+                      <span
+                        key={s.at}
+                        className="ag-blk planned"
+                        style={{ left: `${X(m(s.at))}%`, width: `${Math.max(1, X(m(s.at) + s.minutes) - X(m(s.at)))}%` }}
+                        title={`${hhmm(s.at)} · sessão planejada (~${s.minutes} min)`}
+                      />
+                    ))
+                : !a.live &&
+                  next !== null && (
+                    <span
+                      className="ag-blk planned"
+                      style={{ left: `${X(m(next))}%`, width: `${Math.max(1, X(m(next) + (a.plan.minutes || 15)) - X(m(next)))}%` }}
+                      title={`${hhmm(next)} · próxima sessão prevista`}
+                    />
+                  ))}
           </div>,
         ];
       })}
@@ -213,7 +228,9 @@ export function AccountCard({ a, meta, now }: { a: Account; meta: Meta; now: num
         <div className="wait-line">
           <Icon name="calendar" />
           {why}
-          {a.schedule === 'intervalo' && a.nextAfter ? ` · volta às ${hhmm(a.nextAfter)}` : ''}
+          {(a.schedule === 'intervalo' || a.schedule === 'agendada') && nextSessionAt(a, now)
+            ? ` · às ${hhmm(nextSessionAt(a, now)!)}`
+            : ''}
           {a.schedule === 'fora-da-janela' && a.window ? ` · horário dela ${a.window.start}–${a.window.end}` : ''}
         </div>
       )}

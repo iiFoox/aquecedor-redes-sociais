@@ -46,6 +46,8 @@ async function tick(now = new Date()) {
       backupHold,
       proxyDown: proxyDown(acc),
       plan: () => store.planOf(acc, p.planForDay),
+      slots: () => store.slotsOf(acc, p.planForDay),
+      lastStartAny: store.lastStartAny(Object.values(runner.activeSessions()).map((s) => s.startedAt)),
       today: store.todayOf(acc.id),
       activities: p.activities,
     });

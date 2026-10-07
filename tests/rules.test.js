@@ -129,16 +129,15 @@ test('falta de login não derruba a saúde; captcha derruba', () => {
   assert.equal(rules.computeHealth(acc, now).safety, 50);
 });
 
-test('intervalo entre sessões da mesma conta é sorteado entre 45 e 90 min', () => {
+test('descanso entre sessões da mesma conta tem cauda longa (30 min a 3 h, mediana ~50 min)', () => {
+  const human = require('../motor/human');
   const end = Date.parse('2026-10-07T10:00:00-03:00');
-  assert.equal(
-    rules.nextAfter(end, () => 0),
-    end + 45 * 60000,
-  );
-  assert.equal(
-    rules.nextAfter(end, () => 1),
-    end + 90 * 60000,
-  );
+  const rng = human.makeRng(4);
+  const gaps = Array.from({ length: 3000 }, () => (rules.nextAfter(end, rng) - end) / 60000).sort((a, b) => a - b);
+  assert.ok(gaps[0] >= 30 && gaps[gaps.length - 1] <= 180);
+  const median = gaps[1500];
+  assert.ok(median > 44 && median < 56, `mediana ${median}`);
+  assert.ok(gaps[2970] > 100, 'cauda longa: às vezes passa de 1h40');
 });
 
 test('agendador decide quando iniciar e por que não iniciou', () => {
