@@ -309,6 +309,8 @@ async function run(account, platform, s, ctl) {
       result,
       error,
       screenshot,
+      // Resumo dos tempos desta sessão (pausas e tempo por vídeo) para o card "Naturalidade"
+      timing: Object.fromEntries(Object.entries(s.samples || {}).map(([k, v]) => [k, human.timingSummary(v)])),
     });
     delete sessions[account.id];
     emit({ type: 'session', id: account.id, running: false, result });

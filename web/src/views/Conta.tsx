@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, type Account, type AccountFull, type Meta } from '../api.ts';
 import { AccountActions, AttentionBox, BarChart, Ring, StatePill } from '../components/bits.tsx';
 import { Icon, PlatformBadge } from '../components/Icon.tsx';
+import { Naturalidade } from '../components/Naturalidade.tsx';
 import { confetti } from '../lib/confetti.ts';
 import {
   addDays,
@@ -532,6 +533,7 @@ export function Conta() {
           </div>
         </div>
       </section>
+      <Naturalidade full={full} />
       {full.screens.length > 0 && (
         <section className="panel mt">
           <div className="panel-head">

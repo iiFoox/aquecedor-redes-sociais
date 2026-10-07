@@ -94,6 +94,31 @@ export interface Session {
   result: string;
   error?: string;
   screenshot?: string;
+  timing?: Record<string, Timing>;
+}
+
+// Resumo dos tempos de uma sessão (human.timingSummary)
+export interface Timing {
+  n: number;
+  p10: number;
+  p50: number;
+  p90: number;
+  p99: number;
+  max: number;
+  edges: number[];
+  hist: number[];
+}
+
+export interface Persona {
+  readSpeed: number;
+  pace: number;
+  patience: number;
+  likeBias: number;
+  typingCps: number;
+  distraction: number;
+  peak: number;
+  spread: number;
+  scroll: { step: number; flick: number; overshoot: number };
 }
 
 export interface AccountFull extends Account {
@@ -101,6 +126,7 @@ export interface AccountFull extends Account {
   history: Session[];
   screens: string[];
   proxyUrl: string;
+  persona: Persona | null;
 }
 
 export interface Meta {

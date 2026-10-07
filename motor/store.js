@@ -131,6 +131,7 @@ const sessionFromRow = (r) =>
     result: r.result,
     error: r.error,
     screenshot: r.screenshot,
+    timing: r.timing,
   });
 
 function normalize(a) {
@@ -473,6 +474,7 @@ function addSession(id, session) {
     result: session.result,
     error: session.error || null,
     screenshot: session.screenshot || null,
+    timing: session.timing || null,
   });
   touch(id);
 }

@@ -142,31 +142,6 @@ async function simulate({ account, days = 3, from = startOfDay(Date.now() + DAY)
   return { account: acc, sessions, daily: acc.daily };
 }
 
-// ---------- Relatório ----------
-
-function percentile(sorted, p) {
-  if (!sorted.length) return 0;
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
-}
-
-// Resumo de uma lista de tempos (ms): quantos, percentis e histograma em faixas
-function summarize(values, edges = [500, 1000, 2000, 4000, 8000, 15000, 30000, 60000, 120000]) {
-  const sorted = [...values].sort((a, b) => a - b);
-  const hist = edges.map(() => 0).concat([0]);
-  for (const v of sorted) {
-    const i = edges.findIndex((e) => v < e);
-    hist[i === -1 ? edges.length : i]++;
-  }
-  return {
-    n: sorted.length,
-    p10: percentile(sorted, 10),
-    p50: percentile(sorted, 50),
-    p90: percentile(sorted, 90),
-    p99: percentile(sorted, 99),
-    max: sorted[sorted.length - 1] || 0,
-    edges,
-    hist,
-  };
-}
+const summarize = human.timingSummary;
 
 module.exports = { simulate, simulateSession, summarize, startOfDay };

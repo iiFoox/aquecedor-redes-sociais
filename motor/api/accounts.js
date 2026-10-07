@@ -93,6 +93,7 @@ function summarize(a, full = false) {
     out.history = a.history.slice(-30).reverse();
     out.alerts = a.alerts.slice(-20).reverse().map(alertOut);
     out.screens = runner.listScreens(a.id).slice(0, 12);
+    out.persona = a.persona || null;
     out.proxyUrl = a.proxy || ''; // só no detalhe, para o seletor de proxy (o painel é local)
   }
   return out;

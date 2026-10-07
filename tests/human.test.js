@@ -210,3 +210,12 @@ test('duração real do vídeo muda o tempo assistido', async () => {
   const long = human.watchPlan(60, { rng: () => 0.99 });
   assert.ok(long.ms > short.ms * 4);
 });
+
+test('resumo dos tempos da sessão: percentis e histograma por faixa', () => {
+  const t = human.timingSummary([300, 800, 1500, 1500, 3000, 70000, 200000]);
+  assert.equal(t.n, 7);
+  assert.equal(t.p50, 1500);
+  assert.equal(t.max, 200000);
+  assert.deepEqual(t.hist, [1, 1, 2, 1, 0, 0, 0, 1, 0, 1]); // <0,5 s · <1 s · <2 s · <4 s ... · >2 min
+  assert.equal(human.timingSummary([]).n, 0);
+});

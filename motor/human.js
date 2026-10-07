@@ -231,7 +231,25 @@ function scrollSteps(amount, { persona = null, rng = Math.random } = {}) {
   return steps;
 }
 
+// ---------- Resumo dos tempos (card "Naturalidade") ----------
+
+const TIME_EDGES = [500, 1000, 2000, 4000, 8000, 15000, 30000, 60000, 120000];
+
+// Lista de tempos (ms) → quantos, percentis e histograma por faixas (TIME_EDGES; a última é "acima de 2 min")
+function timingSummary(values, edges = TIME_EDGES) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = (p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : 0);
+  const hist = edges.map(() => 0).concat([0]);
+  for (const v of sorted) {
+    const i = edges.findIndex((e) => v < e);
+    hist[i === -1 ? edges.length : i]++;
+  }
+  return { n: sorted.length, p10: at(10), p50: at(50), p90: at(90), p99: at(99), max: sorted[sorted.length - 1] || 0, edges, hist };
+}
+
 module.exports = {
+  TIME_EDGES,
+  timingSummary,
   PAUSES,
   makeRng,
   hashSeed,

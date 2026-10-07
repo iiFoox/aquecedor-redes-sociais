@@ -2404,3 +2404,61 @@ tr:last-child td {
 .ag-label.link {
   color: var(--fg);
 }
+
+/* Card "Naturalidade" */
+.nat-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 22px;
+  align-items: start;
+}
+.nat-traits {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.nat-traits div {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 13px;
+}
+.nat-traits dt {
+  color: var(--dim);
+}
+.nat-traits dd {
+  margin: 0;
+}
+.nat-hist {
+  display: grid;
+  gap: 5px;
+}
+.nat-hist .g-top {
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.nat-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 34px;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+}
+.nat-row > span:last-child {
+  text-align: right;
+}
+@media (max-width: 1060px) {
+  .nat-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .nat-traits div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .nat-row {
+    grid-template-columns: 88px minmax(0, 1fr) 28px;
+  }
+}
