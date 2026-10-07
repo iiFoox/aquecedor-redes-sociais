@@ -12,6 +12,7 @@ const router = express.Router();
 const { summarize } = require('../summary');
 const actions = require('../actions');
 const cloud = require('../cloud');
+const screens = require('../screens');
 
 // Aparelhos do usuário (cache de 20 s): para mostrar onde cada conta roda
 let devCache = { at: 0, list: [] };
@@ -89,8 +90,13 @@ router.patch(
 // Prints de tela tirados em captcha, bloqueio, erro ou sessão travada
 router.get('/accounts/:id/screens/:file', account, (req, res) => {
   if (!/^[\w-]+\.jpg$/.test(req.params.file)) return res.status(400).json({ error: 'Arquivo inválido' });
-  res.sendFile(path.join(runner.screensDir(req.account.id), req.params.file), (err) => {
-    if (err && !res.headersSent) res.status(404).json({ error: 'Print não encontrado' });
+  res.sendFile(path.join(runner.screensDir(req.account.id), req.params.file), async (err) => {
+    if (!err || res.headersSent) return;
+    // Não está neste aparelho: busca no Supabase Storage
+    const buf = await screens.download(req.account.id, req.params.file).catch(() => null);
+    if (!buf) return res.status(404).json({ error: 'Print não encontrado' });
+    res.type('jpeg').setHeader('Cache-Control', 'private, max-age=86400');
+    res.send(buf);
   });
 });
 

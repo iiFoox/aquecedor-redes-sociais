@@ -40,6 +40,13 @@ function createPainel({ auth, dist, motorPort, readToken = motorToken.read }) {
   // Link do e-mail de "esqueci a senha": abre a tela de login no modo "senha nova" (mesmo se já estiver logado)
   app.get('/nova-senha', (req, res) => res.sendFile(path.join(dist, 'login.html')));
 
+  // Entregar o login e mexer na chave dos logins: só o próprio painel, por dentro, depois de conferir a senha.
+  // Do navegador, não (uma sessão roubada do painel não consegue trocar a chave).
+  app.use('/api/_device', (req, res, next) => {
+    if (/^\/+(link|vault)(\/|$)/i.test(req.path)) return res.status(404).json({ error: 'Rota não encontrada' });
+    next();
+  });
+
   // Repassa a requisição para o motor, sem ler o corpo (funciona também para o tempo real).
   // Leva a senha interna e quem está logado; nunca repassa cabeçalhos com esses nomes vindos do navegador.
   app.use('/api', (req, res) => {

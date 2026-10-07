@@ -17,15 +17,15 @@ const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '127.0.0.1';
 const MOTOR_PORT = Number(process.env.MOTOR_PORT) || 3101;
 
-// Entrega ao motor deste aparelho o login do Supabase de quem acabou de entrar (o aparelho passa a rodar como ele)
-function linkDevice(session, userId) {
+// Pedido interno ao motor deste aparelho (rotas que o navegador não alcança: login e chave dos logins)
+function motorPost(route, payload, userId) {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify(session);
+    const body = JSON.stringify(payload);
     const req = http.request(
       {
         host: '127.0.0.1',
         port: MOTOR_PORT,
-        path: '/api/_device/link',
+        path: route,
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -53,7 +53,16 @@ function linkDevice(session, userId) {
   });
 }
 
-const auth = createAuth({ store: cloudStore({ dir: path.join(require('../motor/paths').DATA, 'painel') }), onLogin: linkDevice });
+// Quem acabou de entrar: o login do Supabase vai para o motor (o aparelho passa a rodar como ele) e a senha destranca
+// a chave dos logins das contas (o motor não grava a senha)
+const linkDevice = (session, userId, password) => motorPost('/api/_device/link', { ...session, password }, userId);
+const vaultAction = (userId, req) => motorPost('/api/_device/vault', req, userId);
+
+const auth = createAuth({
+  store: cloudStore({ dir: path.join(require('../motor/paths').DATA, 'painel') }),
+  onLogin: linkDevice,
+  onVault: vaultAction,
+});
 const app = createPainel({ auth, dist: path.join(__dirname, '..', 'web', 'dist'), motorPort: MOTOR_PORT });
 
 if (process.env.PANEL_PASSWORD) console.warn('ℹ️  PANEL_PASSWORD não é mais usada: o painel agora tem tela de login.');

@@ -6,6 +6,7 @@ const rules = require('./rules');
 const platforms = require('./platforms');
 const { READY_DAY, phaseFor } = require('./platforms/phases');
 const backup = require('./backup');
+const logins = require('./logins');
 
 const STATUS_FRESH_MS = 3 * 60000; // status mais velho que isso: o aparelho dono sumiu
 
@@ -14,6 +15,13 @@ const alertOut = (x) => ({ t: x.t, lastT: x.lastT, count: x.count, level: x.leve
 const MONTH_MS = 30 * 86400000;
 const GRAVE = ['captcha', 'block'];
 const OK_RESULTS = ['ok', 'limit'];
+
+// Prints da conta: os deste aparelho + os do histórico (tirados em outro aparelho; vêm do Supabase Storage)
+function screensOf(a, here) {
+  const all = new Set(here ? runner.listScreens(a.id) : []);
+  for (const h of a.history) if (h.screenshot) all.add(h.screenshot);
+  return [...all].sort().reverse();
+}
 
 const proxyOf = (a) => (a.proxy ? store.allProxies().find((p) => p.url === a.proxy) : null);
 
@@ -87,7 +95,8 @@ function summarize(a, full = false, devices = []) {
         grave: a.alerts.filter((x) => x.t >= since && GRAVE.includes(x.kind)).length,
       };
     })(),
-    lastScreen: here ? runner.listScreens(a.id)[0] || null : null,
+    lastScreen: screensOf(a, here)[0] || null,
+    loginSavedAt: logins.savedAt(a.id), // último login guardado no Supabase (cifrado)
     alerts: a.alerts.slice(-5).reverse().map(alertOut),
     loginOpen: here ? runner.isBrowserOpen(a.id) : !!(rs && rs.loginOpen),
     browserPurpose: here ? runner.browserPurpose(a.id) : (rs && rs.browserPurpose) || null,
@@ -101,7 +110,7 @@ function summarize(a, full = false, devices = []) {
     out.events = a.events.slice(-150).reverse();
     out.history = a.history.slice(-30).reverse();
     out.alerts = a.alerts.slice(-20).reverse().map(alertOut);
-    out.screens = here ? runner.listScreens(a.id).slice(0, 12) : [];
+    out.screens = screensOf(a, here).slice(0, 12);
     out.persona = a.persona || null;
     out.proxyUrl = a.proxy || ''; // só no detalhe, para o seletor de proxy (o painel é local)
   }

@@ -65,6 +65,7 @@ export interface Account {
   todaySessions: { start: number; end: number; result: string }[];
   month: { sessions: number; ok: number; grave: number };
   lastScreen: string | null;
+  loginSavedAt: number | null; // último login guardado no Supabase (cifrado)
   alerts: Alert[];
   loginOpen: boolean;
   browserPurpose: 'login' | 'captcha' | null;
@@ -90,7 +91,10 @@ export interface DeviceInfo {
   mine: boolean;
   email: string | null;
   device: { id: string; name: string } | null;
+  vault: VaultStatus | null;
 }
+// Chave dos logins das contas neste aparelho
+export type VaultStatus = 'ok' | 'trancada' | 'off';
 
 export interface FeedEvent {
   t: number;

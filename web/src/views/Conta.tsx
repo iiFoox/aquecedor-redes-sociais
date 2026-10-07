@@ -16,6 +16,7 @@ import {
   healthLabel,
   heat,
   hhmm,
+  loginSaved,
   missing,
   pct,
   RESULT_LABEL,
@@ -375,6 +376,7 @@ export function Conta() {
               </span>
               {a.interests.length > 0 && <span>· {a.interests.join(', ')}</span>}
               {a.proxyHost && <span>· proxy {a.proxyHost}</span>}
+              <span className={a.loginSavedAt ? '' : 'dim'}>· {loginSaved(a.loginSavedAt)}</span>
             </div>
           </div>
         </div>
@@ -384,7 +386,11 @@ export function Conta() {
             className="btn ghost"
             aria-label="Remover conta"
             title="Remover conta"
-            onClick={() => confirm(`Remover @${a.username}? O login salvo no PC continua na pasta data/profiles.`) && act.remove(a)}
+            onClick={() =>
+              confirm(
+                `Remover @${a.username}? O login salvo no Supabase e os prints saem junto; a pasta do perfil continua neste PC (data/profiles).`,
+              ) && act.remove(a)
+            }
           >
             <Icon name="trash" />
           </button>

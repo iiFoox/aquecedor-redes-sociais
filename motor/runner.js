@@ -12,6 +12,8 @@ const { createBot, AbortError } = require('./bot');
 const { createCtl } = require('./ctl');
 const human = require('./human');
 const { checkProxy } = require('./proxycheck');
+const logins = require('./logins');
+const screens = require('./screens');
 
 const hub = new EventEmitter();
 hub.setMaxListeners(200);
@@ -21,6 +23,7 @@ const manual = {}; // id -> { ctx, purpose } navegador aberto para você (login 
 const lastFrames = {}; // id -> último quadro (base64 jpeg)
 let lock = null; // motivo do bloqueio (ex.: backup dos perfis em andamento)
 
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const emit = (ev) => hub.emit('event', { t: Date.now(), ...ev });
 const { DATA } = require('./paths');
 const profileDir = (id) => path.join(DATA, 'profiles', id);
@@ -80,13 +83,44 @@ async function launch(account, { visible = false } = {}) {
     args,
   };
   if (account.proxy) opts.proxy = proxyOpt(account.proxy);
+  const fresh = !fs.existsSync(profileDir(account.id));
+  let ctx;
   try {
-    return await chromium.launchPersistentContext(profileDir(account.id), opts);
+    ctx = await chromium.launchPersistentContext(profileDir(account.id), opts);
   } catch (e) {
     // Sem cair para outro navegador: trocar de navegador muda o "aparelho" da conta
     if (/msedge|Edge|executable|distribution/i.test(e.message))
       throw new Error(`Não consegui abrir o Microsoft Edge (${e.message.split('\n')[0]}). O robô usa o Edge instalado no Windows`);
     throw e;
+  }
+  await restoreLogin(ctx, account, fresh);
+  return ctx;
+}
+
+const hhmm = (ms) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+// Pasta do perfil nova (conta veio de outro aparelho ou a pasta sumiu): traz o login salvo no Supabase
+async function restoreLogin(ctx, account, fresh) {
+  try {
+    const r = await logins.restoreIfNeeded(ctx, account, { fresh });
+    if (r) {
+      store.addLog(account.id, `Login restaurado do Supabase (salvo às ${hhmm(r.at)})`);
+      emit({ type: 'login-saved', id: account.id, at: logins.savedAt(account.id) });
+    }
+  } catch (e) {
+    store.addLog(account.id, `Não consegui restaurar o login salvo: ${e.message}`, 'warn');
+  }
+}
+
+// Guarda o login da conta no Supabase (cifrado). Nunca derruba a sessão.
+async function saveLogin(ctx, account, announce = false) {
+  try {
+    const at = await logins.save(ctx, account);
+    if (!at) return;
+    if (announce) store.addLog(account.id, `Login salvo no Supabase às ${hhmm(at)}`);
+    emit({ type: 'login-saved', id: account.id, at });
+  } catch (e) {
+    store.addLog(account.id, `Não consegui salvar o login no Supabase: ${e.message}`, 'warn');
   }
 }
 
@@ -160,6 +194,7 @@ async function openBrowser(account, purpose = 'login') {
         const cookies = await ctx.cookies();
         if (cookies.some((c) => c.name === 'sessionid' || c.name === 'sessionid_ss')) {
           clearInterval(check);
+          await saveLogin(ctx, account, true);
           store.clearAttention(account.id, 'Login detectado! Fechando a janela automaticamente', ['login']);
           emit({ type: 'attention', id: account.id, attention: store.get(account.id)?.attention || null });
           await closeBrowser(account.id);
@@ -316,6 +351,8 @@ async function run(account, platform, s, ctl) {
     // Print da tela para você ver o que aconteceu (captcha, bloqueio e erro)
     if (!screenshot && page && ['captcha', 'block', 'error'].includes(result)) screenshot = await snap(page, account.id, result);
   } finally {
+    // Login salvo no fim de cada sessão (só se a conta continua logada; sessão travada não espera)
+    if (ctx && result !== 'not_logged' && !s.killed) await Promise.race([saveLogin(ctx, account), wait(15000)]);
     if (ctx) await ctx.close().catch(() => {});
     const minutes = +((Date.now() - s.startedAt) / 60000).toFixed(1);
     store.addSession(account.id, {
@@ -345,12 +382,15 @@ async function snap(page, id, tag) {
     fs.mkdirSync(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const file = `${stamp}_${tag}.jpg`;
-    await page.screenshot({ path: path.join(dir, file), type: 'jpeg', quality: 70, timeout: 5000 });
+    const buf = await page.screenshot({ path: path.join(dir, file), type: 'jpeg', quality: 70, timeout: 5000 });
+    screens.upload(id, file, buf).catch(() => {}); // sobe para o Supabase (qualquer aparelho vê)
     const old = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith('.jpg'))
       .sort();
-    old.slice(0, Math.max(0, old.length - KEEP_SCREENS)).forEach((f) => fs.rmSync(path.join(dir, f), { force: true }));
+    const drop = old.slice(0, Math.max(0, old.length - KEEP_SCREENS));
+    drop.forEach((f) => fs.rmSync(path.join(dir, f), { force: true }));
+    screens.remove(id, drop).catch(() => {});
     return file;
   } catch {
     return null;

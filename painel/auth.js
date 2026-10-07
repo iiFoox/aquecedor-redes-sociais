@@ -51,8 +51,9 @@ function sameOrigin(req) {
  * store: authStore (supabaseStore ou memoryStore). now: relógio (os testes avançam o tempo).
  * secure: cookie só em https.
  */
-// onLogin(session, userId): entrega o login do Supabase ao motor deste aparelho (painel/index.js). Devolve a situação do aparelho.
-function createAuth({ store, now = Date.now, secure = false, onLogin = async () => null }) {
+// onLogin(session, userId, password): entrega o login do Supabase ao motor deste aparelho (painel/index.js); a senha só
+// destranca a chave dos logins das contas. onVault(userId, pedido): troca de senha e chave dos logins no motor.
+function createAuth({ store, now = Date.now, secure = false, onLogin = async () => null, onVault = async () => null }) {
   const cache = new Map(); // id (hash) -> sessão; evita ir ao banco a cada pedido
   // Hora da tentativa pelo relógio do painel (o relógio do banco pode estar uns segundos adiantado)
   const logAttempt = (a) => store.logAttempt({ ...a, t: now() });
@@ -149,13 +150,13 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
   });
 
   // Entrou (login ou cadastro): sessão do painel + o login do Supabase vai para o motor deste aparelho
-  async function enter(req, res, u, persistent, reason) {
+  async function enter(req, res, u, persistent, reason, password) {
     await startSession(req, res, u.id, persistent, u.email);
     await logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason });
     let device = null;
     if (u.session) {
       await store.claimLegacy(u.session).catch((e) => console.error(`⚠️  Contas antigas: ${e.message}`));
-      device = await onLogin(u.session, u.id).catch((e) => ({ error: e.message }));
+      device = await onLogin(u.session, u.id, password).catch((e) => ({ error: e.message }));
     }
     return device;
   }
@@ -178,7 +179,7 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     if (!r.success) return wrong(null);
     const u = await store.verify(r.data.email, r.data.password).catch(() => null);
     if (!u) return wrong(r.data.email);
-    const device = await enter(req, res, u, r.data.remember, 'ok');
+    const device = await enter(req, res, u, r.data.remember, 'ok', r.data.password);
     res.json({ ok: true, device });
   });
 
@@ -198,7 +199,7 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     await logAttempt({ email: u.email, userId: u.id, ip, userAgent: agentOf(req), ok: true, reason: 'cadastro' });
     // Supabase com confirmação de e-mail ligada: entra depois de clicar no link do e-mail
     if (u.needsConfirm) return res.json({ ok: true, confirm: true, message: `Enviamos um link para ${u.email}. Confirme e depois entre.` });
-    const device = await enter(req, res, u, false, 'ok');
+    const device = await enter(req, res, u, false, 'ok', r.data.password);
     res.json({ ok: true, device });
   });
 
@@ -229,6 +230,8 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     // Senha nova: as sessões abertas do painel neste aparelho saem
     await store.deleteUserSessions(u.id);
     for (const [id, s] of cache) if (s.userId === u.id) cache.delete(id);
+    // Este aparelho tem a chave dos logins: tranca com a senha nova
+    await onVault(u.id, { mode: 'rewrap', password: pw.data }).catch(() => null);
     await logAttempt({ email: u.email, userId: u.id, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
     res.json({ ok: true });
   });
@@ -271,8 +274,43 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     // Senha nova: encerra as outras sessões do painel; esta continua
     await store.deleteUserSessions(userId, req.session.id);
     for (const [id, s] of cache) if (s.userId === userId && id !== req.session.id) cache.delete(id);
+    await onVault(userId, { mode: 'rewrap', password: r.data.password }).catch(() => null);
     await logAttempt({ email, userId, ip: ipOf(req), userAgent: agentOf(req), ok: true, reason: 'troca-senha' });
     res.json({ ok: true });
+  });
+
+  // Chave dos logins trancada: abrir com a senha antiga ("antiga") ou começar uma chave nova ("nova").
+  // Sempre confere a senha atual primeiro (conta como tentativa de senha no bloqueio).
+  router.post('/chave', async (req, res) => {
+    const { email, userId } = req.session;
+    const ip = ipOf(req);
+    const lock = await lockedFor(ip);
+    if (lock > 0) return res.status(429).json({ error: lockMsg(lock), retryAfter: Math.ceil(lock / 1000) });
+    const b = req.body || {};
+    if (!['antiga', 'nova'].includes(b.acao) || typeof b.password !== 'string' || !b.password)
+      return res.status(400).json({ error: 'Informe a senha atual' });
+    if (b.acao === 'antiga' && (typeof b.oldPassword !== 'string' || !b.oldPassword))
+      return res.status(400).json({ error: 'Informe a senha antiga' });
+    const u = await store.verify(email, b.password).catch(() => null);
+    if (!u) {
+      await logAttempt({ email, userId, ip, userAgent: agentOf(req), ok: false, reason: 'senha' });
+      return res.status(400).json({ error: 'A senha atual não confere' });
+    }
+    const r = await onVault(userId, {
+      mode: b.acao === 'nova' ? 'reset' : 'unlock-old',
+      password: b.password,
+      oldPassword: b.oldPassword,
+    }).catch((e) => ({ status: 500, error: e.message }));
+    if (!r || r.error) return res.status(r && r.status >= 400 ? r.status : 500).json({ error: (r && r.error) || 'O motor não respondeu' });
+    await logAttempt({
+      email,
+      userId,
+      ip,
+      userAgent: agentOf(req),
+      ok: true,
+      reason: b.acao === 'nova' ? 'chave-nova' : 'chave-destrancada',
+    });
+    res.json({ ok: true, vault: r.vault });
   });
 
   router.get('/acessos', async (req, res) => {

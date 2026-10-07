@@ -1,6 +1,6 @@
-// Aparelhos: onde cada conta roda, "Rodar neste aparelho" e a lista de aparelhos (Ajustes).
-import { useEffect, useState } from 'react';
-import { api, type Account, type Device, type DeviceInfo } from '../api.ts';
+// Aparelhos: onde cada conta roda, "Rodar neste aparelho", a lista de aparelhos e os logins na nuvem (Ajustes).
+import { useEffect, useState, type FormEvent } from 'react';
+import { api, type Account, type Device, type DeviceInfo, type VaultStatus } from '../api.ts';
 import { useStore } from '../store.tsx';
 import { when } from '../lib/format.ts';
 import { Icon } from './Icon.tsx';
@@ -116,6 +116,127 @@ export function Aparelhos() {
         Cada aparelho roda as próprias contas, ao mesmo tempo. Para mudar uma conta de aparelho, abra a página dela no aparelho novo e
         clique em "Rodar neste aparelho".
       </p>
+    </section>
+  );
+}
+
+// Ajustes → Logins na nuvem: a chave que cifra os logins das contas no Supabase
+export function LoginsNuvem() {
+  const { run } = useStore();
+  const [vault, setVault] = useState<VaultStatus | null>(null);
+  const [mode, setMode] = useState<'antiga' | 'nova' | null>(null);
+  const [password, setPassword] = useState('');
+  const [oldPassword, setOldPassword] = useState('');
+  const [error, setError] = useState('');
+  const load = () => {
+    api<DeviceInfo>('/api/_device')
+      .then((d) => setVault(d.vault))
+      .catch(() => {});
+  };
+  useEffect(load, []);
+  if (!vault) return null;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (
+      mode === 'nova' &&
+      !confirm(
+        'Começar uma chave nova? Os logins salvos com a antiga são apagados do Supabase e as contas sem pasta neste aparelho vão pedir login de novo.',
+      )
+    )
+      return;
+    await run(
+      async () => {
+        try {
+          const r = await api<{ vault: VaultStatus }>('/auth/chave', 'POST', { acao: mode, password, oldPassword });
+          setVault(r.vault);
+        } catch (err) {
+          setError((err as Error).message);
+          throw err;
+        }
+        setMode(null);
+        setPassword('');
+        setOldPassword('');
+      },
+      mode === 'nova' ? 'Chave nova criada. Os logins voltam a ser salvos.' : 'Chave destrancada.',
+    );
+  }
+
+  return (
+    <section className="panel">
+      <h2>Logins na nuvem</h2>
+      <div className="set-row">
+        <div>
+          <b>
+            {vault === 'ok' ? (
+              <span className="ok-text">
+                <Icon name="check" />
+                Ligado
+              </span>
+            ) : (
+              'Chave trancada'
+            )}
+          </b>
+          <span>
+            {vault === 'ok'
+              ? 'O login de cada conta vai para o Supabase, cifrado com uma chave que só a sua senha abre. Conta que muda de aparelho, ou pasta que some, volta logada sozinha.'
+              : 'A sua senha atual não abre a chave dos logins (a senha foi recuperada pelo e-mail e nenhum aparelho com a chave foi aberto depois). Abra com a senha antiga ou comece uma chave nova.'}
+          </span>
+        </div>
+      </div>
+      {vault !== 'ok' && !mode && (
+        <div className="actions">
+          <button className="btn sm" onClick={() => setMode('antiga')}>
+            <Icon name="key" />
+            Tenho a senha antiga
+          </button>
+          <button className="btn sm ghost" onClick={() => setMode('nova')}>
+            Começar chave nova
+          </button>
+        </div>
+      )}
+      {mode && (
+        <form className="stack" onSubmit={submit} style={{ gap: 10 }}>
+          {mode === 'antiga' && (
+            <div className="field">
+              <label htmlFor="vk-antiga">Senha antiga</label>
+              <input
+                id="vk-antiga"
+                className="input"
+                type="password"
+                autoComplete="off"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+              />
+            </div>
+          )}
+          <div className="field">
+            <label htmlFor="vk-atual">Senha atual</label>
+            <input
+              id="vk-atual"
+              className="input"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          {error && (
+            <div className="err-box" role="alert">
+              {error}
+            </div>
+          )}
+          <div className="actions">
+            <button className="btn sm" type="submit" disabled={!password || (mode === 'antiga' && !oldPassword)}>
+              {mode === 'antiga' ? 'Destrancar' : 'Criar chave nova'}
+            </button>
+            <button className="btn sm ghost" type="button" onClick={() => setMode(null)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
     </section>
   );
 }

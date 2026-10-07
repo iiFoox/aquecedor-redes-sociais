@@ -4,6 +4,8 @@ const store = require('./store');
 const runner = require('./runner');
 const rules = require('./rules');
 const cloud = require('./cloud');
+const screens = require('./screens');
+const logins = require('./logins');
 const { CHECKLIST } = require('./platforms/phases');
 
 const fail = (msg, status = 409) => Object.assign(new Error(msg), { status });
@@ -61,6 +63,8 @@ async function local(kind, acc, payload = {}) {
     case 'remove':
       runner.stopSession(acc.id);
       await runner.closeBrowser(acc.id);
+      screens.removeAll(acc.id).catch(() => {}); // o login salvo sai junto com a conta (banco)
+      logins.forget(acc.id);
       return store.remove(acc.id);
     case 'move-out': {
       // Outro aparelho pediu a conta: encerra o que estiver aberto aqui e passa
@@ -97,6 +101,8 @@ async function run(kind, acc, payload = {}) {
     const r = await cloud.client().from('accounts').delete().eq('id', acc.id);
     if (r.error) throw fail(r.error.message, 500);
     store.forget(acc.id);
+    screens.removeAll(acc.id).catch(() => {});
+    logins.forget(acc.id);
     return { ok: true };
   }
   if (!dev.online) throw fail(`${dev.name} está desligado. O pedido fica na fila por 10 min; ligue o app lá ou traga a conta para cá.`);

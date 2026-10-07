@@ -43,7 +43,16 @@ async function setup() {
   await new Promise((r) => motor.listen(0, '127.0.0.1', r));
   // Entrega do login ao motor: guarda o que recebeu
   const linked = [];
-  const auth = createAuth({ store, now: clock.now, onLogin: async (session, userId) => (linked.push({ session, userId }), { ok: true }) });
+  const vaultCalls = [];
+  const auth = createAuth({
+    store,
+    now: clock.now,
+    onLogin: async (session, userId, password) => (linked.push({ session, userId, password }), { ok: true }),
+    onVault: async (userId, r) => (
+      vaultCalls.push({ userId, ...r }),
+      r.oldPassword === 'errada' ? { status: 400, error: 'A senha antiga não abre a chave' } : { ok: true, vault: 'ok' }
+    ),
+  });
   const app = createPainel({ auth, dist: fakeDist(), motorPort: motor.address().port, readToken: () => 'senha-interna' });
   const server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
@@ -79,7 +88,7 @@ async function setup() {
     server.close();
     motor.close();
   };
-  return { req, post, cookieOf, store, clock, close, origin, linked };
+  return { req, post, cookieOf, store, clock, close, origin, linked, vaultCalls };
 }
 
 const SENHA = 'senha forte 123';
@@ -291,6 +300,63 @@ test('esqueci a senha: resposta igual com ou sem conta; o link do e-mail troca a
     assert.equal((await s.post('/auth/login', { email: 'eu@exemplo.com', password: SENHA })).status, 401);
     assert.equal((await s.post('/auth/login', { email: 'eu@exemplo.com', password: 'senha nova 789' })).status, 200);
     assert.equal((await s.req('/nova-senha')).status, 200, 'a página do link precisa abrir sem login');
+  } finally {
+    s.close();
+  }
+});
+
+test('chave dos logins: a senha do login vai para o motor; troca de senha tranca de novo', async () => {
+  const s = await setup();
+  try {
+    const c = s.cookieOf(await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA }));
+    assert.equal(s.linked[0].password, SENHA);
+    await s.post('/auth/login', { email: 'eu@exemplo.com', password: SENHA });
+    assert.equal(s.linked[1].password, SENHA);
+    await s.post('/auth/senha', { current: SENHA, password: 'senha nova 456' }, c);
+    assert.deepEqual(s.vaultCalls.at(-1).mode, 'rewrap');
+    assert.equal(s.vaultCalls.at(-1).password, 'senha nova 456');
+    await s.post('/auth/esqueci', { email: 'eu@exemplo.com' });
+    await s.post('/auth/nova-senha', { access_token: 'rec-eu@exemplo.com', refresh_token: 'x', password: 'senha nova 789' });
+    assert.equal(s.vaultCalls.at(-1).password, 'senha nova 789');
+  } finally {
+    s.close();
+  }
+});
+
+test('chave dos logins: o navegador não alcança as rotas internas do motor (login e chave)', async () => {
+  const s = await setup();
+  try {
+    const c = s.cookieOf(await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA }));
+    for (const p of ['/api/_device/link', '/api/_device/vault', '/api/_DEVICE/VAULT', '/api/_device//vault', '/api/_device/vault/']) {
+      const r = await s.post(p, { mode: 'reset', password: 'x' }, c);
+      assert.equal(r.status, 404, p);
+    }
+    assert.equal((await s.req('/api/_device', { cookie: c })).json.path, '/api/_device', 'a situação do aparelho continua abrindo');
+  } finally {
+    s.close();
+  }
+});
+
+test('chave dos logins: abrir com a senha antiga ou criar nova só com a senha atual certa', async () => {
+  const s = await setup();
+  try {
+    const c = s.cookieOf(await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA }));
+    assert.equal((await s.post('/auth/chave', { acao: 'nova', password: 'errada 123' }, c)).status, 400);
+    assert.equal(s.vaultCalls.length, 0, 'senha atual errada chegou ao motor');
+    assert.equal((await s.post('/auth/chave', { acao: 'antiga', password: SENHA }, c)).status, 400, 'sem a senha antiga');
+    assert.equal((await s.post('/auth/chave', { acao: 'antiga', password: SENHA, oldPassword: 'errada' }, c)).status, 400);
+    const ok = await s.post('/auth/chave', { acao: 'antiga', password: SENHA, oldPassword: 'velha 123' }, c);
+    assert.equal(ok.status, 200);
+    assert.deepEqual(s.vaultCalls.at(-1), {
+      userId: s.store._users.get('eu@exemplo.com').id,
+      mode: 'unlock-old',
+      password: SENHA,
+      oldPassword: 'velha 123',
+    });
+    assert.equal((await s.post('/auth/chave', { acao: 'nova', password: SENHA }, c)).json.vault, 'ok');
+    assert.equal(s.vaultCalls.at(-1).mode, 'reset');
+    assert.equal((await s.post('/auth/chave', { acao: 'nova', password: SENHA })).status, 401, 'sem login');
+    assert.equal((await s.post('/auth/chave', { acao: 'nova', password: SENHA }, c, { origin: 'http://mal.com' })).status, 403);
   } finally {
     s.close();
   }

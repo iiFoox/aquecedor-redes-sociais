@@ -44,9 +44,17 @@ npm run format         # Prettier
     pelo tempo real (somente leitura). `actions.js`: ação em conta de outro aparelho vira comando para ele.
     `publisher.js` publica o status (`accounts.status`). `boot.js` liga tudo depois do login. `summary.js`: resumo da conta.
   - `paths.js`: pasta de dados (`WU_DATA_DIR`; padrão `data/`).
+  - Logins das contas no Supabase (app 3/5): `vault.js` (chave aleatória do usuário, AES-256-GCM; trancada pela senha do
+    app com scrypt em `user_keys` e copiada em cada aparelho com DPAPI em `data/vault-key.bin`). `logins.js` salva
+    cookies + localStorage da plataforma (`storageState` do Playwright) em `account_logins` quando o login é detectado e
+    no fim de cada sessão (só conta logada) e restaura sozinho ao abrir o navegador se a pasta do perfil não existe ou se a
+    conta voltou de outro aparelho com login mais novo (`data/logins-sync.json`). A senha só passa pela memória.
+  - `screens.js`: prints no Storage (bucket privado `screens`, `<dono>/<conta>/`); a rota do print busca lá se não está aqui.
 - `painel/`: login pelo Supabase Auth (`authStore.js`: entrar, criar conta, esqueci a senha; sessões e acessos do painel
   em `data/painel/`), entrega o login ao motor (`/api/_device/link`), serve `web/dist` e repassa `/api` com a senha
   interna (`data/motor.token`) e o usuário (`x-wu-user`). Sem login, só a tela de login (`web/login.html`) abre.
+  `/api/_device/link` e `/api/_device/vault` não passam do navegador: só o painel chama, depois de conferir a senha
+  (`/auth/chave`: abrir a chave com a senha antiga ou começar uma nova).
 - Banco: regras por dono (`auth.uid()`) em tudo; o 1º usuário fica com as contas antigas (`claim_legacy_accounts`).
 - `web/`: o painel (React + TypeScript + Vite). `src/store.tsx` (dados, tempo real, ações), `src/views/` (telas),
   `src/components/`, `src/lib/format.ts` (funções puras, testadas em `tests/web-format.test.ts`). Estilos em `src/styles.css`,

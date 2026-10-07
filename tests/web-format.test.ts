@@ -101,3 +101,10 @@ test('acessos ao painel: texto do motivo e aparelho a partir do user-agent', () 
   );
   assert.equal(f.deviceOf(null), 'aparelho desconhecido');
 });
+
+test('loginSaved: hora de hoje, data de outro dia, ou ainda não salvo', () => {
+  const now = new Date(2026, 9, 7, 15, 0).getTime();
+  assert.equal(f.loginSaved(null, now), 'Login ainda não salvo no Supabase');
+  assert.equal(f.loginSaved(new Date(2026, 9, 7, 9, 5).getTime(), now), 'Login salvo no Supabase às 09:05');
+  assert.equal(f.loginSaved(new Date(2026, 9, 6, 22, 40).getTime(), now), 'Login salvo no Supabase em 06/10 às 22:40');
+});

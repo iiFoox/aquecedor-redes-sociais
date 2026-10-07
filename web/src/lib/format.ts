@@ -17,6 +17,13 @@ export function when(ms: number, now = Date.now()) {
   const d = new Date(ms);
   return d.toDateString() === new Date(now).toDateString() ? hhmm(ms) : `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${hhmm(ms)}`;
 }
+// Último login da conta guardado no Supabase (cifrado)
+export function loginSaved(ms: number | null | undefined, now = Date.now()) {
+  if (!ms) return 'Login ainda não salvo no Supabase';
+  const d = new Date(ms);
+  const day = d.toDateString() === new Date(now).toDateString() ? '' : `em ${pad(d.getDate())}/${pad(d.getMonth() + 1)} `;
+  return `Login salvo no Supabase ${day}às ${hhmm(ms)}`;
+}
 export const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 export const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export function addDays(iso: string, n: number) {
@@ -226,6 +233,8 @@ const ACCESS_LABEL: Record<string, string> = {
   sair: 'Saiu',
   'troca-senha': 'Trocou a senha',
   esqueci: 'Pediu link de senha nova',
+  'chave-nova': 'Criou uma chave nova dos logins',
+  'chave-destrancada': 'Destrancou a chave dos logins',
 };
 export const accessLabel = (reason: string) => ACCESS_LABEL[reason] || reason;
 
