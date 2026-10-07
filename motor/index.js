@@ -1,0 +1,54 @@
+// Motor: robô (Playwright), agendador e banco. Escuta só em 127.0.0.1; quem fala com ele é o painel.
+const path = require('path');
+
+try {
+  process.loadEnvFile(path.join(__dirname, '..', '.env'));
+} catch {
+  /* sem .env: usa as variáveis do sistema */
+}
+
+const store = require('./store');
+const runner = require('./runner');
+const scheduler = require('./scheduler');
+const { createApi } = require('./api');
+
+const PORT = Number(process.env.MOTOR_PORT) || 3101;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let server = null;
+let closing = false;
+
+async function main() {
+  await store.init();
+  server = createApi().listen(PORT, '127.0.0.1', () => console.log(`⚙️  Motor pronto em 127.0.0.1:${PORT}`));
+  server.on('error', (e) => {
+    console.error(`❌ O motor não conseguiu usar a porta ${PORT}: ${e.message}`);
+    process.exit(1);
+  });
+  scheduler.start();
+}
+
+// Fecha as sessões (elas gravam o histórico) e grava o que falta antes de sair
+async function shutdown(reason) {
+  if (closing) return;
+  closing = true;
+  console.log(`\n💾 Encerrando o motor (${reason}): fechando sessões e salvando no Supabase...`);
+  scheduler.stop();
+  if (server) server.close();
+  await Promise.race([runner.closeAll(), wait(20000)]);
+  await Promise.race([store.flush(), wait(8000)]);
+  process.exit(0);
+}
+
+process.on('SIGINT', () => shutdown('Ctrl+C'));
+process.on('SIGTERM', () => shutdown('pedido de parada'));
+process.on('message', (m) => m === 'shutdown' && shutdown('pedido de parada'));
+process.on('unhandledRejection', (e) => console.error('⚠️  Erro não tratado (o motor continua):', e && e.message ? e.message : e));
+process.on('uncaughtException', (e) => {
+  console.error('❌ Falha grave no motor:', e);
+  shutdown('falha grave');
+});
+
+main().catch((e) => {
+  console.error('❌ O motor não iniciou:', e.message);
+  process.exit(1);
+});

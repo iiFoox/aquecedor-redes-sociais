@@ -1,0 +1,126 @@
+const express = require('express');
+const store = require('../store');
+const runner = require('../runner');
+const rules = require('../rules');
+const platforms = require('../platforms');
+const { PHASES, READY_DAY, phaseFor } = require('../platforms/phases');
+const { body, schemas } = require('../validate');
+
+const router = express.Router();
+
+const alertOut = (x) => ({ t: x.t, lastT: x.lastT, count: x.count, level: x.level, kind: x.kind, msg: x.msg, resolved: !!x.resolvedAt });
+
+function summarize(a, full = false) {
+  const p = platforms[a.platform];
+  const day = store.dayOf(a);
+  const s = runner.getSession(a.id);
+  const plan = store.planOf(a, p.planForDay);
+  const today = a.daily[store.localDate()] || {};
+  const out = {
+    id: a.id,
+    platform: a.platform,
+    username: a.username,
+    interests: a.interests,
+    proxy: !!a.proxy,
+    startedAt: a.startedAt,
+    day,
+    phase: phaseFor(day),
+    plan,
+    today,
+    completion: rules.completion(plan, today),
+    dayStatus: rules.dayStatus(p.activities, plan, today, a),
+    attention: a.attention,
+    warmProgress: Math.min(100, Math.round(((day - 1) / (READY_DAY - 1)) * 100)),
+    health: rules.computeHealth(a),
+    sessions: a.history.length,
+    alerts: a.alerts.slice(-5).reverse().map(alertOut),
+    loginOpen: runner.isBrowserOpen(a.id),
+    browserPurpose: runner.browserPurpose(a.id),
+    live: s
+      ? { status: s.status, statusUntil: s.statusUntil, statusAt: s.statusAt, stats: s.stats, startedAt: s.startedAt, endsAt: s.endsAt }
+      : null,
+  };
+  if (full) {
+    out.events = a.events.slice(-150).reverse();
+    out.history = a.history.slice(-30).reverse();
+    out.daily = store.lastDays(a, 14);
+    out.alerts = a.alerts.slice(-20).reverse().map(alertOut);
+  }
+  return out;
+}
+
+// Carrega a conta do :id ou responde 404
+function account(req, res, next) {
+  req.account = store.get(req.params.id);
+  if (!req.account) return res.status(404).json({ error: 'Conta não encontrada' });
+  next();
+}
+
+router.get('/meta', (_, res) => {
+  res.json({
+    phases: PHASES,
+    readyDay: READY_DAY,
+    platforms: Object.fromEntries(Object.entries(platforms).map(([k, p]) => [k, { name: p.name, actions: p.actions, plans: p.plans }])),
+  });
+});
+
+router.get('/accounts', (_, res) => res.json(store.all().map((a) => summarize(a))));
+router.get('/accounts/:id', account, (req, res) => res.json(summarize(req.account, true)));
+
+router.post('/accounts', body(schemas.newAccount), (req, res) => {
+  const { platform, username, proxy, interests } = req.body;
+  if (store.all().some((a) => a.platform === platform && a.username.toLowerCase() === username.toLowerCase())) {
+    return res.status(409).json({ error: `@${username} já está cadastrada no ${platforms[platform].name}` });
+  }
+  const acc = store.add({ platform, username, proxy, interests });
+  store.addLog(acc.id, `Conta adicionada (${platforms[platform].name}). Dia 1 do aquecimento`);
+  res.json(summarize(acc));
+});
+
+router.delete('/accounts/:id', account, async (req, res) => {
+  runner.stopSession(req.account.id);
+  await runner.closeBrowser(req.account.id);
+  store.remove(req.account.id);
+  res.json({ ok: true });
+});
+
+// Navegador para você: login (fecha sozinho ao detectar o login) ou captcha (você fecha quando terminar)
+async function openBrowser(req, res, purpose) {
+  try {
+    await runner.openBrowser(req.account, purpose);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(409).json({ error: e.message });
+  }
+}
+router.post('/accounts/:id/login', account, (req, res) => openBrowser(req, res, 'login'));
+router.post('/accounts/:id/browser', account, body(schemas.openBrowser), (req, res) => openBrowser(req, res, req.body.purpose));
+const closeBrowser = async (req, res) => {
+  await runner.closeBrowser(req.account.id);
+  res.json({ ok: true });
+};
+router.post('/accounts/:id/login/close', account, closeBrowser);
+router.post('/accounts/:id/browser/close', account, closeBrowser);
+
+router.post('/accounts/:id/start', account, async (req, res) => {
+  try {
+    await runner.startSession(req.account);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(409).json({ error: e.message });
+  }
+});
+
+router.post('/accounts/:id/stop', account, (req, res) => {
+  runner.stopSession(req.account.id);
+  res.json({ ok: true });
+});
+
+// Liberar: tira o aviso (bloqueio, captcha ou login) e fecha os alertas abertos da conta
+router.post('/accounts/:id/release', account, (req, res) => {
+  store.clearAttention(req.account.id, 'Conta liberada por você');
+  runner.notify({ type: 'attention', id: req.account.id, attention: null });
+  res.json(summarize(req.account));
+});
+
+module.exports = router;

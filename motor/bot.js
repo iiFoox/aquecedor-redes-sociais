@@ -10,10 +10,16 @@ function weighted(options) {
 }
 
 class StopError extends Error {
-  constructor() { super('Sessão interrompida'); this.code = 'STOPPED'; }
+  constructor() {
+    super('Sessão interrompida');
+    this.code = 'STOPPED';
+  }
 }
 class AbortError extends Error {
-  constructor(msg, code) { super(msg); this.code = code; }
+  constructor(msg, code) {
+    super(msg);
+    this.code = code;
+  }
 }
 const isFatal = (e) => e instanceof StopError || e instanceof AbortError;
 
@@ -31,9 +37,10 @@ function createBot(page, ctl) {
 
   // Gaussiana para gerar tempo de espera orgânico tendendo para a média
   function gaussianRand(min, max) {
-    let u = 0, v = 0;
-    while(u === 0) u = Math.random();
-    while(v === 0) v = Math.random();
+    let u = 0,
+      v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
     let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
     num = num / 10.0 + 0.5; // Aproxima de 0 a 1 (média em 0.5)
     if (num < 0 || num > 1) return gaussianRand(min, max);
@@ -43,7 +50,9 @@ function createBot(page, ctl) {
   // Espera aleatória, interrompível, que informa ao painel o que está acontecendo
   // Fadiga limitada a 1.6x (antes ia até 2.5x e deixava toda pausa gigante)
   const FATIGUE_MAX = 1.6;
-  const rest = () => { fatigue = 1.0; };
+  const rest = () => {
+    fatigue = 1.0;
+  };
 
   async function wait(min, max = min, label) {
     const ms = gaussianRand(min, max) * Math.min(fatigue, FATIGUE_MAX);
@@ -78,7 +87,16 @@ function createBot(page, ctl) {
     for (let i = 0; i < n; i++) {
       const el = loc.nth(i);
       const b = await el.boundingBox().catch(() => null);
-      if (b && b.width >= Math.max(1, minSize) && b.height > 0 && b.y >= 0 && b.y + b.height <= height && b.x >= 0 && b.x + b.width <= width) out.push(el);
+      if (
+        b &&
+        b.width >= Math.max(1, minSize) &&
+        b.height > 0 &&
+        b.y >= 0 &&
+        b.y + b.height <= height &&
+        b.x >= 0 &&
+        b.x + b.width <= width
+      )
+        out.push(el);
     }
     return out;
   }
@@ -101,11 +119,11 @@ function createBot(page, ctl) {
       await sleep(rand(16, 50) * Math.min(fatigue, FATIGUE_MAX));
     }
   }
-  
+
   async function readNiche(text, keywords) {
     if (!text || !keywords || !keywords.length) return false;
     const lower = text.toLowerCase();
-    if (keywords.some(k => lower.includes(k.toLowerCase()))) {
+    if (keywords.some((k) => lower.includes(k.toLowerCase()))) {
       ctl.log('Conteúdo do nicho encontrado! Dwell time (Pausa de leitura)...', 'info');
       await wait(12000, 22000, '👀 Lendo conteúdo (Nicho)');
       fatigue = Math.max(1.0, fatigue - 0.2); // Pausar ajuda a recuperar a fadiga

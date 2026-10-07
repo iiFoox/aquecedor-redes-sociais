@@ -1,5 +1,5 @@
--- WarmUp Studio: setup do Supabase
--- Cole TUDO no Supabase > SQL Editor > New query > Run. Pode rodar mais de uma vez sem problema.
+-- WarmUp Studio: estrutura inicial do banco (contas, proxies e config).
+-- Para montar um banco do zero: rode este arquivo e depois as migrações de migrations/, em ordem.
 
 create table if not exists public.accounts (id text primary key);
 create table if not exists public.proxies  (id text primary key);

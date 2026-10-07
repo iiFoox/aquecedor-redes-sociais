@@ -1,4 +1,4 @@
-const { AbortError, isFatal, weighted, pick } = require('../core/bot');
+const { AbortError, isFatal, weighted, pick } = require('../bot');
 const { phaseIndex } = require('./phases');
 
 const HOME = 'https://www.instagram.com/';
@@ -6,7 +6,8 @@ const SEL = {
   like: 'svg[aria-label="Curtir"], svg[aria-label="Like"]',
   post: 'a[href*="/p/"], a[href*="/reel/"]',
   story: '[role="button"][aria-label*="tory"], main li canvas',
-  popup: 'button:has-text("Agora não"), button:has-text("Not Now"), [role="button"]:has-text("Agora não"), [role="button"]:has-text("Not now")',
+  popup:
+    'button:has-text("Agora não"), button:has-text("Not Now"), [role="button"]:has-text("Agora não"), [role="button"]:has-text("Not now")',
   loginForm: 'input[name="username"]',
 };
 
@@ -20,10 +21,32 @@ const PLANS = [
 ];
 
 const ACTIONS = {
-  like: 'Curtidas', follow: 'Follows', story: 'Stories', reel: 'Reels',
-  explore: 'Explorar/Hashtags', scroll: 'Rolagens de feed',
+  like: 'Curtidas',
+  follow: 'Follows',
+  story: 'Stories',
+  reel: 'Reels',
+  explore: 'Explorar/Hashtags',
+  scroll: 'Rolagens de feed',
 };
-const ACT_LABEL = { feed: 'Rolar o feed', stories: 'Assistir stories', reels: 'Assistir Reels', explore: 'Explorar o nicho', afk: 'Distração / Fora do Teclado' };
+const ACT_LABEL = {
+  feed: 'Rolar o feed',
+  stories: 'Assistir stories',
+  reels: 'Assistir Reels',
+  explore: 'Explorar o nicho',
+  afk: 'Distração / Fora do Teclado',
+};
+
+// Metas que cada atividade conta (produces) e metas que ela pode adiantar (advances).
+// Uma atividade só roda se nenhuma meta que ela conta passou do teto de 120% do plano.
+// ("scroll" do feed não está no plano, então o feed não tem teto próprio.)
+const ACTIVITY_GOALS = {
+  feed: { produces: [], advances: ['like'] },
+  stories: { produces: ['story'], advances: ['story'] },
+  reels: { produces: ['reel'], advances: ['reel', 'like'] },
+  explore: { produces: ['explore'], advances: ['explore', 'like', 'follow'] },
+};
+// Nome da meta que cada atividade usa no controle de falhas desta sessão
+const SKIP_KEY = { stories: 'story', reels: 'reel', explore: 'explore' };
 
 const atHome = (page) => /^https:\/\/www\.instagram\.com\/?(\?.*)?$/.test(page.url());
 
@@ -45,8 +68,16 @@ async function detectProblem(page) {
   const url = page.url();
   if (url.includes('/challenge')) return { kind: 'captcha', msg: 'Instagram pediu uma verificação de segurança (challenge)' };
   if (url.includes('/accounts/login')) return { kind: 'logout', msg: 'A sessão do Instagram expirou. Faça login novamente' };
-  const blocked = page.getByText(/Tente novamente mais tarde|Try Again Later|Ação bloqueada|Action Blocked|restringimos determinadas atividades|We restrict certain activity/i);
-  if (await blocked.first().isVisible().catch(() => false)) return { kind: 'block', msg: 'Instagram bloqueou ações temporariamente' };
+  const blocked = page.getByText(
+    /Tente novamente mais tarde|Try Again Later|Ação bloqueada|Action Blocked|restringimos determinadas atividades|We restrict certain activity/i,
+  );
+  if (
+    await blocked
+      .first()
+      .isVisible()
+      .catch(() => false)
+  )
+    return { kind: 'block', msg: 'Instagram bloqueou ações temporariamente' };
   return null;
 }
 
@@ -65,13 +96,17 @@ const ACTIVITIES = {
       ctl.status('Rolando o feed');
       await bot.scroll(bot.rand(350, 900));
       ctl.action('scroll', 'Feed');
-      
-      const text = await page.locator('article span[dir="auto"], article h1').first().textContent({ timeout: 1000 }).catch(() => '');
+
+      const text = await page
+        .locator('article span[dir="auto"], article h1')
+        .first()
+        .textContent({ timeout: 1000 })
+        .catch(() => '');
       const isNiche = await bot.readNiche(text, account.interests || []);
       const waitTime = isNiche ? bot.rand(12000, 22000) : bot.rand(2000, 8000);
-      
+
       await bot.wait(waitTime, waitTime, 'Lendo o post como uma pessoa faria');
-      
+
       if (Math.random() < 0.12) {
         ctl.status('Erro humano: abriu comentários do post');
         if (await bot.clickVisible('svg[aria-label="Comentar"], svg[aria-label="Comment"]', { minSize: 15 })) {
@@ -116,17 +151,21 @@ const ACTIVITIES = {
     await bot.goto(`${HOME}reels/`, 'Abrindo Reels');
     // Se a meta de reels já bateu mas faltam curtidas, assiste alguns mesmo assim
     const n = ctl.left('reel') > 0 ? Math.min(ctl.left('reel'), bot.rand(3, 6)) : bot.rand(2, 4);
-    for (let i = 1; i <= n && ctl.timeLeft() > 0; i++) {
-      const text = await page.locator('main span[dir="auto"], main h1').first().textContent({ timeout: 1000 }).catch(() => '');
+    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('reel'); i++) {
+      const text = await page
+        .locator('main span[dir="auto"], main h1')
+        .first()
+        .textContent({ timeout: 1000 })
+        .catch(() => '');
       const isNiche = await bot.readNiche(text, account.interests || []);
-      
+
       let ms = Math.random() < 0.25 ? bot.rand(12000, 30000) : bot.rand(4000, 11000);
       if (isNiche) ms = bot.rand(18000, 35000);
-      
+
       const sec = Math.round(ms / 1000);
       await bot.wait(ms, ms, `Assistindo reel ${i}/${n} por ${sec}s${ms > 12000 ? ' (até o fim, sinal de interesse)' : ''}`);
       ctl.action('reel', `${sec}s`);
-      
+
       if (Math.random() < 0.1) {
         ctl.status('Erro humano: pausou reel');
         await page.mouse.click(bot.rand(500, 700), bot.rand(300, 500));
@@ -197,6 +236,8 @@ async function run({ page, bot, ctl, account }) {
   const skip = new Set(); // metas inalcançáveis NESTA sessão (ex: conta nova sem stories pra ver)
   let last = null;
   let lastAfk = Date.now();
+  // Atividade liberada: não falhou nesta sessão, não passa nenhuma meta do teto e ainda adianta alguma
+  const can = (act) => !skip.has(SKIP_KEY[act]) && ctl.allowed(ACTIVITY_GOALS[act], account) && ctl.useful(ACTIVITY_GOALS[act]);
 
   // Loop guiado por META: só para quando bater tudo (ou teto de segurança / travamento)
   while (true) {
@@ -204,10 +245,13 @@ async function run({ page, bot, ctl, account }) {
     if (ctl.timeLeft() <= 0) return 'cap';
     if (ctl.stalled()) return 'stall';
 
-    const opts = [['feed', ctl.left('like') > 0 ? 3 : 1]];
-    if (!skip.has('story') && ctl.left('story') > 0) opts.push(['stories', 2]);
-    if (!skip.has('reel') && (ctl.left('reel') > 0 || ctl.left('like') > 0)) opts.push(['reels', ctl.left('reel') > 0 ? 2 : 1]);
-    if (!skip.has('explore') && (ctl.left('explore') > 0 || ctl.left('follow') > 0)) opts.push(['explore', 2]);
+    const opts = [];
+    if (can('feed')) opts.push(['feed', 3]);
+    if (can('stories')) opts.push(['stories', 2]);
+    if (can('reels')) opts.push(['reels', ctl.left('reel') > 0 ? 2 : 1]);
+    if (can('explore')) opts.push(['explore', 2]);
+    // O que falta só sairia passando do teto de 120% do plano: encerra em vez de forçar
+    if (!opts.length) return 'limit';
     // AFK: nunca duas vezes seguidas e no máximo ~1 a cada 6 min
     if (last !== 'afk' && Date.now() - lastAfk > 6 * 60000) opts.push(['afk', 0.5]);
     const act = weighted(opts);
@@ -223,9 +267,19 @@ async function run({ page, bot, ctl, account }) {
     }
     if (!ok) {
       fails[act] = (fails[act] || 0) + 1;
-      if (act === 'stories' && fails.stories >= 2) { skip.add('story'); ctl.log('Sem stories disponíveis, meta de stories ignorada nesta sessão', 'warn'); }
-      if (act === 'reels' && fails.reels >= 2) { skip.add('reel'); ctl.log('Reels falhou 2x, meta de reels ignorada nesta sessão', 'warn'); }
-      if (act === 'explore' && fails.explore >= 2) { skip.add('explore'); skip.add('follow'); ctl.log('Explorar falhou 2x, metas de explorar/follow ignoradas nesta sessão', 'warn'); }
+      if (act === 'stories' && fails.stories >= 2) {
+        skip.add('story');
+        ctl.log('Sem stories disponíveis, meta de stories ignorada nesta sessão', 'warn');
+      }
+      if (act === 'reels' && fails.reels >= 2) {
+        skip.add('reel');
+        ctl.log('Reels falhou 2x, meta de reels ignorada nesta sessão', 'warn');
+      }
+      if (act === 'explore' && fails.explore >= 2) {
+        skip.add('explore');
+        skip.add('follow');
+        ctl.log('Explorar falhou 2x, metas de explorar/follow ignoradas nesta sessão', 'warn');
+      }
     }
     await dismissPopups(bot);
     await bot.guard();
@@ -237,7 +291,9 @@ module.exports = {
   id: 'instagram',
   name: 'Instagram',
   loginUrl: `${HOME}accounts/login/`,
+  homeUrl: HOME,
   actions: ACTIONS,
+  activities: ACTIVITY_GOALS,
   plans: PLANS,
   planForDay: (day) => {
     const base = PLANS[phaseIndex(day)];
@@ -245,7 +301,8 @@ module.exports = {
     return {
       minutes: Math.max(3, base.minutes + Math.floor(Math.random() * 5) - 2), // -2 a +2 min
       like: Math.max(1, base.like + Math.floor(Math.random() * 3) - 1),
-      follow: Math.max(0, base.follow + Math.floor(Math.random() * 3) - 1),
+      // Fase sem follow continua sem follow (o sorteio não pode criar 1 follow na fase 1)
+      follow: base.follow === 0 ? 0 : Math.max(0, base.follow + Math.floor(Math.random() * 3) - 1),
       story: Math.max(1, base.story + Math.floor(Math.random() * 3) - 1),
       reel: Math.max(1, base.reel + Math.floor(Math.random() * 3) - 1),
       explore: Math.max(0, base.explore + Math.floor(Math.random() * 2)),

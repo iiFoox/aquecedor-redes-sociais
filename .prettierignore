@@ -1,0 +1,5 @@
+node_modules
+data
+.claude
+package-lock.json
+skills-lock.json

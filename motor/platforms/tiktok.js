@@ -1,4 +1,4 @@
-const { AbortError, isFatal, weighted, pick } = require('../core/bot');
+const { AbortError, isFatal, weighted, pick } = require('../bot');
 const { phaseIndex } = require('./phases');
 
 const HOME = 'https://www.tiktok.com/foryou';
@@ -24,7 +24,20 @@ const PLANS = [
 ];
 
 const ACTIONS = { watch: 'Vídeos assistidos', like: 'Curtidas', follow: 'Follows', profile: 'Perfis visitados', search: 'Buscas no nicho' };
-const ACT_LABEL = { fyp: 'Assistir o Para Você', search: 'Buscar vídeos do nicho', profile: 'Visitar perfil de criador', afk: 'Distração / Fora do Teclado' };
+const ACT_LABEL = {
+  fyp: 'Assistir o Para Você',
+  search: 'Buscar vídeos do nicho',
+  profile: 'Visitar perfil de criador',
+  afk: 'Distração / Fora do Teclado',
+};
+
+// Metas que cada atividade conta (produces) e metas que ela pode adiantar (advances).
+// Uma atividade só roda se nenhuma meta que ela conta passou do teto de 120% do plano.
+const ACTIVITY_GOALS = {
+  fyp: { produces: ['watch'], advances: ['watch', 'like', 'follow'] },
+  search: { produces: ['watch', 'search'], advances: ['search', 'watch', 'like'], when: (acc) => (acc.interests || []).length > 0 },
+  profile: { produces: ['profile'], advances: ['profile', 'follow'] },
+};
 
 // Tempo de visualização variado: maioria pula rápido, alguns assiste até o fim
 function watchTime(bot) {
@@ -47,9 +60,24 @@ function likeChance(ctl, base) {
 
 async function detectProblem(page) {
   if (page.url().includes('/login')) return { kind: 'logout', msg: 'TikTok pediu login novamente' };
-  if (await page.locator(SEL.captcha).first().isVisible().catch(() => false)) return { kind: 'captcha', msg: 'TikTok exibiu um captcha' };
-  const limit = page.getByText(/Muitas tentativas|Too many attempts|visitando nosso serviço com muita frequência|visiting our service too frequently/i);
-  if (await limit.first().isVisible().catch(() => false)) return { kind: 'block', msg: 'TikTok limitou a atividade (ações demais)' };
+  if (
+    await page
+      .locator(SEL.captcha)
+      .first()
+      .isVisible()
+      .catch(() => false)
+  )
+    return { kind: 'captcha', msg: 'TikTok exibiu um captcha' };
+  const limit = page.getByText(
+    /Muitas tentativas|Too many attempts|visitando nosso serviço com muita frequência|visiting our service too frequently/i,
+  );
+  if (
+    await limit
+      .first()
+      .isVisible()
+      .catch(() => false)
+  )
+    return { kind: 'block', msg: 'TikTok limitou a atividade (ações demais)' };
   return null;
 }
 
@@ -61,17 +89,21 @@ const ACTIVITIES = {
   async fyp({ page, bot, ctl, account }) {
     if (!page.url().includes('/foryou')) await bot.goto(HOME, 'Abrindo o Para Você');
     const n = bot.rand(5, 12);
-    for (let i = 1; i <= n && ctl.timeLeft() > 0; i++) {
+    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('watch'); i++) {
       const ms = watchTime(bot);
-      
+
       // Tenta extrair a legenda para checar nicho (com timeout de 1s pra não travar o Playwright)
-      const desc = await page.locator('[data-e2e="video-desc"]').first().textContent({ timeout: 1000 }).catch(() => '');
+      const desc = await page
+        .locator('[data-e2e="video-desc"]')
+        .first()
+        .textContent({ timeout: 1000 })
+        .catch(() => '');
       const isNiche = await bot.readNiche(desc, account.interests || []);
-      
+
       const waitTime = isNiche ? bot.rand(12000, 22000) : ms;
       await bot.wait(waitTime, waitTime, `Assistindo vídeo ${i}/${n} por ${Math.round(waitTime / 1000)}s${watchNote(waitTime)}`);
       ctl.action('watch', `${Math.round(waitTime / 1000)}s`);
-      
+
       // Erro humano intencional: abrir os comentários e fechar
       if (Math.random() < 0.15) {
         ctl.status('Erro humano: abriu comentários');
@@ -81,7 +113,7 @@ const ACTIVITIES = {
           await bot.wait(1000, 2000);
         }
       }
-      
+
       if (waitTime > 8000 && Math.random() < (isNiche ? Math.max(0.6, likeChance(ctl, 0.25)) : likeChance(ctl, 0.25))) {
         ctl.status('Gostou do vídeo, curtindo');
         if (await bot.clickVisible(SEL.like)) {
@@ -117,11 +149,16 @@ const ACTIVITIES = {
     }
     await bot.wait(2000, 3000, 'Abrindo o vídeo');
     const n = bot.rand(3, 6);
-    for (let i = 1; i <= n && ctl.timeLeft() > 0; i++) {
+    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('watch'); i++) {
       const ms = watchTime(bot);
       await bot.wait(ms, ms, `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${watchNote(ms)}`);
       ctl.action('watch', `Busca: ${term}`);
-      if (ms > 8000 && Math.random() < Math.max(0.45, likeChance(ctl, 0.45)) && ctl.left('like') > 0 && (await bot.clickVisible(SEL.browseLike))) {
+      if (
+        ms > 8000 &&
+        Math.random() < Math.max(0.45, likeChance(ctl, 0.45)) &&
+        ctl.left('like') > 0 &&
+        (await bot.clickVisible(SEL.browseLike))
+      ) {
         ctl.action('like', `Busca: ${term}`);
         await bot.wait(800, 1800);
       }
@@ -161,7 +198,7 @@ const ACTIVITIES = {
   },
 
   async afk({ bot }) {
-    const ms = bot.rand(35000, 90000); 
+    const ms = bot.rand(35000, 90000);
     await bot.wait(ms, ms, 'Distração (AFK): O humano foi ao banheiro ou minimizou a janela');
     bot.rest(); // voltou descansado
     return true;
@@ -183,6 +220,8 @@ async function run({ page, bot, ctl, account }) {
   if (!interests.length) skip.add('search');
   let last = null;
   let lastAfk = Date.now();
+  // Atividade liberada: não falhou nesta sessão, não passa nenhuma meta do teto e ainda adianta alguma
+  const can = (act) => !skip.has(act) && ctl.allowed(ACTIVITY_GOALS[act], account) && ctl.useful(ACTIVITY_GOALS[act]);
 
   // Loop guiado por META: só para quando bater tudo (ou teto de segurança / travamento)
   while (true) {
@@ -192,9 +231,12 @@ async function run({ page, bot, ctl, account }) {
 
     const needFyp = ctl.left('watch') > 0 || ctl.left('like') > 0 || ctl.left('follow') > 0;
     // Pesos guiados pelo que falta: se o Para Você já bateu, prioriza as metas restantes
-    const opts = [['fyp', needFyp ? 5 : 0.5]];
-    if (!skip.has('search') && ctl.left('search') > 0) opts.push(['search', needFyp ? 2 : 4]);
-    if (!skip.has('profile') && (ctl.left('profile') > 0 || ctl.left('follow') > 0)) opts.push(['profile', ctl.left('follow') > 0 ? 2 : needFyp ? 1.5 : 4]);
+    const opts = [];
+    if (can('fyp')) opts.push(['fyp', needFyp ? 5 : 0.5]);
+    if (can('search')) opts.push(['search', needFyp ? 2 : 4]);
+    if (can('profile')) opts.push(['profile', ctl.left('follow') > 0 ? 2 : needFyp ? 1.5 : 4]);
+    // O que falta só sairia passando do teto de 120% do plano: encerra em vez de forçar
+    if (!opts.length) return 'limit';
     // AFK: nunca duas vezes seguidas e no máximo ~1 a cada 6 min
     if (last !== 'afk' && Date.now() - lastAfk > 6 * 60000) opts.push(['afk', 0.5]);
     const act = weighted(opts);
@@ -210,8 +252,14 @@ async function run({ page, bot, ctl, account }) {
     }
     if (!ok) {
       fails[act] = (fails[act] || 0) + 1;
-      if (act === 'search' && fails.search >= 2) { skip.add('search'); ctl.log('Busca falhou 2x, meta de buscas ignorada nesta sessão', 'warn'); }
-      if (act === 'profile' && fails.profile >= 3) { skip.add('profile'); ctl.log('Perfil falhou 3x, meta de perfis ignorada nesta sessão', 'warn'); }
+      if (act === 'search' && fails.search >= 2) {
+        skip.add('search');
+        ctl.log('Busca falhou 2x, meta de buscas ignorada nesta sessão', 'warn');
+      }
+      if (act === 'profile' && fails.profile >= 3) {
+        skip.add('profile');
+        ctl.log('Perfil falhou 3x, meta de perfis ignorada nesta sessão', 'warn');
+      }
     }
     await dismissPopups(bot);
     await bot.guard();
@@ -223,7 +271,9 @@ module.exports = {
   id: 'tiktok',
   name: 'TikTok',
   loginUrl: 'https://www.tiktok.com/login',
+  homeUrl: HOME,
   actions: ACTIONS,
+  activities: ACTIVITY_GOALS,
   plans: PLANS,
   planForDay: (day) => {
     const base = PLANS[phaseIndex(day)];
@@ -231,7 +281,8 @@ module.exports = {
       minutes: Math.max(3, base.minutes + Math.floor(Math.random() * 5) - 2), // -2 a +2 min
       watch: Math.max(5, base.watch + Math.floor(Math.random() * 11) - 5), // -5 a +5 videos
       like: Math.max(1, base.like + Math.floor(Math.random() * 5) - 2),
-      follow: Math.max(0, base.follow + Math.floor(Math.random() * 3) - 1),
+      // Fase sem follow continua sem follow (o sorteio não pode criar 1 follow na fase 1)
+      follow: base.follow === 0 ? 0 : Math.max(0, base.follow + Math.floor(Math.random() * 3) - 1),
       profile: Math.max(0, base.profile + Math.floor(Math.random() * 3) - 1),
       search: Math.max(0, base.search + Math.floor(Math.random() * 2)),
     };
