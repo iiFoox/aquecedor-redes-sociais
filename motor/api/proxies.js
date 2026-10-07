@@ -6,10 +6,10 @@ const { body, schemas } = require('../validate');
 const router = express.Router();
 
 // Lista com quantas contas usam cada proxy
-router.get('/proxies', (_, res) => {
-  const accounts = store.all();
+router.get('/proxies', (req, res) => {
+  const accounts = store.accountsOf(req.userId);
   res.json(
-    store.allProxies().map((p) => ({
+    store.proxiesOf(req.userId).map((p) => ({
       ...p,
       accounts: accounts.filter((a) => a.proxy === p.url).map((a) => ({ id: a.id, username: a.username, platform: a.platform })),
     })),
@@ -18,11 +18,11 @@ router.get('/proxies', (_, res) => {
 
 router.post('/proxies', body(schemas.newProxy), (req, res) => {
   if (store.allProxies().some((p) => p.url === req.body.url)) return res.status(409).json({ error: 'Esse proxy já está na lista' });
-  res.json(store.addProxy(req.body.url));
+  res.json(store.addProxy(req.body.url, req.userId));
 });
 
 router.delete('/proxies/:id', (req, res) => {
-  const p = store.allProxies().find((x) => x.id === req.params.id);
+  const p = store.proxiesOf(req.userId).find((x) => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: 'Proxy não encontrado' });
   const users = store.all().filter((a) => a.proxy === p.url);
   if (users.length) {
@@ -36,7 +36,7 @@ router.delete('/proxies/:id', (req, res) => {
 
 // Teste na hora, sem abrir navegador
 router.post('/proxies/:id/ping', async (req, res) => {
-  const p = store.allProxies().find((x) => x.id === req.params.id);
+  const p = store.proxiesOf(req.userId).find((x) => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: 'Proxy não encontrado' });
   const r = await runner.pingProxy(p.url);
   store.updateProxy(p.id, {

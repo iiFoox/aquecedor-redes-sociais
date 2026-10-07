@@ -99,9 +99,9 @@ function summarize(a, full = false) {
   return out;
 }
 
-// Carrega a conta do :id ou responde 404
+// Carrega a conta do :id ou responde 404 (conta de outro usuário também é 404: nem confirma que existe)
 function account(req, res, next) {
-  req.account = store.get(req.params.id);
+  req.account = store.ownsAccount(req.userId, req.params.id) ? store.get(req.params.id) : null;
   if (!req.account) return res.status(404).json({ error: 'Conta não encontrada' });
   next();
 }
@@ -115,7 +115,7 @@ router.get('/meta', (_, res) => {
   });
 });
 
-router.get('/accounts', (_, res) => res.json(store.all().map((a) => summarize(a))));
+router.get('/accounts', (req, res) => res.json(store.accountsOf(req.userId).map((a) => summarize(a))));
 router.get('/accounts/:id', account, (req, res) => res.json(summarize(req.account, true)));
 
 router.post('/accounts', body(schemas.newAccount), (req, res) => {
@@ -124,10 +124,10 @@ router.post('/accounts', body(schemas.newAccount), (req, res) => {
     return res.status(409).json({ error: `@${username} já está cadastrada no ${platforms[platform].name}` });
   }
   // "auto": o proxy online da lista com menos contas
-  const url = proxy === 'auto' ? rules.pickProxy(store.allProxies(), store.all()) : proxy;
+  const url = proxy === 'auto' ? rules.pickProxy(store.proxiesOf(req.userId), store.all()) : proxy;
   if (proxy === 'auto' && !url) return res.status(409).json({ error: 'Nenhum proxy online na lista para escolher' });
-  store.ensureProxy(url);
-  const acc = store.add({ platform, username, proxy: url, interests });
+  store.ensureProxy(url, req.userId);
+  const acc = store.add({ platform, username, proxy: url, interests, ownerId: req.userId });
   store.addLog(acc.id, `Conta adicionada (${platforms[platform].name}). Dia 1 do aquecimento`);
   // Conta nova ainda não tem login: o piloto espera em vez de abrir o navegador à toa
   store.setAttention(acc.id, 'login', 'Conta nova: clique em "Login" e entre na conta.');
@@ -150,12 +150,12 @@ router.patch('/accounts/:id', account, body(schemas.accountPatch), (req, res) =>
     }
     if (patch.proxy === 'auto') {
       patch.proxy = rules.pickProxy(
-        store.allProxies(),
+        store.proxiesOf(req.userId),
         store.all().filter((x) => x.id !== req.account.id),
       );
       if (!patch.proxy) return res.status(409).json({ error: 'Nenhum proxy online na lista para escolher' });
     }
-    store.ensureProxy(patch.proxy);
+    store.ensureProxy(patch.proxy, req.userId);
     if (!patch.proxy) patch.proxy = null;
   }
   store.updateAccount(req.account.id, patch);

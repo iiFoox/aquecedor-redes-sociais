@@ -32,7 +32,18 @@ function createApi({ token } = {}) {
     if (req.path === '/api/health') return next();
     if (!motorToken.same(req.headers[motorToken.HEADER], token))
       return res.status(401).json({ error: 'Pedido recusado: só o painel fala com o motor' });
+    // Quem está logado no painel (o painel sempre manda, sobrescrevendo o que vier do navegador)
+    req.userId = String(req.headers['x-wu-user'] || '');
+    if (!req.userId) return res.status(401).json({ error: 'Sem usuário do painel', auth: false });
     next();
+  });
+  // Contas e proxies que ganharam dono por fora (cadastro, "npm run usuario")
+  app.use((req, res, next) => {
+    if (req.path === '/api/health') return next();
+    store
+      .refreshOwners()
+      .catch(() => {})
+      .finally(next);
   });
   app.use(express.json({ limit: '200kb' }));
 

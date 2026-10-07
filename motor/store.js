@@ -86,8 +86,8 @@ const dropNulls = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => 
 // Linha do banco → objeto em memória. As listas antigas dentro do JSON (events, alerts, history)
 // são ignoradas: agora moram nas tabelas próprias (a cópia original ficou na coluna "legacy").
 function accountFromRow(row) {
-  const { events, alerts, history, live, loginOpen, ...data } = row.data || {};
-  return { ...data, id: row.id, platform: row.platform, username: row.username };
+  const { events, alerts, history, live, loginOpen, ownerId, ...data } = row.data || {};
+  return { ...data, id: row.id, platform: row.platform, username: row.username, ownerId: row.owner_id || null };
 }
 const eventFromRow = (r) => dropNulls({ t: Date.parse(r.t), kind: r.kind, action: r.action, level: r.level, msg: r.msg, detail: r.detail });
 const alertFromRow = (r) => ({
@@ -148,8 +148,8 @@ async function init() {
   const evSince = iso(Date.now() - EVENTS_DAYS * 86400000);
   const alSince = iso(Date.now() - ALERTS_DAYS * 86400000);
   const [accRows, prxRows, cfg, evRows, alRows, seRows] = await Promise.all([
-    fetchAll(() => sb.from('accounts').select('id, platform, username, data').order('id'), 'contas'),
-    fetchAll(() => sb.from('proxies').select('id, url, status, ms, data').order('id'), 'proxies'),
+    fetchAll(() => sb.from('accounts').select('id, platform, username, data, owner_id').order('id'), 'contas'),
+    fetchAll(() => sb.from('proxies').select('id, url, status, ms, data, owner_id').order('id'), 'proxies'),
     sb.from('config').select('data').eq('id', 'main').maybeSingle(),
     fetchAll(() => sb.from('events').select('*').gte('t', evSince).order('t').order('id'), 'eventos'),
     fetchAll(() => sb.from('alerts').select('*').or(`resolved_at.is.null,t.gte."${alSince}"`).order('t').order('id'), 'alertas'),
@@ -169,7 +169,7 @@ async function init() {
     a.history = a.history.slice(-KEEP.history);
   }
 
-  proxies = prxRows.map((r) => ({ ...(r.data || {}), id: r.id, url: r.url, status: r.status, ms: r.ms }));
+  proxies = prxRows.map((r) => ({ ...(r.data || {}), id: r.id, url: r.url, status: r.status, ms: r.ms, ownerId: r.owner_id || null }));
   const saved = (cfg.data && cfg.data.data) || {};
   config = { ...DEFAULT_CONFIG, ...Object.fromEntries(Object.entries(saved).filter(([k]) => CONFIG_KEYS.includes(k))) };
   if (Object.keys(saved).some((k) => !CONFIG_KEYS.includes(k))) dirty.config = true; // limpa campos que não existem mais
@@ -181,6 +181,7 @@ async function init() {
 
 let timer = null;
 function schedule() {
+  if (!sb) return; // sem conexão (testes): nada para gravar
   clearTimeout(timer);
   timer = setTimeout(flush, 1500);
 }
@@ -197,10 +198,14 @@ function flush() {
   return flushing;
 }
 
+// owner_id só vai junto quando a conta tem dono: o dono de uma conta sem dono é gravado por fora
+// (cadastro do 1º usuário ou "npm run usuario"), e o motor não pode sobrescrever com vazio.
 function accountToRow(a) {
-  const { live, loginOpen, id, platform, username, events, alerts, history, ...data } = a;
-  return { id, platform, username, data };
+  const { live, loginOpen, id, platform, username, events, alerts, history, ownerId, ...data } = a;
+  return ownerId ? { id, platform, username, data, owner_id: ownerId } : { id, platform, username, data };
 }
+const proxyToRow = ({ id, url, status, ms, ownerId, ...rest }) =>
+  ownerId ? { id, url, status, ms, data: rest, owner_id: ownerId } : { id, url, status, ms, data: rest };
 const alertToRow = (x, accountId) => ({
   id: x.id,
   account_id: accountId,
@@ -224,13 +229,18 @@ async function doFlush() {
     // 2) Contas antes dos eventos (os eventos apontam para a conta)
     const accIds = [...dirty.accounts];
     dirty.accounts.clear();
+    // Em dois lotes (com e sem dono): num lote só, a coluna owner_id iria vazia para as contas sem dono
     const rows = accounts.filter((a) => accIds.includes(a.id)).map(accountToRow);
-    if (rows.length && !check('salvar contas', await sb.from('accounts').upsert(rows))) accIds.forEach((i) => dirty.accounts.add(i));
+    for (const batch of [rows.filter((r) => r.owner_id), rows.filter((r) => !r.owner_id)]) {
+      if (batch.length && !check('salvar contas', await sb.from('accounts').upsert(batch))) accIds.forEach((i) => dirty.accounts.add(i));
+    }
 
     if (dirty.proxies) {
       dirty.proxies = false;
-      const prows = proxies.map(({ id, url, status, ms, ...rest }) => ({ id, url, status, ms, data: rest }));
-      if (prows.length && !check('salvar proxies', await sb.from('proxies').upsert(prows))) dirty.proxies = true;
+      const prows = proxies.map(proxyToRow);
+      for (const batch of [prows.filter((r) => r.owner_id), prows.filter((r) => !r.owner_id)]) {
+        if (batch.length && !check('salvar proxies', await sb.from('proxies').upsert(batch))) dirty.proxies = true;
+      }
     }
 
     const alive = new Set(accounts.map((a) => a.id));
@@ -462,8 +472,8 @@ function addSession(id, session) {
   touch(id);
 }
 
-function recentEvents(limit = 60) {
-  return accounts
+function recentEvents(limit = 60, userId = undefined) {
+  return (userId === undefined ? accounts : accountsOf(userId))
     .flatMap((a) => a.events.slice(-limit).map((e) => ({ ...e, id: a.id, username: a.username, platform: a.platform })))
     .sort((x, y) => y.t - x.t)
     .slice(0, limit);
@@ -473,12 +483,12 @@ function recentEvents(limit = 60) {
 
 const allProxies = () => proxies;
 // Garante que o proxy de uma conta esteja na lista (para entrar no teste a cada 30 min)
-function ensureProxy(url) {
+function ensureProxy(url, ownerId = null) {
   if (!url || proxies.some((p) => p.url === url)) return;
-  addProxy(url);
+  addProxy(url, ownerId);
 }
-function addProxy(url) {
-  const p = { id: crypto.randomUUID(), url, status: 'unknown', ms: 0, lastCheck: null };
+function addProxy(url, ownerId = null) {
+  const p = { id: crypto.randomUUID(), url, status: 'unknown', ms: 0, lastCheck: null, ownerId };
   proxies.push(p);
   dirty.proxies = true;
   schedule();
@@ -498,6 +508,36 @@ function updateProxy(id, updates) {
 }
 
 const getConfig = () => config;
+
+// ---------- Dono (cada usuário do painel vê só o que é dele) ----------
+
+// Contas e proxies sem dono podem ganhar dono por fora (cadastro do 1º usuário, "npm run usuario"):
+// relê do banco, no máximo a cada 5 s, só os que ainda estão sem dono.
+let ownersCheckedAt = 0;
+async function refreshOwners() {
+  const accIds = accounts.filter((a) => !a.ownerId).map((a) => a.id);
+  const prxIds = proxies.filter((p) => !p.ownerId).map((p) => p.id);
+  if ((!accIds.length && !prxIds.length) || Date.now() - ownersCheckedAt < 5000 || !sb) return;
+  ownersCheckedAt = Date.now();
+  const [a, p] = await Promise.all([
+    accIds.length ? sb.from('accounts').select('id, owner_id').in('id', accIds).not('owner_id', 'is', null) : { data: [] },
+    prxIds.length ? sb.from('proxies').select('id, owner_id').in('id', prxIds).not('owner_id', 'is', null) : { data: [] },
+  ]);
+  for (const r of a.data || []) {
+    const acc = accounts.find((x) => x.id === r.id);
+    if (acc) acc.ownerId = r.owner_id;
+  }
+  for (const r of p.data || []) {
+    const px = proxies.find((x) => x.id === r.id);
+    if (px) px.ownerId = r.owner_id;
+  }
+}
+const accountsOf = (userId) => accounts.filter((a) => a.ownerId && a.ownerId === userId);
+const proxiesOf = (userId) => proxies.filter((p) => p.ownerId && p.ownerId === userId);
+const ownsAccount = (userId, id) => {
+  const a = get(id);
+  return !!(a && a.ownerId && a.ownerId === userId);
+};
 
 // ---------- Férias ----------
 
@@ -556,6 +596,10 @@ module.exports = {
   clearAttention,
   addSession,
   recentEvents,
+  refreshOwners,
+  accountsOf,
+  proxiesOf,
+  ownsAccount,
   allProxies,
   addProxy,
   removeProxy,
