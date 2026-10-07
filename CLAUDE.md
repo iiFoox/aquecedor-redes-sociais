@@ -47,6 +47,9 @@ npm run format         # Prettier
     pelo tempo real (somente leitura). `actions.js`: ação em conta de outro aparelho vira comando para ele.
     `publisher.js` publica o status (`accounts.status`). `boot.js` liga tudo depois do login. `summary.js`: resumo da conta.
   - `paths.js`: pasta de dados (`WU_DATA_DIR`; padrão `data/`).
+  - Trava (`accounts.lease_device/lease_until`, `store.takeLease`): antes de abrir sessão ou navegador o aparelho pega a
+    trava numa operação só no banco (conta dele e nenhum outro com trava válida; sem internet não abre). Vale 5 min,
+    renovada a cada minuto pelo `publisher.js`, solta ao fechar. "Rodar neste aparelho" espera a trava do outro vencer.
   - Logins das contas no Supabase (app 3/5): `vault.js` (chave aleatória do usuário, AES-256-GCM; trancada pela senha do
     app com scrypt em `user_keys` e copiada em cada aparelho com DPAPI em `data/vault-key.bin`). `logins.js` salva
     cookies + localStorage da plataforma (`storageState` do Playwright) em `account_logins` quando o login é detectado e
@@ -73,6 +76,8 @@ npm run format         # Prettier
 - `scripts/`: `servico.js` (PM2 e inicialização do Windows), `restaurar.js`, `publicar.js`, `app.js`. `ecosystem.config.js`: PM2.
 - `data/`: fora do Git. `profiles/<id>` (sessões logadas), `screens/<id>` (prints), `logs/` (PM2).
 
+Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
+
 ## Regras
 
 - O ID de uma conta e a pasta `data/profiles/<id>` nunca mudam: mudar perde o login.
@@ -92,3 +97,5 @@ npm run format         # Prettier
 - O app usa só a chave PÚBLICA + o login do usuário; as regras por dono no banco protegem os dados. A chave secreta
   nunca entra no app (no `.env`, só para testes e manutenção) e o `.env` nunca vai para o Git.
 - Cada fase termina com testes e lint passando, commit e push.
+- QA ao vivo: nunca entrar pelo PAINEL com usuário de teste enquanto houver contas sem dono (`owner_id` null): o painel
+  chama `claim_legacy_accounts` e o usuário de teste vira dono das contas antigas. Logar o teste direto pelo supabase-js.

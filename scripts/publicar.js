@@ -72,7 +72,7 @@ async function enviar(exe) {
     buf: buf.subarray(s, e),
   }));
   for (const p of parts) await put(p.name, p.buf, 'application/octet-stream');
-  await put('instalar.ps1', fs.readFileSync(path.join(__dirname, 'instalar.ps1')), 'text/plain');
+  await put('instalar.ps1', fs.readFileSync(path.join(__dirname, 'instalar.ps1')), 'text/plain; charset=utf-8');
   const manifest = {
     version,
     file: path.basename(exe),

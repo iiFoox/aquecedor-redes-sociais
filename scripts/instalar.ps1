@@ -1,4 +1,5 @@
-# Instala o WarmUp Studio num aparelho novo (vai para o bucket público "downloads" pelo npm run publicar).
+# Instala o WarmUp Studio num aparelho novo (vai para o bucket publico "downloads" pelo npm run publicar).
+# Mensagens sem acento: o PowerShell do Windows le o script baixado como ANSI.
 # Uso, no PowerShell do aparelho novo:
 #   irm https://cuuuudyjqjyeqvvfqtkl.supabase.co/storage/v1/object/public/downloads/instalar.ps1 | iex
 # Baixa as partes do instalador, confere cada uma (SHA-256), junta e abre o instalador.
@@ -22,6 +23,6 @@ try {
     Write-Host "  $($p.name) ok"
   }
 } finally { $out.Close() }
-if ((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() -ne $m.sha256) { throw 'O instalador baixado não confere. Rode de novo.' }
-Write-Host 'Abrindo o instalador. Se o Windows avisar "editor desconhecido": Mais informações > Executar assim mesmo.'
+if ((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() -ne $m.sha256) { throw 'O instalador baixado nao confere. Rode de novo.' }
+Write-Host 'Abrindo o instalador. Se o Windows avisar "editor desconhecido": Mais informacoes > Executar assim mesmo.'
 Start-Process $exe
