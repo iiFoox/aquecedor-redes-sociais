@@ -20,7 +20,7 @@ enxergam tudo pelo painel. Uma conta nunca roda em dois aparelhos ao mesmo tempo
    ```
    robocopy "C:\Users\vfbnn\.gemini\antigravity-ide\scratch\insta-warmer\data\profiles" "$env:APPDATA\WarmUp Studio\data\profiles" /E
    ```
-3. **Instale:** dê dois cliques em `release\WarmUp-Studio-Setup-2.0.0.exe` (ou use o comando do item 3, abaixo).
+3. **Instale:** dê dois cliques em `release\WarmUp-Studio-Setup-2.0.1.exe` (ou use o comando do item 3, abaixo).
    O Windows mostra "O Windows protegeu o computador" (o app não tem assinatura paga): **Mais informações → Executar assim mesmo**.
    Instala sem pedir administrador e abre sozinho.
 4. **Primeira abertura:**
