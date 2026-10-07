@@ -60,6 +60,46 @@ const RESULT_LABEL = {
   block: 'Bloqueio',
   limit: 'Limite do plano',
   error: 'Erro',
+  watchdog: 'Travou',
+};
+
+// Por que o piloto automático não abre sessão agora (motivo vindo de rules.decide)
+const SCHEDULE_LABEL = {
+  'piloto-desligado': 'Piloto automático desligado',
+  ferias: 'Em férias',
+  backup: 'Esperando o backup dos logins',
+  'fora-da-janela': 'Fora do horário',
+  'precisa-atencao': 'Esperando você resolver o aviso',
+  'proxy-fora': 'Proxy fora do ar: esperando ele voltar',
+  'limite-simultaneo': 'Esperando vaga (limite de contas ao mesmo tempo)',
+  'meta-batida': 'Metas de hoje batidas',
+  'limite-do-plano': 'Limite de 120% do plano atingido',
+  intervalo: 'Intervalo entre sessões',
+  iniciar: 'Na fila para iniciar',
+};
+const scheduleLine = (a) => {
+  if (a.live || a.loginOpen || !a.schedule || a.schedule === 'rodando' || a.schedule === 'navegador-aberto') return '';
+  const win = a.window ? ` (horário dela: ${a.window.start}–${a.window.end})` : '';
+  return `<div class="acc-sched">${SCHEDULE_LABEL[a.schedule] || a.schedule}${a.schedule === 'fora-da-janela' ? win : ''}</div>`;
+};
+// Opções de proxy para o cadastro e para a edição da conta
+function proxyOptions(current = '') {
+  const online = proxies.filter((p) => p.status === 'online').length;
+  const list = proxies
+    .map((p) => {
+      const n = (p.accounts || []).length;
+      const st = p.status === 'online' ? `${p.ms} ms` : p.status === 'offline' ? 'fora do ar' : 'não testado';
+      return `<option value="${esc(p.url)}" ${p.url === current ? 'selected' : ''}>${esc(proxyHost(p.url))} · ${st} · ${n} conta(s)</option>`;
+    })
+    .join('');
+  return `<option value="" ${!current ? 'selected' : ''}>Sem proxy</option>${online ? '<option value="auto">Automático (o online com menos contas)</option>' : ''}${list}`;
+}
+const proxyHost = (url) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 };
 
 const ICONS = {
@@ -205,6 +245,7 @@ function renderAccounts() {
         }
         
         ${attentionBox(a)}
+        ${scheduleLine(a)}
 
         <div class="acc-foot">
           <button class="btn sm ghost" data-act="login" data-id="${a.id}">${ICONS.key} Login</button>
@@ -331,6 +372,15 @@ $('#bulk-submit').onclick = async () => {
   renderAnalytics();
 };
 
+// Cadastro: escolhe o proxy da lista, automático, nenhum ou cola um novo
+function fillProxyPick() {
+  $('#proxy-pick').innerHTML = proxyOptions('') + '<option value="novo">Outro (colar endereço)</option>';
+  if (proxies.some((p) => p.status === 'online')) $('#proxy-pick').value = 'auto';
+  $('#proxy').classList.toggle('hidden', $('#proxy-pick').value !== 'novo');
+}
+$('#proxy-pick').onchange = () => $('#proxy').classList.toggle('hidden', $('#proxy-pick').value !== 'novo');
+$('#add-open').addEventListener('click', fillProxyPick);
+
 $$('#platform-seg button').forEach((b) =>
   b.addEventListener('click', (e) => {
     $$('#platform-seg button').forEach((x) => x.classList.remove('active'));
@@ -347,7 +397,7 @@ $('#add-form').onsubmit = async (e) => {
       platform: $('#platform-seg .active').dataset.p,
       username: $('#username').value,
       interests: $('#interests').value,
-      proxy: $('#proxy').value,
+      proxy: $('#proxy-pick').value === 'novo' ? $('#proxy').value : $('#proxy-pick').value,
     };
     await api('/api/accounts', 'POST', data);
     toast('Conta adicionada com sucesso!');
@@ -433,7 +483,7 @@ async function openDetail(id) {
           <div>
             <span class="chip">Dia ${a.day} · Fase ${a.phase.n}</span>
             <span class="chip ${a.platform}">${pMeta.name}</span>
-            ${a.proxy ? `<span class="chip">Proxy configurado</span>` : ''}
+            ${a.proxy ? `<span class="chip">Proxy ${esc(a.proxyHost)}${a.proxyStatus === 'offline' ? ' · fora do ar' : ''}</span>` : ''}
             <span class="pill ${st.cls}">${st.label}</span>
           </div>
         </div>
@@ -534,6 +584,40 @@ async function openDetail(id) {
       </div>
       
       <div class="card mt-4">
+        <h3>Ajustes desta conta</h3>
+        ${scheduleLine(a)}
+        <form class="acc-settings" data-id="${a.id}">
+          <label class="inline"><input type="checkbox" name="own" ${a.window ? 'checked' : ''} /> Horário próprio</label>
+          <div class="acc-win">
+            <input type="time" name="start" value="${a.window ? a.window.start : window.scheduleConfig.start}" ${a.window ? '' : 'disabled'} />
+            <span>até</span>
+            <input type="time" name="end" value="${a.window ? a.window.end : window.scheduleConfig.end}" ${a.window ? '' : 'disabled'} />
+          </div>
+          <small>Sem horário próprio, usa o horário geral (${window.scheduleConfig.start}–${window.scheduleConfig.end}).</small>
+          <label>Proxy</label>
+          <select name="proxy">${proxyOptions(a.proxyUrl || '')}</select>
+          <small>Trocar o proxy de uma conta já logada muda o IP dela e pode pedir verificação.</small>
+          <button class="btn sm primary" type="submit">Salvar ajustes</button>
+        </form>
+      </div>
+
+      ${
+        a.screens && a.screens.length
+          ? `<div class="card mt-4">
+        <h3>Prints de problemas</h3>
+        <div class="screens">
+          ${a.screens
+            .map(
+              (f) =>
+                `<a href="/api/accounts/${a.id}/screens/${f}" target="_blank" rel="noopener"><img loading="lazy" src="/api/accounts/${a.id}/screens/${f}" alt="${esc(f)}" /><span>${esc(f.slice(0, 16).replace('T', ' '))} · ${esc(f.split('_').pop().replace('.jpg', ''))}</span></a>`,
+            )
+            .join('')}
+        </div>
+      </div>`
+          : ''
+      }
+
+      <div class="card mt-4">
         <h3>Últimas Sessões</h3>
         <div class="table-wrap">
           <table class="sessions">
@@ -609,6 +693,35 @@ async function releaseAccount(id) {
 window.openCaptchaBrowser = openCaptchaBrowser;
 window.releaseAccount = releaseAccount;
 
+// Ajustes da conta (horário próprio e proxy)
+$('#detail').addEventListener('change', (e) => {
+  const form = e.target.closest('.acc-settings');
+  if (!form || e.target.name !== 'own') return;
+  form.start.disabled = form.end.disabled = !e.target.checked;
+});
+$('#detail').addEventListener('submit', async (e) => {
+  const form = e.target.closest('.acc-settings');
+  if (!form) return;
+  e.preventDefault();
+  const id = form.dataset.id;
+  const a = accounts.find((x) => x.id === id) || {};
+  const body = { window: form.own.checked ? { start: form.start.value, end: form.end.value } : null };
+  if (form.proxy.value !== (a.proxyUrl || '')) {
+    if (a.proxy && !confirm('Trocar o proxy muda o IP desta conta. Continuar?')) return;
+    body.proxy = form.proxy.value;
+  }
+  try {
+    await api(`/api/accounts/${id}`, 'PATCH', body);
+    toast('Ajustes salvos', 'success');
+    accounts = await api('/api/accounts');
+    proxies = await api('/api/proxies').catch(() => proxies);
+    renderAccounts();
+    openDetail(id);
+  } catch (err) {
+    toast(err.message, 'danger');
+  }
+});
+
 // Botões do aviso dentro do detalhe (o detalhe não passa pelo clique dos cards)
 $('#detail').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-act]');
@@ -640,6 +753,13 @@ function connectStream() {
   evtSource.onmessage = function (event) {
     if (event.data.startsWith('ping')) return;
     const ev = JSON.parse(event.data);
+
+    // Férias, backup e proxies: recarrega o estado geral
+    if (ev.type === 'vacation' || ev.type === 'backup' || ev.type === 'proxies') {
+      refreshGeneral();
+      if (ev.type === 'backup' && ev.backup) toast(`Backup dos logins feito (${ev.backup.sizeMB} MB)`, 'success');
+      return;
+    }
 
     // Atualiza estado local rápido sem recarregar tudo
     const acc = accounts.find((a) => a.id === ev.id);
@@ -788,6 +908,8 @@ async function init() {
     $('#sch-max').value = window.scheduleConfig.max;
     $('#cfg-headless').checked = !!window.scheduleConfig.headless;
     $('#cfg-mute').checked = window.scheduleConfig.muteAudio !== false;
+    renderVacation();
+    renderBackup();
 
     renderKPIs();
     renderAccounts();
@@ -801,6 +923,7 @@ async function init() {
       try {
         accounts = await api('/api/accounts');
         proxies = await api('/api/proxies').catch(() => proxies);
+        window.scheduleConfig = await api('/api/config').catch(() => window.scheduleConfig);
         motorOff(false);
       } catch (err) {
         if (err.motorOff) motorOff(true);
@@ -809,6 +932,7 @@ async function init() {
       renderKPIs();
       renderAccounts();
       renderProxies();
+      renderVacation();
       renderAnalytics();
     }, 10000);
   } catch (err) {
@@ -842,7 +966,7 @@ $('#proxy-form').onsubmit = async (e) => {
 };
 
 function renderProxies() {
-  $('#proxy-count-label').textContent = `${proxies.length} IPs cadastrados`;
+  $('#proxy-count-label').textContent = `${proxies.length} proxies · testados sozinhos a cada 30 min, sem abrir navegador`;
   if (!proxies.length) {
     $('#proxies-list').innerHTML = `<div class="empty card" style="padding: 30px;">Nenhum proxy cadastrado ainda.</div>`;
     return;
@@ -850,18 +974,23 @@ function renderProxies() {
 
   $('#proxies-list').innerHTML = proxies
     .map((p) => {
-      let stat = `<span class="pill">Status Desconhecido</span>`;
-      if (p.status === 'online') stat = `<span class="pill on">Online (${p.ms}ms)</span>`;
-      if (p.status === 'offline') stat = `<span class="pill login">Offline / Inacessível</span>`;
+      let stat = `<span class="pill">Ainda não testado</span>`;
+      if (p.status === 'online') stat = `<span class="pill on">Online · ${p.ms} ms${p.ip ? ` · IP ${esc(p.ip)}` : ''}</span>`;
+      if (p.status === 'offline') stat = `<span class="pill login">Fora do ar${p.error ? `: ${esc(p.error)}` : ''}</span>`;
+      const users = (p.accounts || []).map((a) => `@${esc(a.username)}`).join(', ');
+      const when = p.lastCheck
+        ? `Testado às ${new Date(p.lastCheck).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        : '';
 
       return `
-      <div class="card" style="display: flex; justify-content: space-between; align-items: center; padding: 18px 24px;">
-        <div style="font-family: var(--mono); font-size: 0.9rem;">
-          <div style="margin-bottom: 8px;">${p.url}</div>
+      <div class="card proxy-row">
+        <div style="font-family: var(--mono); font-size: 0.9rem; min-width: 0;">
+          <div style="margin-bottom: 8px; overflow-wrap: anywhere;">${esc(proxyHost(p.url))}</div>
           <div>${stat}</div>
+          <small style="display: block; margin-top: 6px; color: var(--mut)">${users ? `Usado por ${users}` : 'Livre (nenhuma conta)'}${when ? ` · ${when}` : ''}</small>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn sm" onclick="pingProxy('${p.id}')">⚡ Testar Conexão</button>
+          <button class="btn sm" onclick="pingProxy('${p.id}')">⚡ Testar agora</button>
           <button class="btn danger sm" onclick="deleteProxy('${p.id}')">${ICONS.trash}</button>
         </div>
       </div>
@@ -871,23 +1000,27 @@ function renderProxies() {
 }
 
 window.pingProxy = async (id) => {
-  toast('Testando IP no navegador...', 'warn');
+  toast('Testando o proxy...', 'warn');
   try {
     const res = await api(`/api/proxies/${id}/ping`, 'POST');
     proxies = proxies.map((p) => (p.id === id ? res : p));
     renderProxies();
-    if (res.status === 'online') toast('Proxy está online e funcional!', 'success');
-    else toast('Proxy falhou ou está bloqueado.', 'danger');
+    if (res.status === 'online') toast(`Proxy online (${res.ms} ms, IP ${res.ip})`, 'success');
+    else toast(`Proxy fora do ar: ${res.error || 'sem resposta'}`, 'danger');
   } catch (e) {
     toast('Erro na checagem.', 'danger');
   }
 };
 
 window.deleteProxy = async (id) => {
-  if (!confirm('Excluir este IP definitivamente?')) return;
-  await api(`/api/proxies/${id}`, 'DELETE');
-  proxies = proxies.filter((p) => p.id !== id);
-  renderProxies();
+  if (!confirm('Excluir este proxy da lista?')) return;
+  try {
+    await api(`/api/proxies/${id}`, 'DELETE');
+    proxies = proxies.filter((p) => p.id !== id);
+    renderProxies();
+  } catch (err) {
+    toast(err.message, 'danger');
+  }
 };
 
 // Scheduler Logic
@@ -921,6 +1054,92 @@ $('#settings-form').onsubmit = async (e) => {
     toast('Erro ao salvar.', 'danger');
   }
 };
+
+// ---------- Férias ----------
+
+function renderVacation() {
+  const c = window.scheduleConfig || {};
+  const on = c.pausedUntil && c.pausedUntil > Date.now();
+  const back = on ? new Date(c.pausedUntil).toLocaleDateString('pt-BR') : '';
+  $('#vacation-state').innerHTML = on
+    ? `<b>Em férias.</b> As contas voltam a aquecer em ${back}, continuando do dia em que pararam.`
+    : 'Desligado. As contas seguem o plano normalmente.';
+  $('#vacation-form').classList.toggle('hidden', !!on);
+  $('#vacation-end').classList.toggle('hidden', !on);
+  $('#vacation-banner').classList.toggle('hidden', !on);
+  $('#vacation-banner').textContent = on ? `🏖️ Modo férias: nada roda até ${back}. As contas continuam do dia em que pararam.` : '';
+  if (!$('#vacation-until').value) {
+    const d = new Date(Date.now() + 7 * 86400000);
+    $('#vacation-until').value = d.toISOString().slice(0, 10);
+  }
+}
+
+$('#vacation-form').onsubmit = async (e) => {
+  e.preventDefault();
+  if (!confirm('Parar todas as contas até a data de volta? Sessões em andamento fecham com segurança.')) return;
+  try {
+    window.scheduleConfig = await api('/api/vacation', 'POST', { until: $('#vacation-until').value });
+    renderVacation();
+    toast('Modo férias ligado', 'success');
+  } catch (err) {
+    toast(err.message, 'danger');
+  }
+};
+$('#vacation-end').onclick = async () => {
+  try {
+    window.scheduleConfig = await api('/api/vacation', 'DELETE');
+    renderVacation();
+    toast('Férias encerradas. As contas continuam de onde pararam.', 'success');
+    accounts = await api('/api/accounts');
+    renderAccounts();
+  } catch (err) {
+    toast(err.message, 'danger');
+  }
+};
+
+// ---------- Backup dos logins ----------
+
+async function renderBackup() {
+  const b = await api('/api/backup').catch(() => null);
+  if (!b) return;
+  const last = b.last && b.last.at ? `${new Date(b.last.at).toLocaleString('pt-BR')} · ${b.last.sizeMB} MB` : 'Nenhum ainda';
+  const err =
+    b.last && b.last.error ? `<div class="acc-alert block"><b>Último backup falhou</b><span>${esc(b.last.error)}</span></div>` : '';
+  $('#backup-box').innerHTML = `
+    <div class="kv"><span>Pasta</span><b style="overflow-wrap:anywhere">${esc(b.dir)}</b></div>
+    <div class="kv"><span>Último backup</span><b>${last}</b></div>
+    <div class="kv"><span>Automático</span><b>Todo dia às ${b.at}, guardando os ${b.keep} mais recentes (${b.files.length} agora)</b></div>
+    <div class="kv"><span>Situação</span><b>${b.running ? 'Fazendo backup...' : b.due ? 'Pendente: roda quando nenhuma conta estiver aberta' : 'Em dia'}</b></div>
+    ${err}`;
+}
+
+$('#backup-now').onclick = async () => {
+  const btn = $('#backup-now');
+  btn.disabled = true;
+  try {
+    await api('/api/backup', 'POST');
+    toast('Backup dos logins feito', 'success');
+    renderBackup();
+  } catch (err) {
+    toast(err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+async function refreshGeneral() {
+  try {
+    window.scheduleConfig = await api('/api/config');
+    proxies = await api('/api/proxies');
+    accounts = await api('/api/accounts');
+  } catch {
+    return;
+  }
+  renderVacation();
+  renderBackup();
+  renderProxies();
+  renderAccounts();
+}
 
 let charts = {};
 

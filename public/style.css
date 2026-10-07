@@ -1579,3 +1579,97 @@ input:focus {
   border: 1px solid rgba(255, 90, 122, 0.4);
   color: var(--txt);
 }
+
+/* Fase 2: motivo da fila, ajustes da conta, prints, proxies, férias e backup */
+.acc-sched {
+  font-size: 0.8rem;
+  color: var(--mut);
+  margin: 8px 0 0;
+}
+.acc-settings {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin-top: 10px;
+}
+.acc-settings .inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.acc-settings .acc-win {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.acc-settings small {
+  color: var(--dim);
+}
+.acc-settings select,
+#proxy-pick {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--txt);
+  border: 1px solid var(--bd);
+}
+.acc-settings button {
+  justify-self: start;
+  margin-top: 6px;
+}
+.screens {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.screens a {
+  display: grid;
+  gap: 6px;
+  color: var(--mut);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+.screens img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+}
+.proxy-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px;
+  flex-wrap: wrap;
+}
+.motor-off.vacation {
+  position: static;
+  margin-bottom: 16px;
+  background: rgba(37, 244, 238, 0.12);
+  border-color: rgba(37, 244, 238, 0.35);
+  color: var(--txt);
+}
+.backup-box {
+  display: grid;
+  gap: 10px;
+}
+.backup-box .kv {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+.backup-box .kv span {
+  color: var(--mut);
+}
+@media (max-width: 600px) {
+  .backup-box .kv {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

@@ -17,6 +17,31 @@ Painel em http://localhost:3001. O `npm start` sobe dois programas:
 
 `Ctrl+C` fecha as sessões com segurança e grava o que falta antes de sair.
 
+## Rodar em segundo plano (dia a dia)
+
+```
+npm run ligar               # liga motor + painel; reiniciam sozinhos se caírem
+npm run desligar            # desliga com segurança
+npm run status              # está rodando?
+npm run logs                # registros (ficam em data/logs)
+npm run autostart:ligar     # liga sozinho quando você entra no Windows
+npm run autostart:desligar  # tira da inicialização
+```
+
+Use **ou** `npm start` **ou** `npm run ligar`, nunca os dois ao mesmo tempo (as portas são as mesmas).
+
+## Proteções
+
+- **Backup dos logins**: todo dia às 04:00, `data/profiles` sem cache (~1 MB) vai para `OneDrive\Backups\WarmUp Studio`.
+  Guarda os 7 mais recentes. Só roda com tudo parado; enquanto estiver pendente, o piloto não abre sessões novas.
+  Para restaurar: desligue o motor e rode `npm run restaurar` (lista), `npm run restaurar -- ultimo` (tudo)
+  ou `npm run restaurar -- ultimo alemdofato5` (só uma conta). A pasta atual nunca é apagada: vira `...-antes-<data>`.
+- **Vigia**: sessão 15 min sem sinal, ou 5 min além do teto de segurança, tem o navegador fechado. Fica registrada como "Travou".
+- **Prints**: captcha, bloqueio, erro e sessão travada guardam um print em `data/screens/<conta>` (os 30 últimos), visível no detalhe da conta.
+- **Proxies**: testados a cada 30 min sem abrir navegador. Conta com proxy fora do ar espera ele voltar; nunca troca de IP sozinha.
+- **Horário por conta**: no detalhe da conta, "Horário próprio" substitui o horário geral só para ela.
+- **Modo férias** (Agendamento): nada roda até a data de volta, e cada conta continua do dia do aquecimento em que parou.
+
 ## Quando a conta precisa de você
 
 - **Captcha**: a sessão para na hora. Clique em **Abrir navegador**, resolva o captcha e feche a janela. A conta volta para a fila.

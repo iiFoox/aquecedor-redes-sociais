@@ -73,6 +73,7 @@
         </header>
 
         <main class="container view-section active" id="view-accounts">
+          <div id="vacation-banner" class="motor-off vacation hidden" role="status"></div>
           <section class="kpis" id="kpis" aria-label="Indicadores gerais"></section>
 
           <section id="how" class="card how hidden" aria-labelledby="how-title"></section>
@@ -170,6 +171,22 @@
               <button type="submit" class="btn primary" style="margin-top: 10px">Salvar Configurações</button>
             </form>
           </div>
+
+          <div class="card" style="max-width: 600px; margin-top: 24px">
+            <h3 style="margin-bottom: 8px">🏖️ Modo férias</h3>
+            <p id="vacation-state" style="color: var(--mut); margin-bottom: 16px"></p>
+            <form id="vacation-form" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end">
+              <div>
+                <label style="display: block; margin-bottom: 8px">Volto no dia</label>
+                <input type="date" id="vacation-until" required />
+              </div>
+              <button type="submit" class="btn primary">Ligar férias</button>
+            </form>
+            <button id="vacation-end" type="button" class="btn hidden">Voltar agora</button>
+            <small style="display: block; margin-top: 10px"
+              >Nada roda nas férias. Na volta, cada conta continua do dia do aquecimento em que parou.</small
+            >
+          </div>
         </main>
 
         <main class="container view-section hidden" id="view-analytics">
@@ -256,6 +273,13 @@
               <button type="submit" class="btn primary" style="justify-self: start">Salvar Anti-Detect</button>
             </form>
           </div>
+
+          <div class="card" style="max-width: 600px; margin-top: 24px">
+            <h3 style="margin-bottom: 12px">💾 Backup dos logins</h3>
+            <div id="backup-box" class="backup-box"></div>
+            <button id="backup-now" type="button" class="btn primary" style="margin-top: 16px">Fazer backup agora</button>
+            <small style="display: block; margin-top: 10px">Para restaurar: desligue o motor e rode <code>npm run restaurar</code>.</small>
+          </div>
         </main>
       </div>
     </div>
@@ -277,7 +301,8 @@
         <label for="interests">Nichos / interesses <small>(separados por vírgula)</small></label>
         <input id="interests" placeholder="fitness, receitas fit, academia" autocomplete="off" />
         <label for="proxy">Proxy <small>(opcional, recomendado 1 por conta)</small></label>
-        <input id="proxy" placeholder="http://usuario:senha@host:porta" autocomplete="off" />
+        <select id="proxy-pick"></select>
+        <input id="proxy" class="hidden" placeholder="http://usuario:senha@host:porta" autocomplete="off" />
         <div class="modal-actions">
           <button type="button" class="btn ghost" id="add-cancel">Cancelar</button>
           <button type="submit" class="btn primary" id="add-submit">Adicionar conta</button>

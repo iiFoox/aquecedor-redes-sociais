@@ -86,6 +86,9 @@ function inWindow(minutes, start, end) {
   return s < e ? minutes >= s && minutes < e : minutes >= s || minutes < e;
 }
 
+// Janela da conta: a dela, se tiver, senão a janela geral do piloto automático
+const windowOf = (account, config) => account.window || { start: config.start, end: config.end };
+
 // Tipo do alerta a partir do texto (para alertas antigos, que não tinham tipo)
 function kindFromMsg(msg = '') {
   if (/logad|login|expirou/i.test(msg)) return 'login';
@@ -112,7 +115,7 @@ function mergeAlert(alerts, next) {
  *  - 40 pts consistência (dias com sessão nos últimos 7 dias)
  *  - 30 pts cumprimento das metas (média das últimas 3 sessões que chegaram a rodar)
  *  - 30 pts segurança (perde pontos com captcha, bloqueio e erro da semana).
- * Falta de login não conta: não é um sinal da plataforma contra a conta.
+ * Falta de login e proxy fora do ar não contam: não são sinais da plataforma contra a conta.
  */
 function computeHealth(a, now = new Date()) {
   const ran = (a.history || []).filter((h) => h.result !== 'not_logged');
@@ -123,8 +126,10 @@ function computeHealth(a, now = new Date()) {
   let active = todayActive ? 1 : 0;
   let total = todayActive ? 1 : 0;
   for (let i = 1; i < Math.min(day, 7); i++) {
+    const d = a.daily[addDays(today, -i)] || {};
+    if (d.vacation) continue; // dia de férias não conta contra a consistência
     total++;
-    if ((a.daily[addDays(today, -i)] || {}).sessions) active++;
+    if (d.sessions) active++;
   }
   const consistency = total ? active / total : 0;
 
@@ -133,7 +138,7 @@ function computeHealth(a, now = new Date()) {
 
   const weekAgo = now.getTime() - 7 * DAY_MS;
   const penalty = (a.alerts || [])
-    .filter((x) => x.t > weekAgo && x.kind !== 'login')
+    .filter((x) => x.t > weekAgo && x.kind !== 'login' && x.kind !== 'proxy')
     .reduce((s, x) => s + (x.level === 'danger' ? 15 : x.level === 'warn' ? 4 : 0), 0);
   const safety = Math.max(0, 30 - penalty);
 
@@ -153,20 +158,73 @@ const nextAfter = (endedAt, rand = Math.random) => endedAt + Math.round(GAP_MIN 
 // Intervalo antigo, para contas que ainda não têm "nextAfter" gravado
 const legacyGap = (id) => (GAP_MIN + (String(id).charCodeAt(0) % 45)) * 60000;
 
+// ---------- Férias ----------
+
+// Datas inteiras que ficaram em férias: as de depois do dia em que saiu até antes do dia em que voltou.
+// O dia da saída e o da volta contam como dias normais.
+function vacationDays(fromMs, toMs) {
+  const out = [];
+  const end = localDate(new Date(toMs));
+  for (let d = addDays(localDate(new Date(fromMs)), 1); d < end; d = addDays(d, 1)) out.push(d);
+  return out;
+}
+
+// O aquecimento continua de onde parou: o início da conta anda para frente um dia por dia de férias
+// (só os dias de férias depois do cadastro contam)
+function shiftStart(startedAt, days) {
+  const skip = days.filter((d) => d > localDate(new Date(startedAt))).length;
+  return { startedAt: new Date(Date.parse(startedAt) + skip * DAY_MS).toISOString(), skipped: skip };
+}
+
+// ---------- Backup ----------
+
+const BACKUP_RETRY_MS = 30 * 60000;
+
+// Backup do dia já pode rodar? A partir do horário marcado, uma vez por data. Se falhar, tenta de novo em 30 min.
+function backupDue(now, last, at = '04:00') {
+  if (localMinutes(now) < toMinutes(at)) return false;
+  if (last && last.at && localDate(new Date(last.at)) === localDate(now)) return false;
+  if (last && last.triedAt && now.getTime() - last.triedAt < BACKUP_RETRY_MS) return false;
+  return true;
+}
+
+// ---------- Proxies ----------
+
+const proxyHost = (url) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '';
+  }
+};
+
+// Proxy automático: o online com menos contas (desempate: o mais rápido). Nunca usado em conta já logada.
+function pickProxy(proxies, accounts) {
+  const uses = (url) => accounts.filter((a) => a.proxy === url).length;
+  const online = proxies.filter((p) => p.status === 'online');
+  online.sort((x, y) => uses(x.url) - uses(y.url) || (x.ms || 0) - (y.ms || 0));
+  return online[0] ? online[0].url : null;
+}
+
 /**
  * Decide se o agendador inicia uma sessão desta conta agora. Devolve o motivo:
- * 'iniciar' ou o que impede. ctx: { now, config, runningCount, running, browserOpen, plan, today, activities }
+ * 'iniciar' ou o que impede. ctx: { now, config, runningCount, running, browserOpen, backupHold, proxyDown,
+ * plan (objeto ou função), today, activities }
  */
 function decide(account, ctx) {
   const { now, config } = ctx;
   if (!config.active) return 'piloto-desligado';
   if (config.pausedUntil && now.getTime() < config.pausedUntil) return 'ferias';
-  if (!inWindow(localMinutes(now), config.start, config.end)) return 'fora-da-janela';
+  if (ctx.backupHold) return 'backup';
+  const win = windowOf(account, config);
+  if (!inWindow(localMinutes(now), win.start, win.end)) return 'fora-da-janela';
   if (ctx.running) return 'rodando';
   if (ctx.browserOpen) return 'navegador-aberto';
   if (account.attention) return 'precisa-atencao';
+  if (ctx.proxyDown) return 'proxy-fora';
   if (ctx.runningCount >= config.max) return 'limite-simultaneo';
-  const status = dayStatus(ctx.activities, ctx.plan, ctx.today, account);
+  const plan = typeof ctx.plan === 'function' ? ctx.plan() : ctx.plan;
+  const status = dayStatus(ctx.activities, plan, ctx.today, account);
   if (status === 'done') return 'meta-batida';
   if (status === 'limit') return 'limite-do-plano';
   if (account.nextAfter) {
@@ -196,10 +254,16 @@ module.exports = {
   canProgress,
   dayStatus,
   inWindow,
+  windowOf,
   kindFromMsg,
   mergeAlert,
   computeHealth,
   nextAfter,
   legacyGap,
+  vacationDays,
+  shiftStart,
+  backupDue,
+  proxyHost,
+  pickProxy,
   decide,
 };

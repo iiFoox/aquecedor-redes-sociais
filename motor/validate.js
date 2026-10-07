@@ -17,6 +17,13 @@ const interests = z
   )
   .refine((list) => list.every((s) => s.length <= 40), 'Cada interesse pode ter no máximo 40 letras');
 
+// Proxy da conta: vazio (sem proxy), "auto" (o da lista com menos contas) ou um endereço
+const accountProxy = z
+  .string()
+  .optional()
+  .transform((s) => (s || '').trim())
+  .refine((s) => !s || s === 'auto' || PROXY_URL.test(s), PROXY_MSG);
+
 const newAccount = z.object({
   platform: z.enum(['instagram', 'tiktok'], { errorMap: () => ({ message: 'Plataforma inválida' }) }).default('instagram'),
   username: z
@@ -24,12 +31,30 @@ const newAccount = z.object({
     .transform((s) => s.trim().replace(/^@/, ''))
     .refine((s) => s.length > 0, 'Informe o usuário')
     .refine((s) => USERNAME.test(s), 'Usuário inválido: use só letras, números, ponto e _ (até 30)'),
-  proxy: z
-    .string()
-    .optional()
-    .transform((s) => (s || '').trim())
-    .refine((s) => !s || PROXY_URL.test(s), PROXY_MSG),
+  proxy: accountProxy,
   interests,
+});
+
+// Janela de horário só desta conta (null volta a usar a janela geral)
+const accountWindow = z
+  .object({
+    start: z.string().regex(HHMM, 'Horário de início inválido (use HH:MM)'),
+    end: z.string().regex(HHMM, 'Horário de fim inválido (use HH:MM)'),
+  })
+  .strip()
+  .nullable();
+
+const accountPatch = z
+  // .optional() de fora: campo ausente fica de fora (não vira proxy vazio nem lista vazia)
+  .object({ window: accountWindow.optional(), proxy: accountProxy.optional(), interests: interests.optional() })
+  .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)));
+
+// Férias: a data em que você volta (as contas voltam a aquecer à 00:00 desse dia)
+const vacation = z.object({
+  until: z
+    .string({ required_error: 'Informe a data de volta' })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (use AAAA-MM-DD)')
+    .refine((d) => !Number.isNaN(Date.parse(`${d}T12:00:00Z`)), 'Data inválida'),
 });
 
 const newProxy = z.object({
@@ -60,4 +85,4 @@ const body = (schema) => (req, res, next) => {
   next();
 };
 
-module.exports = { body, schemas: { newAccount, newProxy, configPatch, openBrowser } };
+module.exports = { body, schemas: { newAccount, accountPatch, newProxy, configPatch, openBrowser, vacation } };

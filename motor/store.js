@@ -6,7 +6,17 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const rules = require('./rules');
 
-const DEFAULT_CONFIG = { active: false, start: '08:00', end: '22:00', max: 2, headless: false, muteAudio: true, pausedUntil: null };
+const DEFAULT_CONFIG = {
+  active: false,
+  start: '08:00',
+  end: '22:00',
+  max: 2,
+  headless: false,
+  muteAudio: true,
+  pausedUntil: null, // férias: até quando (ms)
+  pausedFrom: null, // férias: desde quando (ms)
+  lastBackup: null, // { at, file, sizeMB, error, triedAt }
+};
 const CONFIG_KEYS = Object.keys(DEFAULT_CONFIG);
 const KEEP = { events: 400, alerts: 100, history: 300 }; // quanto fica em memória por conta
 const EVENTS_DAYS = 3; // eventos carregados ao abrir
@@ -119,6 +129,7 @@ const sessionFromRow = (r) =>
     completion: r.completion == null ? 0 : Number(r.completion),
     result: r.result,
     error: r.error,
+    screenshot: r.screenshot,
   });
 
 function normalize(a) {
@@ -333,6 +344,18 @@ function remove(id) {
   schedule();
 }
 
+// Campos que você pode mudar depois do cadastro (proxy, interesses, janela de horário)
+function updateAccount(id, patch) {
+  const a = get(id);
+  if (!a) return null;
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete a[k];
+    else a[k] = v;
+  }
+  touch(id);
+  return a;
+}
+
 function recordAction(id, action, detail = '') {
   const a = get(id);
   if (!a) return;
@@ -419,6 +442,7 @@ function addSession(id, session) {
     completion: session.completion ?? null,
     result: session.result,
     error: session.error || null,
+    screenshot: session.screenshot || null,
   });
   touch(id);
 }
@@ -443,6 +467,11 @@ function recentEvents(limit = 60) {
 // ---------- Proxies e config ----------
 
 const allProxies = () => proxies;
+// Garante que o proxy de uma conta esteja na lista (para entrar no teste a cada 30 min)
+function ensureProxy(url) {
+  if (!url || proxies.some((p) => p.url === url)) return;
+  addProxy(url);
+}
 function addProxy(url) {
   const p = { id: crypto.randomUUID(), url, status: 'unknown', ms: 0, lastCheck: null };
   proxies.push(p);
@@ -464,6 +493,36 @@ function updateProxy(id, updates) {
 }
 
 const getConfig = () => config;
+
+// ---------- Férias ----------
+
+function startVacation(untilMs) {
+  config = { ...config, pausedUntil: untilMs, pausedFrom: config.pausedFrom || Date.now() };
+  dirty.config = true;
+  schedule();
+  return config;
+}
+
+// Fim das férias (na data marcada ou quando você volta antes): o aquecimento continua de onde parou.
+// Cada conta anda o início para frente pelos dias inteiros de férias, e esses dias ficam marcados.
+function endVacation(now = Date.now()) {
+  if (!config.pausedUntil && !config.pausedFrom) return [];
+  const days = config.pausedFrom ? rules.vacationDays(config.pausedFrom, now) : [];
+  const moved = [];
+  for (const a of accounts) {
+    const { startedAt, skipped } = rules.shiftStart(a.startedAt, days);
+    if (!skipped) continue;
+    a.startedAt = startedAt;
+    for (const d of days) if (!a.daily[d]) a.daily[d] = { vacation: true };
+    addLog(a.id, `Voltou das férias: ${skipped} dia(s) parado(s). O aquecimento continua do dia ${rules.dayOf(a)}`);
+    moved.push(a.id);
+    touch(a.id);
+  }
+  config = { ...config, pausedUntil: null, pausedFrom: null };
+  dirty.config = true;
+  schedule();
+  return moved;
+}
 function setConfig(next) {
   config = { ...config, ...next };
   dirty.config = true;
@@ -497,4 +556,8 @@ module.exports = {
   updateProxy,
   getConfig,
   setConfig,
+  updateAccount,
+  ensureProxy,
+  startVacation,
+  endVacation,
 };

@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const store = require('../store');
 const runner = require('../runner');
@@ -5,10 +6,30 @@ const rules = require('../rules');
 const platforms = require('../platforms');
 const { PHASES, READY_DAY, phaseFor } = require('../platforms/phases');
 const { body, schemas } = require('../validate');
+const backup = require('../backup');
 
 const router = express.Router();
 
 const alertOut = (x) => ({ t: x.t, lastT: x.lastT, count: x.count, level: x.level, kind: x.kind, msg: x.msg, resolved: !!x.resolvedAt });
+
+const proxyOf = (a) => (a.proxy ? store.allProxies().find((p) => p.url === a.proxy) : null);
+
+// Por que o piloto automático não está abrindo sessão nesta conta agora (ou 'iniciar')
+function scheduleReason(a, p, plan, today) {
+  const px = proxyOf(a);
+  return rules.decide(a, {
+    now: new Date(),
+    config: store.getConfig(),
+    runningCount: 0,
+    running: !!runner.getSession(a.id),
+    browserOpen: runner.isBrowserOpen(a.id),
+    backupHold: backup.hold(),
+    proxyDown: !!px && px.status === 'offline',
+    plan,
+    today,
+    activities: p.activities,
+  });
+}
 
 function summarize(a, full = false) {
   const p = platforms[a.platform];
@@ -22,6 +43,10 @@ function summarize(a, full = false) {
     username: a.username,
     interests: a.interests,
     proxy: !!a.proxy,
+    proxyHost: a.proxy ? rules.proxyHost(a.proxy) : null,
+    proxyStatus: proxyOf(a)?.status || (a.proxy ? 'unknown' : null),
+    window: a.window || null,
+    schedule: scheduleReason(a, p, plan, today),
     startedAt: a.startedAt,
     day,
     phase: phaseFor(day),
@@ -45,6 +70,8 @@ function summarize(a, full = false) {
     out.history = a.history.slice(-30).reverse();
     out.daily = store.lastDays(a, 14);
     out.alerts = a.alerts.slice(-20).reverse().map(alertOut);
+    out.screens = runner.listScreens(a.id).slice(0, 12);
+    out.proxyUrl = a.proxy || ''; // só no detalhe, para o seletor de proxy (o painel é local)
   }
   return out;
 }
@@ -72,9 +99,48 @@ router.post('/accounts', body(schemas.newAccount), (req, res) => {
   if (store.all().some((a) => a.platform === platform && a.username.toLowerCase() === username.toLowerCase())) {
     return res.status(409).json({ error: `@${username} já está cadastrada no ${platforms[platform].name}` });
   }
-  const acc = store.add({ platform, username, proxy, interests });
+  // "auto": o proxy online da lista com menos contas
+  const url = proxy === 'auto' ? rules.pickProxy(store.allProxies(), store.all()) : proxy;
+  if (proxy === 'auto' && !url) return res.status(409).json({ error: 'Nenhum proxy online na lista para escolher' });
+  store.ensureProxy(url);
+  const acc = store.add({ platform, username, proxy: url, interests });
   store.addLog(acc.id, `Conta adicionada (${platforms[platform].name}). Dia 1 do aquecimento`);
   res.json(summarize(acc));
+});
+
+// Muda proxy, interesses ou janela de horário da conta
+router.patch('/accounts/:id', account, body(schemas.accountPatch), (req, res) => {
+  const patch = { ...req.body };
+  if ('proxy' in patch) {
+    if (runner.getSession(req.account.id) || runner.isBrowserOpen(req.account.id)) {
+      return res.status(409).json({ error: 'Feche a sessão ou o navegador desta conta antes de trocar o proxy' });
+    }
+    if (patch.proxy === 'auto') {
+      patch.proxy = rules.pickProxy(
+        store.allProxies(),
+        store.all().filter((x) => x.id !== req.account.id),
+      );
+      if (!patch.proxy) return res.status(409).json({ error: 'Nenhum proxy online na lista para escolher' });
+    }
+    store.ensureProxy(patch.proxy);
+    if (!patch.proxy) patch.proxy = null;
+  }
+  store.updateAccount(req.account.id, patch);
+  const what = [
+    'window' in patch && (patch.window ? `horário ${patch.window.start}–${patch.window.end}` : 'horário geral'),
+    'proxy' in patch && (patch.proxy ? `proxy ${rules.proxyHost(patch.proxy)}` : 'sem proxy'),
+    'interests' in patch && 'interesses',
+  ].filter(Boolean);
+  if (what.length) store.addLog(req.account.id, `Conta atualizada: ${what.join(', ')}`);
+  res.json(summarize(req.account));
+});
+
+// Prints de tela tirados em captcha, bloqueio, erro ou sessão travada
+router.get('/accounts/:id/screens/:file', account, (req, res) => {
+  if (!/^[\w-]+\.jpg$/.test(req.params.file)) return res.status(400).json({ error: 'Arquivo inválido' });
+  res.sendFile(path.join(runner.screensDir(req.account.id), req.params.file), (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'Print não encontrado' });
+  });
 });
 
 router.delete('/accounts/:id', account, async (req, res) => {
