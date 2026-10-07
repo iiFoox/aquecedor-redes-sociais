@@ -216,6 +216,6 @@ test('resumo dos tempos da sessão: percentis e histograma por faixa', () => {
   assert.equal(t.n, 7);
   assert.equal(t.p50, 1500);
   assert.equal(t.max, 200000);
-  assert.deepEqual(t.hist, [1, 1, 2, 1, 0, 0, 0, 1, 0, 1]); // <0,5 s · <1 s · <2 s · <4 s ... · >2 min
+  assert.deepEqual(t.hist, [1, 1, 2, 1, 0, 0, 0, 0, 1, 1]); // <0,5 s · <1 s · <2 s · <4 s ... · 1–2 min · >2 min
   assert.equal(human.timingSummary([]).n, 0);
 });
