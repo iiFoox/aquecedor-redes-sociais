@@ -154,8 +154,13 @@ test('simulador: horários mudam de um dia para o outro e o dia sempre fecha a m
   const mean = starts.reduce((a, b) => a + b, 0) / starts.length;
   const sd = Math.sqrt(starts.reduce((a, b) => a + (b - mean) ** 2, 0) / starts.length);
   assert.ok(sd > 45, `primeira sessão quase sempre no mesmo horário (desvio ${sd.toFixed(0)} min)`);
-  const perDay = Object.values(r.daily).map((d) => d.sessions || 0);
-  assert.ok(new Set(perDay).size > 1, 'sempre o mesmo número de sessões por dia');
+  // Número de sessões por dia varia (olhando várias contas: uma ou outra pode repetir a semana toda)
+  let varied = 0;
+  for (let s = 1; s <= 6; s++) {
+    const q = await simulate({ account: { platform: 'tiktok', username: 't', interests: ['IA'] }, days: 7, seed: s });
+    if (new Set(Object.values(q.daily).map((d) => d.sessions || 0)).size > 1) varied++;
+  }
+  assert.ok(varied >= 4, `só ${varied} de 6 contas variaram o número de sessões por dia`);
   for (const d of Object.values(r.daily))
     if (d.plan) assert.notEqual(rules.dayStatus(tiktok.activities, d.plan, d, { interests: ['IA'] }), 'pending');
 });
@@ -238,4 +243,34 @@ test('alertas: a mesma falha 3 vezes na sessão e sessão que vê vídeos sem cu
   assert.equal(rules.noLikeWarning(6, { watch: 4 }), null); // viu pouco
   assert.equal(rules.noLikeWarning(0, { watch: 30 }), null); // não faltava curtida
   assert.match(rules.noLikeWarning(3, { reel: 10 }), /10 vídeos/); // reels do Instagram contam
+});
+
+test('"Iniciar" (sessão inteira): fecha 100% do dia em todas as fases, sem passar do teto', async () => {
+  const { simulateSession } = require('../motor/sim/simulate');
+  const { createFakeClock } = require('../motor/sim/fakePage');
+  const platforms = require('../motor/platforms');
+  for (const pid of ['tiktok', 'instagram']) {
+    const platform = platforms[pid];
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const day of [1, 5, 10, 15, 20]) {
+        const plan = platform.planForDay(day, human.makeRng(seed * 31 + day));
+        const today = {};
+        const r = await simulateSession({
+          account: { platform: pid, username: 't', interests: ['receitas'], persona: human.makePersona(seed) },
+          platform,
+          plan,
+          today,
+          clock: createFakeClock(Date.parse('2026-10-08T15:00:00-03:00')),
+          rng: human.makeRng(seed + day),
+        });
+        const where = `${pid} semente ${seed} dia ${day}`;
+        assert.equal(r.reason, 'goals', `${where}: terminou por ${r.reason}`);
+        for (const k of Object.keys(plan)) {
+          if (k === 'minutes') continue;
+          assert.ok((today[k] || 0) >= plan[k], `${where}: ${k} ${today[k] || 0}/${plan[k]}`);
+          assert.ok((today[k] || 0) <= rules.capOf(plan[k]), `${where}: ${k} passou do teto`);
+        }
+      }
+    }
+  }
 });

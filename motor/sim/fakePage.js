@@ -30,7 +30,9 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
           : null
         : /CommentMain/.test(sel)
           ? { x: 990, y: 60, width: 352, height: 624 }
-          : { x: 560 + i * 8, y: 180 + i * 60, width: 48, height: 48 },
+          : /\/video\/|\/p\/|\/reel\//.test(sel)
+            ? { x: 290 + i * 200, y: 84, width: 192, height: 254 } // miniatura de vídeo/post (medida no TikTok)
+            : { x: 560 + i * 8, y: 180 + i * 60, width: 48, height: 48 },
     scrollIntoViewIfNeeded: async () => {},
     inputValue: async () => typed,
     getAttribute: async (name) => (name === 'aria-pressed' && LIKE.test(sel) ? String(liked) : null),

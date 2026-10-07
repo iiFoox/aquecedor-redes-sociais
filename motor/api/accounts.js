@@ -203,7 +203,7 @@ router.post('/accounts/:id/browser/close', account, closeBrowser);
 
 router.post('/accounts/:id/start', account, async (req, res) => {
   try {
-    await runner.startSession(req.account);
+    await runner.startSession(req.account, { manual: true }); // clicou em Iniciar: vai até 100% do dia
     res.json({ ok: true });
   } catch (e) {
     res.status(409).json({ error: e.message });

@@ -77,6 +77,17 @@ const likeChance = (ctl, base) => {
 };
 const likesTight = (ctl) => likePace(ctl) * ELIGIBLE > 0.7;
 
+// Follows: mesmo raciocínio. Vêm do perfil (onde seguir é natural) e, às vezes, de um vídeo visto até o fim.
+// A chance sobe se os follows que faltam estão apertados em relação ao que ainda dá para fazer hoje.
+const roomOf = (ctl, k) => (ctl.left(k) > 0 ? ctl.left(k) : ctl.room(k));
+function followChance(ctl, where) {
+  const f = ctl.left('follow');
+  if (f <= 0) return 0;
+  if (where === 'profile') return Math.min(0.95, Math.max(0.55, f / Math.max(1, roomOf(ctl, 'profile'))));
+  // Para Você: só vídeos vistos por 15 s ou mais (~1 em 3)
+  return Math.min(0.8, Math.max(0.35, (f / Math.max(1, roomOf(ctl, 'watch'))) * 3));
+}
+
 // Algum dos primeiros elementos está visível? (o primeiro pode ser um contêiner escondido)
 async function anyVisible(loc, max = 8) {
   const n = Math.min(await loc.count().catch(() => 0), max);
@@ -149,9 +160,19 @@ async function typedSearch({ page, bot, ctl }, term) {
     await bot.pause('decide');
     await page.keyboard.press('Enter');
     await bot.pause('load', `Buscando "${term}"`);
-    if (page.url().includes('/search')) return true;
-    ctl.log('A busca digitada não abriu os resultados, indo pelo endereço', 'warn');
+    if (page.url().includes('/search/video')) return true;
+    // O Enter abre a aba "Melhores" (mistura usuários e vídeos; sem login nem carrega). Gente clica em "Vídeos".
+    if (page.url().includes('/search')) {
+      const tab = page.getByText(/^V[íi]deos$/).first();
+      if (await tab.isVisible().catch(() => false)) {
+        await bot.pause('decide');
+        await bot.click(tab);
+        await bot.pause('load', 'Abrindo a aba Vídeos');
+        if (page.url().includes('/search/video')) return true;
+      }
+    } else ctl.log('A busca digitada não abriu os resultados, indo pelo endereço', 'warn');
   }
+  // Pelo endereço, direto na aba de vídeos (o caminho antigo, conferido no site)
   await bot.goto(`https://www.tiktok.com/search/video?q=${encodeURIComponent(term)}`, `Buscando "${term}"`);
   return true;
 }
@@ -225,7 +246,7 @@ const ACTIVITIES = {
         await browseComments({ page, bot, ctl });
       }
 
-      if (waitTime > 15000 && ctl.left('follow') > 0 && bot.random() < 0.35) {
+      if (waitTime > 15000 && bot.random() < followChance(ctl, 'fyp')) {
         ctl.status('Assistiu até o fim, seguindo o criador');
         if (await bot.clickVisible(SEL.feedFollow)) {
           ctl.action('follow', 'Criador do vídeo');
@@ -301,7 +322,7 @@ const ACTIVITIES = {
       await bot.scroll(bot.rand(300, 700));
       await bot.pause('glance', 'Olhando os vídeos do perfil');
     }
-    if (ctl.left('follow') > 0 && bot.random() < 0.55) {
+    if (bot.random() < followChance(ctl, 'profile')) {
       await bot.scroll(-2500);
       await bot.pause('decide');
       if (await bot.clickVisible(SEL.follow)) {

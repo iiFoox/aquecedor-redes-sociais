@@ -11,15 +11,19 @@ function createCursor(page, { rng = Math.random, sleep = realSleep, start = null
   const r = (a, b) => a + Math.floor(rng() * (b - a + 1));
   let pos = start || { x: r(300, 700), y: r(200, 500) };
 
-  // Percorre a curva até o ponto: menos passos em movimentos curtos, mais nos longos
+  // Percorre a curva até o ponto: um passo a cada ~14 px (menos nos curtos, mais nos longos).
+  // A curva do ghost-cursor às vezes vem com poucos pontos; entre eles, interpola (sem "saltos" no mouse).
   async function glide(to) {
     const dist = Math.hypot(to.x - pos.x, to.y - pos.y);
     if (dist < 1) return;
-    const pts = path(pos, to);
-    const steps = Math.max(4, Math.min(pts.length, Math.round(dist / 14)));
+    const pts = [pos, ...path(pos, to), to];
+    const steps = Math.max(4, Math.round(dist / 14));
     for (let i = 1; i <= steps; i++) {
-      const p = pts[Math.min(pts.length - 1, Math.round((i * (pts.length - 1)) / steps))];
-      await page.mouse.move(p.x, p.y);
+      const f = (i / steps) * (pts.length - 1);
+      const a = pts[Math.floor(f)];
+      const b = pts[Math.min(pts.length - 1, Math.floor(f) + 1)];
+      const k = f - Math.floor(f);
+      await page.mouse.move(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k);
       await sleep(r(4, 14));
     }
     pos = { x: to.x, y: to.y };

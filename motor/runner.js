@@ -172,7 +172,8 @@ async function closeBrowser(id) {
   if (manual[id]) await manual[id].ctx.close().catch(() => {});
 }
 
-async function startSession(account) {
+// manual: você clicou em Iniciar. Aí a sessão vai até 100% do dia; as sessões em partes (rotina) são do piloto.
+async function startSession(account, { manual = false } = {}) {
   const id = account.id;
   if (lock) throw new Error(lock);
   if (sessions[id]) throw new Error('Sessão já em execução');
@@ -214,7 +215,7 @@ async function startSession(account) {
   // Parte do dia que esta sessão cobre (rotina): sessões de tamanhos diferentes; a última fecha 100%
   const slots = store.slotsOf(account, platform.planForDay);
   const slot = slots[store.todayOf(id).sessions || 0];
-  const target = slot ? slot.target : 1;
+  const target = manual || !slot ? 1 : slot.target;
   const ctl = createCtl({
     state: s,
     plan,
@@ -244,7 +245,7 @@ async function startSession(account) {
     .map((k) => `${k} ${left(k)}`)
     .join(', ');
   ctl.log(
-    `Sessão iniciada: Dia ${day}, Fase ${phase.n} (${phase.name}). Faltam: ${pend}. Roda até bater as metas (teto de segurança ${capMin} min)`,
+    `Sessão iniciada: Dia ${day}, Fase ${phase.n} (${phase.name}). Faltam: ${pend}. ${target < 1 ? `Sessão da rotina: roda até ${Math.round(target * 100)}% do dia` : 'Roda até bater 100% das metas do dia'} (teto de segurança ${capMin} min)`,
   );
   s.done = run(account, platform, s, ctl);
 }

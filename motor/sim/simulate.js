@@ -26,6 +26,7 @@ async function simulateSession({ account, platform, plan, today, clock, rng, tar
     lastBeat: start,
   };
   const actions = [];
+  const logs = [];
   const ctl = createCtl({
     state,
     plan,
@@ -38,7 +39,9 @@ async function simulateSession({ account, platform, plan, today, clock, rng, tar
         today[type] = (today[type] || 0) + 1;
         actions.push({ t: clock.now(), type, detail });
       },
-      log() {},
+      log(msg, level) {
+        logs.push({ t: clock.now(), msg, level });
+      },
       alert() {},
     },
   });
@@ -64,6 +67,7 @@ async function simulateSession({ account, platform, plan, today, clock, rng, tar
     samples: state.samples,
     wheel: page.events.filter((e) => e.type === 'wheel').map((e) => e.dy),
     events: page.events,
+    logs,
   };
 }
 

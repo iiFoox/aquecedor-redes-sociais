@@ -21,6 +21,7 @@ video{position:absolute;left:440px;top:30px;width:400px;height:700px;background:
 button[aria-label="exit"]{position:absolute;left:1300px;top:20px;width:32px;height:32px;display:none}
 </style></head><body>
 <form data-e2e="search-box" action="/search"><input data-e2e="search-user-input" name="q" type="search" placeholder="Pesquisar"></form>
+<span id="tab-videos" style="position:absolute;left:560px;top:5px;padding:4px">Vídeos</span>
 <video muted></video>
 <div role="button" data-e2e="like-icon" aria-label="Curtir vídeo" aria-pressed="false"></div>
 <div role="button" data-e2e="comment-icon"></div>
@@ -37,6 +38,8 @@ document.querySelector('video').addEventListener('dblclick', () => setLiked(true
 const toggle = (open) => { panel.classList.toggle('open', open); exit.style.display = open ? 'block' : 'none'; };
 document.querySelector('[data-e2e="comment-icon"]').addEventListener('click', () => toggle(!panel.classList.contains('open')));
 exit.addEventListener('click', () => toggle(false));
+// Aba "Vídeos" da busca: leva para /search/video com o mesmo termo
+document.getElementById('tab-videos').addEventListener('click', () => (location.href = '/search/video' + location.search));
 window.events = [];
 addEventListener('mousemove', () => window.events.push('move'));
 </script></body></html>`;
@@ -132,16 +135,20 @@ test('navegador real: comentários rolam com a rodinha e fecham', async (t) => {
   await page.close();
 });
 
-test('navegador real: busca digitada entra na caixa e o Enter abre a busca', async (t) => {
+test('navegador real: busca digitada entra na caixa, o Enter abre a busca e ela clica na aba Vídeos', async (t) => {
   if (!available) return t.skip('Chromium do Playwright não instalado');
   const { page, bot, ctl } = await setup();
   // A busca digitada é sorteada em 80% das vezes; com esta semente sai digitada
-  for (let i = 0; i < 5 && !page.url().includes('/search?q='); i++) {
+  const visited = [];
+  page.on('framenavigated', (f) => f === page.mainFrame() && visited.push(new URL(f.url()).pathname));
+  for (let i = 0; i < 5 && !visited.includes('/search'); i++) {
     await page.goto('https://www.tiktok.com/foryou');
     await tiktok._typedSearch({ page, bot, ctl }, 'receitas fáceis');
   }
+  // Digitou (o Enter levou a /search?q=) e clicou na aba "Vídeos"
+  assert.ok(visited.includes('/search'), 'a busca nunca foi digitada');
   const url = new URL(page.url());
-  assert.equal(url.pathname, '/search');
+  assert.equal(url.pathname, '/search/video');
   assert.equal(url.searchParams.get('q'), 'receitas fáceis');
   await page.close();
 });
