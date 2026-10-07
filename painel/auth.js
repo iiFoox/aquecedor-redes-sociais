@@ -279,7 +279,7 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     res.json({ ok: true });
   });
 
-  // Chave dos logins trancada: abrir com a senha antiga ("antiga") ou começar uma chave nova ("nova").
+  // Chave dos logins trancada: abrir com a senha atual ("atual"), com a senha antiga ("antiga") ou começar uma nova ("nova").
   // Sempre confere a senha atual primeiro (conta como tentativa de senha no bloqueio).
   router.post('/chave', async (req, res) => {
     const { email, userId } = req.session;
@@ -287,7 +287,7 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
     const lock = await lockedFor(ip);
     if (lock > 0) return res.status(429).json({ error: lockMsg(lock), retryAfter: Math.ceil(lock / 1000) });
     const b = req.body || {};
-    if (!['antiga', 'nova'].includes(b.acao) || typeof b.password !== 'string' || !b.password)
+    if (!['atual', 'antiga', 'nova'].includes(b.acao) || typeof b.password !== 'string' || !b.password)
       return res.status(400).json({ error: 'Informe a senha atual' });
     if (b.acao === 'antiga' && (typeof b.oldPassword !== 'string' || !b.oldPassword))
       return res.status(400).json({ error: 'Informe a senha antiga' });
@@ -297,7 +297,7 @@ function createAuth({ store, now = Date.now, secure = false, onLogin = async () 
       return res.status(400).json({ error: 'A senha atual não confere' });
     }
     const r = await onVault(userId, {
-      mode: b.acao === 'nova' ? 'reset' : 'unlock-old',
+      mode: { atual: 'unlock', antiga: 'unlock-old', nova: 'reset' }[b.acao],
       password: b.password,
       oldPassword: b.oldPassword,
     }).catch((e) => ({ status: 500, error: e.message }));

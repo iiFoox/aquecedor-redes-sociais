@@ -64,7 +64,7 @@ enxergam tudo pelo painel. Uma conta nunca roda em dois aparelhos ao mesmo tempo
 
 - **"O WarmUp Studio já está rodando neste PC pelo terminal":** `npm run desligar` na pasta do projeto e abra o app de novo.
 - **Ícone vermelho com "o motor parou várias vezes":** ícone → Abrir a pasta dos registros → `motor.log`.
-- **"Chave trancada" em Logins na nuvem:** acontece se a senha foi trocada pelo "Esqueci a senha" e nenhum aparelho que
-  já tinha a chave foi aberto depois. Abra o app num aparelho antigo (ele tranca de novo com a senha nova) ou use
+- **"Chave trancada" em Logins na nuvem:** este aparelho ficou sem a chave dos logins (ela foi trocada em outro
+  aparelho, ou a senha foi recuperada pelo "Esqueci a senha"). Clique em **Destrancar com a senha atual**. Se não abrir,
   **Tenho a senha antiga**. Último caso: **Começar chave nova** (as contas sem pasta neste aparelho pedem login de novo).
 - **Desinstalar:** Configurações do Windows → Aplicativos → WarmUp Studio. Os dados em `%APPDATA%\WarmUp Studio` ficam.

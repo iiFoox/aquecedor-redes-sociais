@@ -76,3 +76,4 @@ const stop = () => server.close(() => process.exit(0));
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 process.on('message', (m) => m === 'shutdown' && stop());
+if (process.send) process.on('disconnect', stop); // o aplicativo que abriu o painel caiu

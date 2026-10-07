@@ -47,6 +47,8 @@ async function shutdown(reason, code = 0) {
 process.on('SIGINT', () => shutdown('Ctrl+C'));
 process.on('SIGTERM', () => shutdown('pedido de parada'));
 process.on('message', (m) => m === 'shutdown' && shutdown('pedido de parada'));
+// Aberto pelo aplicativo (canal IPC): se o aplicativo cair, encerra também (no Windows o filho ficaria solto nas portas)
+if (process.send) process.on('disconnect', () => shutdown('o aplicativo fechou'));
 process.on('unhandledRejection', (e) => console.error('⚠️  Erro não tratado (o motor continua):', e && e.message ? e.message : e));
 process.on('uncaughtException', (e) => {
   console.error('❌ Falha grave no motor:', e);

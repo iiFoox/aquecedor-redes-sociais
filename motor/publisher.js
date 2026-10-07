@@ -36,7 +36,12 @@ async function tick(force = false) {
       .mine()
       .filter((a) => runner.getSession(a.id) || runner.isBrowserOpen(a.id))
       .map((a) => a.id);
-    await store.renewLeases(open).catch(() => {});
+    const lost = await store.renewLeases(open).catch(() => []);
+    for (const id of lost) {
+      store.addLog(id, 'A trava desta conta foi para outro aparelho: sessão e navegador fechados aqui', 'warn');
+      runner.stopSession(id);
+      runner.closeBrowser(id).catch(() => {});
+    }
   }
   for (const a of store.mine()) {
     const st = statusOf(a);

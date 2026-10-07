@@ -13,11 +13,12 @@ const ROOT = path.join(__dirname, '..');
 const RELEASE = path.join(ROOT, 'release');
 const BUCKET = 'downloads';
 const onlyBuild = process.argv.includes('--so-gerar');
+const force = process.argv.includes('--forcar'); // publicar de novo a mesma versão (ex.: corrigir um envio que falhou)
 const { version } = require('../package.json');
 
+// Erro: para tudo e sai com código 1 (sem process.exit no meio: no Windows ele quebra com conexões abertas)
 const fail = (msg) => {
-  console.error(`❌ ${msg}`);
-  process.exit(1);
+  throw Object.assign(new Error(msg), { publicar: true });
 };
 const run = (args) => {
   const r = spawnSync(process.execPath, args, { cwd: ROOT, stdio: 'inherit', windowsHide: true });
@@ -91,8 +92,23 @@ async function enviar(exe) {
   if (old.length) await sb.storage.from(BUCKET).remove(old.map((f) => f.name));
 }
 
+// Versão já publicada (os aparelhos só atualizam se a nova for maior)
+async function publicada() {
+  const { BASE } = require('../desktop/updater');
+  const r = await fetch(`${BASE}/latest.json?t=${Date.now()}`).catch(() => null);
+  if (!r || !r.ok) return null;
+  return (await r.json().catch(() => ({}))).version || null;
+}
+
 (async () => {
   console.log(`📦 WarmUp Studio ${version}`);
+  if (!onlyBuild && !force) {
+    const atual = await publicada();
+    if (atual && !newer(version, atual))
+      fail(
+        `A versão ${version} não é mais nova que a publicada (${atual}). Suba "version" no package.json (ex.: ${atual.replace(/\d+$/, (n) => Number(n) + 1)}).`,
+      );
+  }
   run([path.join(ROOT, 'scripts', 'build-web.js'), '--force']);
   fs.rmSync(RELEASE, { recursive: true, force: true });
   run([path.join(ROOT, 'node_modules', 'electron-builder', 'cli.js'), '--win', '--x64', '--publish', 'never']);
@@ -105,4 +121,7 @@ async function enviar(exe) {
   console.log(`\n✅ Versão ${version} publicada. Os aparelhos atualizam em até 6 h (ou "Procurar atualização" no ícone).`);
   console.log('   Instalar num aparelho novo (PowerShell):');
   console.log(`   irm ${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/instalar.ps1 | iex`);
-})();
+})().catch((e) => {
+  console.error(`❌ ${e.publicar ? e.message : e.stack}`);
+  process.exitCode = 1;
+});

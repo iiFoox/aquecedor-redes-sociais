@@ -40,12 +40,16 @@ router.post('/_device/link', async (req, res) => {
 router.post('/_device/vault', async (req, res) => {
   if (!cloud.ready() || cloud.user().id !== req.userId) return res.status(403).json({ error: 'Aparelho de outro usuário' });
   const { mode, password, oldPassword } = req.body || {};
-  if (!['rewrap', 'unlock-old', 'reset'].includes(mode) || typeof password !== 'string' || !password)
+  if (!['unlock', 'rewrap', 'unlock-old', 'reset'].includes(mode) || typeof password !== 'string' || !password)
     return res.status(400).json({ error: 'Pedido inválido' });
   if (mode === 'unlock-old' && typeof oldPassword !== 'string') return res.status(400).json({ error: 'Informe a senha antiga' });
   try {
     const r = await boot.vaultAction({ mode, password, oldPassword });
     if (r.wrong) return res.status(400).json({ error: 'A senha antiga não abre a chave', vault: r.status });
+    if (mode === 'unlock' && r.status !== 'ok')
+      return res
+        .status(400)
+        .json({ error: 'A senha atual não abre a chave. Tente a senha antiga ou comece uma chave nova.', vault: r.status });
     res.json({ ok: true, vault: r.status });
   } catch (e) {
     res.status(500).json({ error: e.message });

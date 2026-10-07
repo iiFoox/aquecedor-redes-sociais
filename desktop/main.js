@@ -18,6 +18,7 @@ const PANEL_URL = `http://localhost:${PANEL_PORT}`;
 const DATA = process.env.WU_DATA_DIR || (app.isPackaged ? path.join(app.getPath('userData'), 'data') : path.join(ROOT, 'data'));
 const SETTINGS = path.join(app.getPath('userData'), 'app-settings.json');
 const HIDDEN = process.argv.includes('--escondido'); // aberto pelo Windows ao ligar: começa só na bandeja
+const AUTOSTART_ARGS = ['--escondido'];
 
 let win = null;
 let tray = null;
@@ -28,6 +29,7 @@ let state = { color: 'cinza', tip: `${NAME}: ligando...`, info: null };
 let seen = new Set(); // avisos já notificados (conta:tipo)
 let awake = null; // powerSaveBlocker
 let battery = { has: null, onBattery: false, level: null, hold: null };
+let gaveUp = null; // motor ou painel que caiu 5 vezes em 2 min (o ícone fica vermelho até você reabrir o app)
 const children = {};
 
 // ---------- Ajustes do aplicativo ----------
@@ -84,6 +86,7 @@ function startChild(name, script) {
     // Caiu: liga de novo (como o PM2 fazia). 5 quedas em 2 min: para e avisa.
     c.crashes = c.crashes.filter((t) => Date.now() - t < 120000).concat(Date.now());
     if (c.crashes.length >= 5) {
+      gaveUp = name;
       setState('vermelho', `${NAME}: o ${name} parou várias vezes`);
       notify(`O ${name} parou várias vezes`, `Veja o registro em ${path.join(DATA, 'logs', `${name}.log`)}`);
       return;
@@ -203,6 +206,7 @@ function showWindow(hash = '') {
       }
     });
     win.on('closed', () => (win = null));
+    win.on('session-end', sessionEnd);
     loadPanel(hash);
   } else {
     if (hash) win.loadURL(`${PANEL_URL}/${hash}`);
@@ -240,7 +244,7 @@ function setState(color, tip, info = state.info) {
 
 function menu() {
   const i = state.info;
-  const auto = app.isPackaged ? app.getLoginItemSettings().openAtLogin : false;
+  const auto = app.isPackaged ? app.getLoginItemSettings({ args: AUTOSTART_ARGS }).openAtLogin : false;
   const items = [
     { label: 'Abrir o painel', click: () => showWindow() },
     { type: 'separator' },
@@ -269,15 +273,16 @@ function menu() {
 
 function setAutostart(on) {
   if (!app.isPackaged) return;
-  app.setLoginItemSettings({ openAtLogin: on, args: ['--escondido'] });
+  app.setLoginItemSettings({ openAtLogin: on, args: AUTOSTART_ARGS });
   saveSettings({ autostart: on });
   if (tray) tray.setContextMenu(menu());
 }
 
 // A cada 10 s: situação do motor → cor, avisos novos → notificação, sessão rodando → aparelho acordado
 async function poll() {
+  if (gaveUp) return; // fica vermelho com o aviso (a cor "ligando" esconderia o problema)
   const info = await motor('GET', '/api/_device/tray');
-  const look = logic.trayState(info, { battery });
+  const look = logic.trayState(info);
   setState(look.color, `${NAME}: ${look.text}`, info);
   if (!info) return;
   // Avisos novos (captcha, bloqueio, login, proxy) viram notificação; clicar abre a conta
@@ -347,7 +352,7 @@ async function checkPower() {
 
 function watchPower() {
   checkPower();
-  setInterval(checkPower, 120000);
+  setInterval(() => battery.has !== false && checkPower(), 120000); // PC de mesa (sem bateria): não fica consultando
   powerMonitor.on('on-battery', checkPower);
   powerMonitor.on('on-ac', checkPower);
   // Vai dormir (tampa, suspensão): encerra as sessões direito antes
@@ -355,11 +360,29 @@ function watchPower() {
     motor('POST', '/api/_device/power', { event: 'suspend' });
   });
   powerMonitor.on('resume', () => setTimeout(poll, 5000));
-  // Windows desligando: fecha tudo com segurança
-  powerMonitor.on('shutdown', (e) => {
-    e.preventDefault();
-    app.quit();
+  // Windows saindo ou desligando: avisa uma janela ('session-end'). Mesmo começando só na bandeja existe uma janela
+  // invisível para receber o aviso. O Windows dá poucos segundos: pede para o motor e o painel fecharem direito.
+  const guard = new BrowserWindow({
+    show: false,
+    width: 1,
+    height: 1,
+    skipTaskbar: true,
+    focusable: false,
+    webPreferences: { sandbox: true },
   });
+  guard.on('session-end', sessionEnd);
+}
+
+function sessionEnd() {
+  if (quitting === 'session-end') return;
+  quitting = 'session-end'; // as janelas fecham de verdade (não vão para a bandeja)
+  for (const c of Object.values(children)) {
+    try {
+      c.child.send('shutdown');
+    } catch {
+      /* já fechou */
+    }
+  }
 }
 
 // ---------- Atualização (Supabase Storage, pasta pública de downloads; ver updater.js) ----------

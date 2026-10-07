@@ -120,6 +120,23 @@ function createVault({ db, local, userId }) {
     return { status };
   }
 
+  // Confere se a chave em uso ainda é a do banco (outro aparelho pode ter começado uma chave nova).
+  // Trocou: para de usar a velha (os logins salvos com ela ninguém mais abriria) até você destrancar de novo.
+  async function check() {
+    if (status !== 'ok') return status;
+    let row;
+    try {
+      row = await db.get();
+    } catch {
+      return status; // sem internet: segue com a que tem
+    }
+    if (!row || row.key_version !== version) {
+      key = null;
+      status = 'trancada';
+    }
+    return status;
+  }
+
   // Senha trocada pelo painel: tranca a mesma chave com a senha nova
   async function rewrap(password) {
     if (!key) return { status };
@@ -151,6 +168,7 @@ function createVault({ db, local, userId }) {
 
   return {
     resume,
+    check,
     unlock,
     rewrap,
     unlockOld,

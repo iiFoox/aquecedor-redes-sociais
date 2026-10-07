@@ -70,6 +70,9 @@ async function startDevice() {
     setInterval(() => {
       store.reloadAccounts().catch(() => {});
       logins.reload().catch(() => {});
+      v.check()
+        .then((st) => st === 'trancada' && console.warn(VAULT_MSG.trancada))
+        .catch(() => {});
     }, 120000).unref();
     scheduler.start();
     runner.startWatchdog();
@@ -101,6 +104,7 @@ async function link(session, password) {
 // Senha trocada, chave trancada (abrir com a senha antiga) ou começar uma chave nova
 async function vaultAction({ mode, password, oldPassword }) {
   const v = vaultOf();
+  if (mode === 'unlock') return v.unlock(password);
   if (mode === 'rewrap') return v.rewrap(password);
   if (mode === 'unlock-old') return v.unlockOld(oldPassword, password);
   if (mode === 'reset') {

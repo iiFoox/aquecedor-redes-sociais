@@ -49,7 +49,9 @@ npm run format         # Prettier
   - `paths.js`: pasta de dados (`WU_DATA_DIR`; padrão `data/`).
   - Trava (`accounts.lease_device/lease_until`, `store.takeLease`): antes de abrir sessão ou navegador o aparelho pega a
     trava numa operação só no banco (conta dele e nenhum outro com trava válida; sem internet não abre). Vale 5 min,
-    renovada a cada minuto pelo `publisher.js`, solta ao fechar. "Rodar neste aparelho" espera a trava do outro vencer.
+    renovada a cada minuto pelo `publisher.js`, solta ao fechar; trava perdida (outro aparelho pegou) para a sessão aqui.
+    "Rodar neste aparelho" espera a trava do outro vencer. Gravar uma conta que já existe é `update ... where device_id =
+este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma conta que foi para outro.
   - Logins das contas no Supabase (app 3/5): `vault.js` (chave aleatória do usuário, AES-256-GCM; trancada pela senha do
     app com scrypt em `user_keys` e copiada em cada aparelho com DPAPI em `data/vault-key.bin`). `logins.js` salva
     cookies + localStorage da plataforma (`storageState` do Playwright) em `account_logins` quando o login é detectado e

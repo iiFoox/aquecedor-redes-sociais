@@ -52,6 +52,7 @@ let config = { ...DEFAULT_CONFIG };
 const dirty = { accounts: new Set(), proxies: false, config: false };
 const deleted = { accounts: new Set(), proxies: new Set() };
 const pending = { events: [], alerts: new Map(), sessions: [] };
+const unsaved = new Set(); // contas cadastradas aqui que ainda não foram para o banco
 
 // ---------- Conexão e leitura ----------
 
@@ -357,8 +358,19 @@ async function doFlush() {
     const accIds = [...dirty.accounts];
     dirty.accounts.clear();
     // Só as contas deste aparelho (as dos outros são gravadas pelo aparelho dono delas)
-    const rows = accounts.filter((a) => accIds.includes(a.id) && isMine(a)).map(accountToRow);
-    if (rows.length && !check('salvar contas', await sb.from('accounts').upsert(rows))) accIds.forEach((i) => dirty.accounts.add(i));
+    const mineDirty = accounts.filter((a) => accIds.includes(a.id) && isMine(a));
+    const news = mineDirty.filter((a) => unsaved.has(a.id)).map(accountToRow);
+    if (news.length) {
+      if (check('salvar contas novas', await sb.from('accounts').upsert(news))) news.forEach((r) => unsaved.delete(r.id));
+      else news.forEach((r) => dirty.accounts.add(r.id));
+    }
+    // Conta que já existe: só atualiza se ainda for deste aparelho no banco. Se outro aparelho levou a conta
+    // (e o aviso ainda não chegou aqui), não escreve por cima nem puxa a conta de volta.
+    for (const a of mineDirty.filter((x) => !news.some((r) => r.id === x.id))) {
+      const { platform, username, data } = accountToRow(a);
+      const r = await sb.from('accounts').update({ platform, username, data }).eq('id', a.id).eq('device_id', deviceId).select('id');
+      if (!check('salvar conta', r)) dirty.accounts.add(a.id);
+    }
 
     if (dirty.proxies) {
       dirty.proxies = false;
@@ -487,12 +499,14 @@ function add(data) {
     history: [],
   };
   accounts.push(a);
+  unsaved.add(a.id);
   touch(a.id);
   return a;
 }
 
 function remove(id) {
   accounts = accounts.filter((a) => a.id !== id);
+  unsaved.delete(id);
   dirty.accounts.delete(id);
   deleted.accounts.add(id);
   pending.events = pending.events.filter((e) => e.account_id !== id);
@@ -691,16 +705,22 @@ async function takeLease(id) {
   return true;
 }
 
-// Renova a trava das contas abertas aqui (a cada minuto)
+// Renova a trava das contas abertas aqui (a cada minuto). Devolve as que perderam a trava (ficou sem internet mais
+// que o prazo e outro aparelho pegou a conta): essas têm de parar aqui. Sem internet, não devolve nenhuma.
 async function renewLeases(ids) {
-  if (!sb || !deviceId || !ids.length) return;
+  if (!sb || !deviceId || !ids.length) return [];
   const until = Date.now() + rules.LEASE_MS;
   const r = await sb
     .from('accounts')
     .update({ lease_until: iso(until) })
     .in('id', ids)
-    .eq('lease_device', deviceId);
-  if (check('renovar a trava', r)) for (const id of ids) if (get(id)) get(id).lease = { device: deviceId, until };
+    .eq('lease_device', deviceId)
+    .eq('device_id', deviceId)
+    .select('id');
+  if (!check('renovar a trava', r)) return [];
+  const kept = new Set(r.data.map((x) => x.id));
+  for (const id of kept) if (get(id)) get(id).lease = { device: deviceId, until };
+  return ids.filter((id) => !kept.has(id));
 }
 
 // Solta a trava (sessão e navegador fechados)

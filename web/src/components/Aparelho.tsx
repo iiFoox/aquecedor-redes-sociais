@@ -124,7 +124,7 @@ export function Aparelhos() {
 export function LoginsNuvem() {
   const { run } = useStore();
   const [vault, setVault] = useState<VaultStatus | null>(null);
-  const [mode, setMode] = useState<'antiga' | 'nova' | null>(null);
+  const [mode, setMode] = useState<'atual' | 'antiga' | 'nova' | null>(null);
   const [password, setPassword] = useState('');
   const [oldPassword, setOldPassword] = useState('');
   const [error, setError] = useState('');
@@ -181,14 +181,17 @@ export function LoginsNuvem() {
           <span>
             {vault === 'ok'
               ? 'O login de cada conta vai para o Supabase, cifrado com uma chave que só a sua senha abre. Conta que muda de aparelho, ou pasta que some, volta logada sozinha.'
-              : 'A sua senha atual não abre a chave dos logins (a senha foi recuperada pelo e-mail e nenhum aparelho com a chave foi aberto depois). Abra com a senha antiga ou comece uma chave nova.'}
+              : 'Este aparelho não está com a chave dos logins (ela foi trocada em outro aparelho, ou a senha foi recuperada pelo e-mail). Destranque com a senha atual; se não abrir, use a senha antiga. Último caso: comece uma chave nova.'}
           </span>
         </div>
       </div>
       {vault !== 'ok' && !mode && (
         <div className="actions">
-          <button className="btn sm" onClick={() => setMode('antiga')}>
+          <button className="btn sm" onClick={() => setMode('atual')}>
             <Icon name="key" />
+            Destrancar com a senha atual
+          </button>
+          <button className="btn sm ghost" onClick={() => setMode('antiga')}>
             Tenho a senha antiga
           </button>
           <button className="btn sm ghost" onClick={() => setMode('nova')}>
@@ -229,7 +232,7 @@ export function LoginsNuvem() {
           )}
           <div className="actions">
             <button className="btn sm" type="submit" disabled={!password || (mode === 'antiga' && !oldPassword)}>
-              {mode === 'antiga' ? 'Destrancar' : 'Criar chave nova'}
+              {mode === 'nova' ? 'Criar chave nova' : 'Destrancar'}
             </button>
             <button className="btn sm ghost" type="button" onClick={() => setMode(null)}>
               Cancelar

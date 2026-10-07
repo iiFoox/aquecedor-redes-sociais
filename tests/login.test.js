@@ -361,6 +361,8 @@ test('chave dos logins: abrir com a senha antiga ou criar nova só com a senha a
       password: SENHA,
       oldPassword: 'velha 123',
     });
+    assert.equal((await s.post('/auth/chave', { acao: 'atual', password: SENHA }, c)).status, 200);
+    assert.equal(s.vaultCalls.at(-1).mode, 'unlock');
     assert.equal((await s.post('/auth/chave', { acao: 'nova', password: SENHA }, c)).json.vault, 'ok');
     assert.equal(s.vaultCalls.at(-1).mode, 'reset');
     assert.equal((await s.post('/auth/chave', { acao: 'nova', password: SENHA })).status, 401, 'sem login');

@@ -249,3 +249,20 @@ test('navegador: salva o login de um perfil e restaura num perfil novo (sem sair
     fs.rmSync(dirB, { recursive: true, force: true });
   }
 });
+
+test('cofre: chave trocada em outro aparelho → este para de usar a velha; destranca com a senha atual', async () => {
+  const db = memDb();
+  const pc = v.createVault({ db, local: memLocal(), userId: USER });
+  await pc.unlock('senha forte 123');
+  const nb = v.createVault({ db, local: memLocal(), userId: USER });
+  await nb.unlock('senha forte 123');
+  assert.equal(await nb.check(), 'ok');
+  await pc.reset('senha forte 123'); // chave nova no PC
+  assert.equal(await nb.check(), 'trancada', 'o notebook seguiu salvando com a chave velha');
+  assert.throws(() => nb.seal({}, 'c1'));
+  assert.equal((await nb.unlock('senha forte 123')).status, 'ok');
+  assert.equal(nb.version(), 2);
+  // Sem internet: segue com a que tem
+  const off = v.createVault({ db: { ...db, get: async () => Promise.reject(new Error('sem rede')) }, local: memLocal(), userId: USER });
+  assert.equal(await off.check(), 'off');
+});
