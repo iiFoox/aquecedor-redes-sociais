@@ -69,6 +69,8 @@ async function launch(account, { visible = false } = {}) {
   const scr = account.viewport || { w: 1366, h: 768 };
   const opts = {
     channel: 'msedge',
+    // Sandbox ligado: sem ele o Playwright passa --no-sandbox e o Edge mostra a faixa "sinalizador sem suporte"
+    chromiumSandbox: true,
     headless: visible ? false : !!conf.headless,
     screen: { width: scr.w, height: scr.h },
     viewport: { width: scr.w, height: scr.h - BROWSER_UI_PX },
