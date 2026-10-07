@@ -59,7 +59,8 @@ function Traits({ p }: { p: Persona }) {
       `passos de ~${p.scroll.step} px`,
       `${Math.round(p.scroll.flick * 100)}% rápidas · ${Math.round(p.scroll.overshoot * 100)}% passa do ponto`,
     ],
-    ['Digitação', `${p.typingCps.toString().replace('.', ',')} letras/s`, 'para a busca digitada (em breve)'],
+    ['Digitação', `${p.typingCps.toString().replace('.', ',')} letras/s`, 'na busca do TikTok, às vezes erra e apaga'],
+    ['Curtir vídeo', `${Math.round((p.doubleTap ?? 0.4) * 100)}% com dois cliques`, 'o resto no coração'],
   ];
   return (
     <dl className="nat-traits">

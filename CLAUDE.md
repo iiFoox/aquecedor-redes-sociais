@@ -27,7 +27,8 @@ npm run format         # Prettier
   - `store.js`: estado em memória + gravação em lote no Supabase.
   - `runner.js`: sessões, navegador manual (login/captcha), vigia de sessão travada e prints de erro.
   - `scheduler.js`: piloto automático, teste dos proxies a cada 30 min e fim das férias.
-  - `human.js`: comportamento humano (pausas de cauda longa, personalidade da conta, destino de cada vídeo, rolagem com inércia).
+  - `human.js`: comportamento humano (pausas de cauda longa, personalidade da conta, destino de cada vídeo, rolagem com inércia,
+    digitação com erro e correção, curtida com dois cliques no vídeo).
     `bot.js` usa isso; `ctl.js` é o controle da sessão (o mesmo na sessão real e no simulador).
   - Rotina do dia: `rules.planSlots` (horários e tamanho de cada sessão, perto do pico da conta). Sessão curta para em `ctl.target`.
   - `sim/`: simulador com relógio e página falsos (`npm run simular -- <conta|nova-tiktok> <dias>`). Roda o código real das plataformas.

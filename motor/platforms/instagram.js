@@ -182,8 +182,9 @@ const ACTIVITIES = {
         `Assistindo reel ${i}/${n} por ${sec}s${note}${isNiche ? ' · nicho' : ''}`,
         willLike &&
           (async () => {
-            if (!(await bot.clickVisible(SEL.like, { minSize: 20 }))) return false;
-            ctl.action('like', 'Reel');
+            const how = await bot.likeVideo(SEL.like, { minSize: 20 });
+            if (!how) return false;
+            ctl.action('like', how === 'tap' ? 'Reel (dois cliques)' : 'Reel');
             return true;
           }),
       );

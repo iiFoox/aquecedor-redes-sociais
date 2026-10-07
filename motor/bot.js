@@ -225,6 +225,59 @@ function createBot(page, ctl, opts = {}) {
     }
   }
 
+  // Digita como gente: ritmo da personalidade, pausa entre palavras e às vezes erra e apaga
+  async function type(text, label) {
+    if (label) ctl.status(label);
+    for (const { key, ms } of human.typingPlan(text, { persona, rng })) {
+      if (ctl.shouldStop()) throw new StopError();
+      await clock.sleep(ms);
+      if (key === 'Backspace') await page.keyboard.press('Backspace');
+      else await page.keyboard.type(key);
+    }
+  }
+
+  // Maior vídeo inteiro na tela (null se não houver)
+  async function mainVideo() {
+    let best = null;
+    let area = 0;
+    for (const el of await visible('video', { minSize: 150, max: 6 })) {
+      const b = await el.boundingBox().catch(() => null);
+      if (b && b.width * b.height > area) {
+        area = b.width * b.height;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  // Dois cliques rápidos no meio do vídeo (longe das bordas, onde ficam os botões e a legenda)
+  async function doubleTap(box) {
+    const x = Math.round(box.x + box.width * (0.3 + rng() * 0.4));
+    const y = Math.round(box.y + box.height * (0.3 + rng() * 0.3));
+    await moveTo(x, y);
+    await clock.sleep(r(60, 200));
+    await page.mouse.down();
+    await clock.sleep(r(40, 90));
+    await page.mouse.up();
+    await clock.sleep(human.tapGap(rng));
+    await page.mouse.down({ clickCount: 2 });
+    await clock.sleep(r(40, 90));
+    await page.mouse.up({ clickCount: 2 });
+  }
+
+  // Curte um vídeo: pela personalidade, com dois cliques no vídeo ou no coração.
+  // Sem vídeo na tela, vai no coração. Retorna como curtiu ('tap' | 'icon') ou null se não achou onde.
+  async function likeVideo(iconSelector, iconOpts = {}) {
+    if (human.prefersDoubleTap(persona, rng)) {
+      const box = await mainVideo();
+      if (box) {
+        await doubleTap(box);
+        return 'tap';
+      }
+    }
+    return (await clickVisible(iconSelector, iconOpts)) ? 'icon' : null;
+  }
+
   async function goto(url, label) {
     ctl.status(label || 'Navegando');
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -247,6 +300,9 @@ function createBot(page, ctl, opts = {}) {
     watchWithLike,
     videoInfo,
     awayTab,
+    type,
+    likeVideo,
+    doubleTap,
     moveTo,
     fidget,
     click,

@@ -119,6 +119,7 @@ export interface Persona {
   peak: number;
   spread: number;
   scroll: { step: number; flick: number; overshoot: number };
+  doubleTap?: number;
 }
 
 export interface AccountFull extends Account {

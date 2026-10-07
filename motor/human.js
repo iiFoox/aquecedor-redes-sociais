@@ -111,6 +111,7 @@ const PEAKS = [
  *  - typingCps: letras por segundo ao digitar
  *  - distraction: frequência de distrações (1 = normal)
  *  - peak / spread: horário preferido (hora) e quanto se espalha em volta dele (horas)
+ *  - doubleTap: parte das curtidas em vídeo feitas com dois cliques no vídeo (o resto vai no coração)
  */
 function makePersona(seed = Math.floor(Math.random() * 2 ** 31)) {
   const rng = makeRng(seed);
@@ -138,6 +139,8 @@ function makePersona(seed = Math.floor(Math.random() * 2 ** 31)) {
     distraction: round2(between(rng, 0.5, 1.5)),
     peak,
     spread: round2(between(rng, 1.5, 3.5)),
+    // Sorteado por último: as contas que já têm personalidade mantêm os outros traços iguais
+    doubleTap: round2(between(rng, 0.2, 0.6)),
   };
 }
 
@@ -247,7 +250,65 @@ function timingSummary(values, edges = TIME_EDGES) {
   return { n: sorted.length, p10: at(10), p50: at(50), p90: at(90), p99: at(99), max: sorted[sorted.length - 1] || 0, edges, hist };
 }
 
+// ---------- Teclado e dois cliques ----------
+
+// Vizinhas no teclado (QWERTY/ABNT): o erro de digitação mais comum é a tecla do lado
+const ROWS = ['qwertyuiop', 'asdfghjklç', 'zxcvbnm'];
+function neighbor(ch, rng) {
+  const lower = ch.toLowerCase();
+  for (const row of ROWS) {
+    const i = row.indexOf(lower);
+    if (i === -1) continue;
+    const opts = [row[i - 1], row[i + 1]].filter(Boolean);
+    const n = opts[Math.floor(rng() * opts.length)];
+    return ch === lower ? n : n.toUpperCase();
+  }
+  return null;
+}
+
+/**
+ * Como digitar um texto: lista de { key, ms } (key é uma letra ou "Backspace"; ms é a espera antes dela).
+ * Velocidade da personalidade (typingCps), ritmo irregular, pausa maior entre palavras e,
+ * às vezes, uma letra errada que é apagada logo depois. Aplicando a lista, sai exatamente o texto.
+ */
+function typingPlan(text, { persona = null, rng = Math.random, typo = 0.025 } = {}) {
+  const cps = persona && persona.typingCps ? persona.typingCps : 5;
+  const base = 1000 / cps;
+  const steps = [];
+  let typos = 0;
+  for (const ch of text) {
+    let ms = bounded(rng, base, 0.45, 35, base * 5);
+    if (ch === ' ') ms += bounded(rng, base * 0.8, 0.6, 50, 1500); // fim de palavra
+    const wrong = typos < 1 && /[a-zç]/i.test(ch) && rng() < typo ? neighbor(ch, rng) : null;
+    if (wrong) {
+      typos++;
+      steps.push({ key: wrong, ms: Math.round(ms) });
+      steps.push({ key: 'Backspace', ms: Math.round(bounded(rng, 450, 0.4, 180, 1500)) }); // percebeu o erro
+      ms = bounded(rng, base, 0.4, 60, base * 4);
+    }
+    steps.push({ key: ch, ms: Math.round(ms) });
+  }
+  return steps;
+}
+
+// Texto que sai de um plano de digitação (para conferir nos testes)
+function typedText(steps) {
+  let out = '';
+  for (const s of steps) out = s.key === 'Backspace' ? out.slice(0, -1) : out + s.key;
+  return out;
+}
+
+// Intervalo entre os dois cliques de um "toque duplo" (pessoas: ~80 a 200 ms)
+const tapGap = (rng = Math.random) => Math.round(bounded(rng, 120, 0.3, 70, 220));
+
+// Usa dois cliques no vídeo em vez do coração? (conta antiga sem o traço: 40%)
+const prefersDoubleTap = (persona, rng = Math.random) => rng() < (persona && persona.doubleTap != null ? persona.doubleTap : 0.4);
+
 module.exports = {
+  typingPlan,
+  typedText,
+  tapGap,
+  prefersDoubleTap,
   TIME_EDGES,
   timingSummary,
   PAUSES,

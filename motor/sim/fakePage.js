@@ -16,10 +16,18 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
   const caption = () => (interests.length && rng() < nicheRate ? `vídeo sobre ${pick(interests)}` : pick(CAPTIONS));
 
+  let typed = '';
   const el = (sel, i) => ({
     sel,
-    boundingBox: async () => ({ x: 560 + i * 8, y: 180 + i * 60, width: 48, height: 48 }),
+    // O vídeo ocupa o meio da tela; o resto são botões pequenos
+    boundingBox: async () =>
+      sel === 'video'
+        ? i === 0
+          ? { x: 440, y: 40, width: 400, height: 710 }
+          : null
+        : { x: 560 + i * 8, y: 180 + i * 60, width: 48, height: 48 },
     scrollIntoViewIfNeeded: async () => {},
+    inputValue: async () => typed,
     isVisible: async () => !PROBLEM.test(sel),
     textContent: async () => caption(),
   });
@@ -41,10 +49,26 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     locator,
     getByText: () => ({ first: () => ({ isVisible: async () => false }) }),
     getByRole: (role) => ({ first: () => el(`role=${role}`, 0) }),
-    keyboard: { press: async (key) => events.push({ type: 'key', key }) },
+    keyboard: {
+      press: async (key) => {
+        events.push({ type: 'key', key });
+        if (key === 'Backspace') typed = typed.slice(0, -1);
+        else if (/^(Control|Meta)\+a$/i.test(key)) typed = '';
+        else if (key === 'Enter' && typed) {
+          url = `https://www.tiktok.com/search?q=${encodeURIComponent(typed)}`;
+          typed = '';
+        }
+      },
+      type: async (text) => {
+        events.push({ type: 'type', text });
+        typed += text;
+      },
+    },
     mouse: {
       wheel: async (_x, dy) => events.push({ type: 'wheel', dy }),
       click: async () => events.push({ type: 'click' }),
+      down: async (o = {}) => events.push({ type: 'down', count: o.clickCount || 1 }),
+      up: async (o = {}) => events.push({ type: 'up', count: o.clickCount || 1 }),
       move: async () => {},
     },
     // Duração do vídeo visível: de ~6 s a 90 s, a maioria perto de 20 s (como num feed de vídeos curtos)

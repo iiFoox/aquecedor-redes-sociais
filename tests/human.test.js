@@ -219,3 +219,90 @@ test('resumo dos tempos da sessão: percentis e histograma por faixa', () => {
   assert.deepEqual(t.hist, [1, 1, 2, 1, 0, 0, 0, 0, 1, 1]); // <0,5 s · <1 s · <2 s · <4 s ... · 1–2 min · >2 min
   assert.equal(human.timingSummary([]).n, 0);
 });
+
+test('digitação: sai o texto certo, no ritmo da conta, e às vezes erra e apaga', () => {
+  let typos = 0;
+  const speeds = [];
+  for (let seed = 1; seed <= 200; seed++) {
+    const persona = human.makePersona(seed);
+    const steps = human.typingPlan('receitas fáceis', { persona, rng: human.makeRng(seed) });
+    assert.equal(human.typedText(steps), 'receitas fáceis');
+    if (steps.some((s) => s.key === 'Backspace')) typos++;
+    const ms = steps.reduce((a, s) => a + s.ms, 0);
+    speeds.push({ cps: persona.typingCps, real: 15 / (ms / 1000) });
+    assert.ok(new Set(steps.map((s) => s.ms)).size > steps.length / 2, 'teclas em ritmo fixo');
+  }
+  assert.ok(typos > 5 && typos < 100, `erros de digitação: ${typos} em 200`);
+  // Quem digita mais rápido na personalidade digita mais rápido de verdade
+  const fast = speeds.filter((s) => s.cps > 6).map((s) => s.real);
+  const slow = speeds.filter((s) => s.cps < 4.5).map((s) => s.real);
+  const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  assert.ok(avg(fast) > avg(slow) * 1.2);
+});
+
+test('personalidade nova ganha "dois cliques" sem mudar os traços que já existiam', () => {
+  const p = human.makePersona(42);
+  assert.ok(p.doubleTap >= 0.2 && p.doubleTap <= 0.6);
+  const old = { ...p };
+  delete old.doubleTap;
+  let yes = 0;
+  const rng = human.makeRng(1);
+  for (let i = 0; i < 1000; i++) if (human.prefersDoubleTap(old, rng)) yes++;
+  assert.ok(yes > 330 && yes < 470, 'conta sem o traço deveria usar 40%');
+  for (let i = 0; i < 200; i++) {
+    const g = human.tapGap(rng);
+    assert.ok(g >= 70 && g <= 220);
+  }
+});
+
+test('curtida com dois cliques: dois cliques rápidos no meio do vídeo; sem vídeo, vai no coração', async () => {
+  const { bot, page } = fakeBot(5);
+  const tap = await bot.doubleTap({ x: 440, y: 40, width: 400, height: 710 });
+  assert.equal(tap, undefined);
+  const ev = page.events.filter((e) => e.type === 'down' || e.type === 'up');
+  assert.deepEqual(
+    ev.map((e) => `${e.type}${e.count}`),
+    ['down1', 'up1', 'down2', 'up2'],
+  );
+  const move = page.events.filter((e) => e.type === 'move').pop();
+  assert.ok(move.x > 440 + 400 * 0.25 && move.x < 440 + 400 * 0.75, 'clique perto da borda do vídeo');
+  let taps = 0;
+  let icons = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    const how = await fakeBot(seed).bot.likeVideo('[data-e2e="like-icon"]');
+    if (how === 'tap') taps++;
+    if (how === 'icon') icons++;
+  }
+  assert.ok(taps > 5 && icons > 5 && taps + icons === 60);
+  // Sem vídeo inteiro na tela: coração
+  const { bot: b2, page: p2 } = fakeBot(7);
+  const orig = p2.locator;
+  p2.locator = (sel) => (sel === 'video' ? { ...orig(sel), count: async () => 0 } : orig(sel));
+  for (let i = 0; i < 10; i++) assert.equal(await b2.likeVideo('[data-e2e="like-icon"]'), 'icon');
+});
+
+test('busca do TikTok: clica na caixa, digita, aperta Enter e conta uma busca', async () => {
+  const { simulateSession } = require('../motor/sim/simulate');
+  const tiktok = require('../motor/platforms/tiktok');
+  let typedRuns = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const today = {};
+    const plan = { minutes: 25, watch: 20, like: 4, follow: 0, profile: 0, search: 2 };
+    const r = await simulateSession({
+      account: { platform: 'tiktok', username: 't', interests: ['receitas fáceis'], persona: human.makePersona(seed) },
+      platform: tiktok,
+      plan,
+      today,
+      clock: createFakeClock(Date.parse('2026-10-08T15:00:00-03:00')),
+      rng: human.makeRng(seed),
+    });
+    const typed = r.events.filter((e) => e.type === 'type');
+    if (typed.length) {
+      typedRuns++;
+      const enter = r.events.findIndex((e) => e.type === 'key' && e.key === 'Enter');
+      assert.ok(enter > r.events.indexOf(typed[0]), 'digitou e não apertou Enter');
+    }
+    for (const [k, v] of Object.entries(plan)) if (k !== 'minutes') assert.ok((today[k] || 0) <= Math.ceil(v * 1.2) || v === 0);
+  }
+  assert.ok(typedRuns > 0, 'nenhuma busca digitada');
+});

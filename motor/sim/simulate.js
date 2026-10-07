@@ -63,6 +63,7 @@ async function simulateSession({ account, platform, plan, today, clock, rng, tar
     actions,
     samples: state.samples,
     wheel: page.events.filter((e) => e.type === 'wheel').map((e) => e.dy),
+    events: page.events,
   };
 }
 

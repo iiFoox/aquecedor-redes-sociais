@@ -11,6 +11,7 @@ const SEL = {
   avatar: '[data-e2e="video-author-avatar"], [data-e2e="video-author-uniqueid"], [data-e2e="feed-video-author"]',
   videoLink: 'a[href*="/video/"]',
   close: '[data-e2e="browse-close"]',
+  searchInput: 'input[data-e2e="search-user-input"]',
   login: '[data-e2e="top-login-button"], #header-login-button',
   captcha: '#captcha-verify-container, #captcha_container, .captcha-verify-container, [class*="captcha_verify"], [class*="CaptchaVerify"]',
   popup: 'button:has-text("Agora não"), button:has-text("Not now"), button:has-text("Pular"), button:has-text("Skip")',
@@ -78,6 +79,35 @@ async function detectProblem(page) {
   return null;
 }
 
+// Curte o vídeo da tela (dois cliques no vídeo ou coração, pela personalidade) e registra
+async function likeVideo(bot, ctl, icon, detail) {
+  const how = await bot.likeVideo(icon);
+  if (!how) return false;
+  ctl.action('like', how === 'tap' ? `${detail} (dois cliques)` : detail);
+  return true;
+}
+
+// Busca como gente: clica na caixa de busca, digita e aperta Enter.
+// Se a caixa não estiver na tela (layout estreito) ou a busca não abrir, vai direto pelo endereço.
+async function typedSearch({ page, bot, ctl }, term) {
+  if (bot.random() < 0.8 && (await bot.clickVisible(SEL.searchInput, { minSize: 40 }))) {
+    await bot.pause('decide');
+    const box = page.locator(SEL.searchInput).first();
+    if ((await box.inputValue().catch(() => '')).trim()) {
+      await page.keyboard.press('Control+a'); // apaga a busca anterior escrevendo por cima
+      await bot.pause('decide');
+    }
+    await bot.type(term, `Digitando "${term}" na busca`);
+    await bot.pause('decide');
+    await page.keyboard.press('Enter');
+    await bot.pause('load', `Buscando "${term}"`);
+    if (page.url().includes('/search')) return true;
+    ctl.log('A busca digitada não abriu os resultados, indo pelo endereço', 'warn');
+  }
+  await bot.goto(`https://www.tiktok.com/search/video?q=${encodeURIComponent(term)}`, `Buscando "${term}"`);
+  return true;
+}
+
 async function dismissPopups(bot) {
   if (await bot.clickVisible(SEL.popup)) await bot.pause('decide', 'Fechando pop-up');
 }
@@ -107,9 +137,7 @@ const ACTIVITIES = {
         willLike &&
           (async () => {
             ctl.status('Gostou do vídeo, curtindo');
-            if (!(await bot.clickVisible(SEL.like))) return false;
-            ctl.action('like', 'Vídeo do Para Você');
-            return true;
+            return likeVideo(bot, ctl, SEL.like, 'Vídeo do Para Você');
           }),
       );
       ctl.action('watch', `${Math.round(waitTime / 1000)}s`);
@@ -150,7 +178,7 @@ const ACTIVITIES = {
 
   async search({ page, bot, ctl, account }) {
     const term = bot.pick(account.interests).trim();
-    await bot.goto(`https://www.tiktok.com/search/video?q=${encodeURIComponent(term)}`, `Buscando "${term}"`);
+    await typedSearch({ page, bot, ctl }, term);
     ctl.action('search', term);
     await bot.pause('read', 'Olhando os resultados da busca');
     await bot.scroll(bot.rand(200, 600));
@@ -172,12 +200,7 @@ const ACTIVITIES = {
       await bot.watchWithLike(
         ms,
         `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${WATCH_NOTE[outcome]}`,
-        willLike &&
-          (async () => {
-            if (!(await bot.clickVisible(SEL.browseLike))) return false;
-            ctl.action('like', `Busca: ${term}`);
-            return true;
-          }),
+        willLike && (() => likeVideo(bot, ctl, SEL.browseLike, `Busca: ${term}`)),
       );
       ctl.action('watch', `Busca: ${term}`);
       await page.keyboard.press('ArrowDown');
