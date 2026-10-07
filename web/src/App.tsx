@@ -28,11 +28,11 @@ const SUB: Record<View, string> = {
   rotina: 'Quando cada conta pode aquecer',
   proxies: 'Endereços de rede das contas, testados a cada 30 min',
   analises: 'Últimos 30 dias, todas as contas',
-  ajustes: 'Aparência, navegador, motor e backup',
+  ajustes: 'Sua conta, aparência, navegador, motor e backup',
 };
 
 function Side() {
-  const { accounts, view, accountId, go, system, backup, motorOff } = useStore();
+  const { accounts, view, accountId, go, system, backup, motorOff, me, logout } = useStore();
   return (
     <aside className="side" aria-label="Navegação">
       <div className="brand">
@@ -85,6 +85,14 @@ function Side() {
           </div>
         )}
         {system && <div className="dim">{system.pm2 ? 'Reinicia sozinho (PM2)' : 'Rodando pelo npm start'}</div>}
+      </div>
+      <div className="side-user">
+        <span className="su-email" title={me?.email}>
+          {me?.email || ''}
+        </span>
+        <button className="icon-btn" onClick={logout} aria-label="Sair" title="Sair">
+          <Icon name="logout" />
+        </button>
       </div>
     </aside>
   );

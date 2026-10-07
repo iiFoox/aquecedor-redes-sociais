@@ -212,3 +212,44 @@ export function shotInfo(file: string) {
 }
 
 export const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// ---------- Acessos ao painel (Ajustes → Acessos) ----------
+
+const ACCESS_LABEL: Record<string, string> = {
+  ok: 'Entrou',
+  senha: 'Senha errada',
+  bloqueado: 'Tentou durante o bloqueio',
+  cadastro: 'Conta criada',
+  'cadastro-recusado': 'Cadastro recusado',
+  sair: 'Saiu',
+  'troca-senha': 'Trocou a senha',
+};
+export const accessLabel = (reason: string) => ACCESS_LABEL[reason] || reason;
+
+// "Edge no Windows", "Chrome no Android"... a partir do user-agent
+export function deviceOf(ua: string | null | undefined) {
+  if (!ua) return 'aparelho desconhecido';
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /OPR\//.test(ua)
+      ? 'Opera'
+      : /Firefox\//.test(ua)
+        ? 'Firefox'
+        : /Chrome\//.test(ua)
+          ? 'Chrome'
+          : /Safari\//.test(ua)
+            ? 'Safari'
+            : 'navegador';
+  const os = /Android/.test(ua)
+    ? 'Android'
+    : /iPhone|iPad/.test(ua)
+      ? 'iPhone'
+      : /Windows/.test(ua)
+        ? 'Windows'
+        : /Mac OS X/.test(ua)
+          ? 'Mac'
+          : /Linux/.test(ua)
+            ? 'Linux'
+            : '';
+  return os ? `${browser} no ${os}` : browser;
+}

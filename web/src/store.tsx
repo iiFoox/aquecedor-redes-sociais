@@ -7,6 +7,7 @@ import {
   type BackupStatus,
   type Config,
   type FeedEvent,
+  type Me,
   type Meta,
   type Proxy,
   type StreamEvent,
@@ -24,6 +25,9 @@ interface Toast {
 }
 
 interface Store {
+  me: Me | null;
+  setMe: (m: Me) => void;
+  logout: () => Promise<void>;
   meta: Meta | null;
   accounts: Account[];
   proxies: Proxy[];
@@ -84,6 +88,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [nav, setNav] = useState(readHash);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [flash, setFlash] = useState<string | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [tick, setTick] = useState(0);
   const [lastEvent, setLastEvent] = useState<StreamEvent | null>(null);
   const prev = useRef<Map<string, Account>>(new Map());
@@ -164,6 +169,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const on = () => setNav(readHash());
     addEventListener('hashchange', on);
     return () => removeEventListener('hashchange', on);
+  }, []);
+
+  // Quem está logado (e-mail no menu, Ajustes → Conta do painel)
+  useEffect(() => {
+    api<Me>('/auth/eu')
+      .then(setMe)
+      .catch(() => {});
+  }, []);
+
+  // Sair: encerra a sessão no servidor e volta para o login
+  const logout = useCallback(async () => {
+    try {
+      await api('/auth/sair', 'POST', {});
+    } catch {
+      /* já estava fora */
+    }
+    location.replace('/login');
   }, []);
 
   // Carga inicial + atualização a cada 10 s (o tempo real cobre o resto)
@@ -299,6 +321,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const value: Store = {
+    me,
+    setMe,
+    logout,
     meta,
     accounts,
     proxies,

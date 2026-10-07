@@ -2462,3 +2462,179 @@ tr:last-child td {
     grid-template-columns: 88px minmax(0, 1fr) 28px;
   }
 }
+
+/* ---------- Tela de login e cadastro ---------- */
+.auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background:
+    radial-gradient(900px 500px at 15% -10%, color-mix(in srgb, var(--b2) 14%, transparent), transparent 70%),
+    radial-gradient(800px 500px at 110% 110%, color-mix(in srgb, var(--b3) 14%, transparent), transparent 70%), var(--bg);
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  display: grid;
+  gap: 16px;
+  padding: 28px 24px;
+  box-shadow: var(--shadow);
+}
+.auth-card h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+.auth-card p {
+  margin: 0;
+}
+.auth-brand {
+  padding: 0;
+}
+.auth-note {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) 12%, var(--panel-2));
+  color: var(--fg);
+}
+.auth-note .ic {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.auth-check {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-size: 13.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.auth-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--b2);
+}
+.auth-submit {
+  justify-content: center;
+  padding: 11px 14px;
+  font-size: 15px;
+}
+.auth-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.auth-switch {
+  text-align: center;
+  font-size: 13.5px;
+}
+.auth-switch .link {
+  color: var(--b2);
+  font-weight: 600;
+}
+/* O menu do painel esconde o nome em tela estreita; na tela de login ele fica */
+.auth .brand-name {
+  display: inline;
+}
+.pw {
+  position: relative;
+}
+.pw .input {
+  padding-right: 42px;
+}
+.pw-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.pw-eye:hover {
+  color: var(--fg);
+}
+.pw-eye .ic {
+  width: 18px;
+  height: 18px;
+}
+.spinner.sm {
+  width: 14px;
+  height: 14px;
+  border-color: color-mix(in srgb, var(--on-brand) 35%, transparent);
+  border-top-color: var(--on-brand);
+}
+
+/* Quem está logado + Sair (menu lateral; no celular, vira um ícone no fim da barra do topo) */
+.side-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.su-email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .side-user {
+    margin-left: auto;
+    padding: 0;
+  }
+  .su-email {
+    display: none;
+  }
+}
+
+/* Ajustes → Conta do painel */
+.set-more {
+  margin-top: 6px;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--line-soft);
+}
+.set-more > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.access-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.access-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.access-list li .dim {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+.access-list li.bad .acc-what {
+  color: var(--bad);
+  font-weight: 600;
+}

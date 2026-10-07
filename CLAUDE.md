@@ -12,6 +12,7 @@ npm start              # motor + painel no terminal; painel em http://localhost:
 npm run ligar          # o mesmo em segundo plano pelo PM2 (desligar / status / logs / autostart:ligar)
 npm run restaurar      # restaura data/profiles de um backup (motor desligado)
 npm run simular -- alemdofato5 7   # simula 7 dias sem abrir navegador (só lê o Supabase)
+npm run usuario -- criar eu@email.com   # cria usuário do painel (senha pedida sem mostrar)
 npm run build          # gera o painel (web/dist); npm start e npm run ligar fazem isso sozinhos
 npm run dev:web        # painel com recarga automática em http://localhost:5173 (precisa do motor ligado)
 npm test               # testes (node:test, inclusive os .ts do painel)
@@ -37,7 +38,11 @@ npm run format         # Prettier
   - `backup.js`: backup diário dos perfis (04:00, sem cache, 7 últimos). `proxycheck.js`: teste de proxy sem navegador.
   - `platforms/`: TikTok e Instagram. Cada atividade declara as metas que conta (`produces`) e as que adianta (`advances`).
   - `api/`: rotas. `validate.js`: validação (zod) de tudo que entra.
-- `painel/`: serve `web/dist` e repassa `/api` ao motor. Se o motor cair, o painel continua no ar.
+- `painel/`: login (`auth.js`: sessão em cookie httpOnly, bloqueio por tentativas, CSRF; `authStore.js`: Supabase Auth +
+  `panel_sessions` + `login_attempts`), serve `web/dist` e repassa `/api` ao motor com a senha interna (`data/motor.token`)
+  e o usuário logado (`x-wu-user`). Sem login, só a tela de login (`web/login.html`) abre. Se o motor cair, o painel continua no ar.
+- Usuários: `npm run usuario -- criar|senha|listar`, ou a tela de cadastro (só neste PC, se liberada em Ajustes).
+  Cada usuário vê só as próprias contas e proxies (`owner_id`); horário, piloto, limite e backup são gerais.
 - `web/`: o painel (React + TypeScript + Vite). `src/store.tsx` (dados, tempo real, ações), `src/views/` (telas),
   `src/components/`, `src/lib/format.ts` (funções puras, testadas em `tests/web-format.test.ts`). Estilos em `src/styles.css`,
   com tokens de cor no `:root` e tema claro/escuro. Responsivo: funciona no celular, sem app instalável.

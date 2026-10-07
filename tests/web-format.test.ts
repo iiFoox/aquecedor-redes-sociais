@@ -88,3 +88,16 @@ test('sessão da rotina que fez a parte dela aparece como "Parte do dia"', () =>
   assert.equal(f.resultLabel({ result: 'ok', completion: 1 }), 'Concluída');
   assert.equal(f.resultLabel({ result: 'captcha', completion: 0.2 }), 'Captcha');
 });
+
+test('acessos ao painel: texto do motivo e aparelho a partir do user-agent', () => {
+  assert.equal(f.accessLabel('senha'), 'Senha errada');
+  assert.equal(f.accessLabel('ok'), 'Entrou');
+  const edge =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0';
+  assert.equal(f.deviceOf(edge), 'Edge no Windows');
+  assert.equal(
+    f.deviceOf('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36'),
+    'Chrome no Android',
+  );
+  assert.equal(f.deviceOf(null), 'aparelho desconhecido');
+});

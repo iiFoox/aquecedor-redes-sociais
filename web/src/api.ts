@@ -208,6 +208,38 @@ export async function api<T = unknown>(url: string, method = 'GET', body?: unkno
     throw new ApiError('O painel está fora do ar', true);
   }
   const data = await r.json().catch(() => ({}));
+  // Sessão do painel venceu: volta para o login sem perder a página (o #conta/... segue no endereço)
+  if (r.status === 401 && data.auth === false) {
+    expired();
+    throw new ApiError(data.error || 'Sessão expirada', false);
+  }
   if (!r.ok) throw new ApiError(data.error || `Erro ${r.status}`, !!data.motorOff);
   return data as T;
+}
+
+let leaving = false;
+export function expired() {
+  if (leaving) return;
+  leaving = true;
+  try {
+    sessionStorage.setItem('wu-expired', '1');
+  } catch {
+    /* sem armazenamento: só não mostra o aviso */
+  }
+  location.replace('/login' + location.hash);
+}
+
+// ---------- Login do painel ----------
+export interface Me {
+  id: string;
+  email: string;
+  signup: boolean; // cadastro liberado neste PC
+  persistent: boolean; // entrou com "Manter conectado"
+}
+export interface Access {
+  t: number;
+  ip: string | null;
+  userAgent: string | null;
+  ok: boolean;
+  reason: 'ok' | 'senha' | 'bloqueado' | 'cadastro' | 'cadastro-recusado' | 'sair' | 'troca-senha';
 }
