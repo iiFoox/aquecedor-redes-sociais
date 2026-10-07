@@ -121,6 +121,11 @@ async function claim(acc) {
   }
   const dev = await onlineOf(acc.deviceId);
   if (!dev.online) {
+    // Parece desligado, mas a trava ainda vale: pode estar sem internet com a conta aberta. Espera vencer.
+    if (rules.leaseHeld(acc, cloud.device().id))
+      throw fail(
+        `${dev.name} estava com a conta aberta há pouco. Tente de novo depois das ${new Date(acc.lease.until).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`,
+      );
     await store.claimAccount(acc.id);
     store.addLog(acc.id, `Conta trazida de ${dev.name} (desligado) para ${cloud.device().name}`);
     return { ok: true };

@@ -21,6 +21,7 @@ hub.setMaxListeners(200);
 const sessions = {}; // id -> estado da sessão em andamento
 const manual = {}; // id -> { ctx, purpose } navegador aberto para você (login ou captcha)
 const lastFrames = {}; // id -> último quadro (base64 jpeg)
+const opening = new Set(); // contas abrindo sessão agora (o navegador manual fechando não solta a trava)
 let lock = null; // motivo do bloqueio (ex.: backup dos perfis em andamento)
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -164,13 +165,22 @@ async function openBrowser(account, purpose = 'login') {
   if (lock) throw new Error(lock);
   if (sessions[account.id]) throw new Error('Há uma sessão rodando nesta conta. Pare a sessão antes.');
   if (manual[account.id]) return;
+  if (!(await store.takeLease(account.id)))
+    throw new Error('Esta conta está aberta em outro aparelho ou não roda mais neste. Tente de novo em alguns minutos.');
   const platform = platforms[account.platform];
-  const ctx = await launch(account, { visible: true });
+  let ctx;
+  try {
+    ctx = await launch(account, { visible: true });
+  } catch (e) {
+    store.dropLease(account.id).catch(() => {});
+    throw e;
+  }
   manual[account.id] = { ctx, purpose };
   let check = null;
   ctx.on('close', () => {
     clearInterval(check);
     delete manual[account.id];
+    if (!sessions[account.id] && !opening.has(account.id)) store.dropLease(account.id).catch(() => {});
     if (purpose === 'captcha' && account.attention && account.attention.kind === 'captcha') {
       store.clearAttention(account.id, 'Janela fechada depois do captcha. A conta voltou para a fila', ['captcha']);
       emit({ type: 'attention', id: account.id, attention: null });
@@ -211,7 +221,17 @@ async function closeBrowser(id) {
 }
 
 // manual: você clicou em Iniciar. Aí a sessão vai até 100% do dia; as sessões em partes (rotina) são do piloto.
-async function startSession(account, { manual = false } = {}) {
+async function startSession(account, opts = {}) {
+  if (opening.has(account.id)) throw new Error('Sessão já em execução');
+  opening.add(account.id);
+  try {
+    return await openSession(account, opts);
+  } finally {
+    opening.delete(account.id);
+  }
+}
+
+async function openSession(account, { manual = false } = {}) {
   const id = account.id;
   if (lock) throw new Error(lock);
   if (sessions[id]) throw new Error('Sessão já em execução');
@@ -227,6 +247,10 @@ async function startSession(account, { manual = false } = {}) {
   const status = rules.dayStatus(platform.activities, plan, store.todayOf(id), account);
   if (status === 'done') throw new Error('As metas desta conta já foram batidas hoje. Volte amanhã.');
   if (status === 'limit') throw new Error('O que falta hoje passaria do limite de 120% do plano. Volte amanhã.');
+  // Trava: a conta não pode estar aberta em outro aparelho (e tem de continuar sendo deste)
+  if (!(await store.takeLease(id)))
+    throw new Error('Esta conta está aberta em outro aparelho ou não roda mais neste. Tente de novo em alguns minutos.');
+  if (sessions[id]) throw new Error('Sessão já em execução');
 
   // Sem timer fixo: a sessão roda até bater as metas. Só existe um teto de segurança
   // (2,5x o tempo estimado, entre 30 e 90 min) e um detector de travamento (10 min sem progresso).
@@ -371,6 +395,7 @@ async function run(account, platform, s, ctl) {
       timing: Object.fromEntries(Object.entries(s.samples || {}).map(([k, v]) => [k, human.timingSummary(v)])),
     });
     delete sessions[account.id];
+    if (!manual[account.id]) store.dropLease(account.id).catch(() => {});
     emit({ type: 'session', id: account.id, running: false, result });
   }
 }

@@ -97,7 +97,8 @@ router.post('/_device/power', async (req, res) => {
   }
   if (b.battery && typeof b.battery === 'object') {
     const r = power.setBattery({ onBattery: !!b.battery.onBattery, level: Number.isFinite(b.battery.level) ? b.battery.level : null });
-    if (r.changed) console.log(r.hold ? `🔋 Bateria abaixo de ${power.LOW}%: sem sessão nova até ligar na tomada` : '🔌 Energia ok: piloto liberado');
+    if (r.changed)
+      console.log(r.hold ? `🔋 Bateria abaixo de ${power.LOW}%: sem sessão nova até ligar na tomada` : '🔌 Energia ok: piloto liberado');
     return res.json({ ok: true, hold: r.hold, changed: r.changed });
   }
   res.status(400).json({ error: 'Pedido inválido' });

@@ -87,7 +87,7 @@ const dropNulls = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => 
 // Linha do banco → objeto em memória. As listas antigas dentro do JSON (events, alerts, history)
 // são ignoradas: agora moram nas tabelas próprias (a cópia original ficou na coluna "legacy").
 function accountFromRow(row) {
-  const { events, alerts, history, live, loginOpen, ownerId, deviceId: _d, remoteStatus, ...data } = row.data || {};
+  const { events, alerts, history, live, loginOpen, ownerId, deviceId: _d, remoteStatus, lease: _l, ...data } = row.data || {};
   return {
     ...data,
     id: row.id,
@@ -96,6 +96,8 @@ function accountFromRow(row) {
     ownerId: row.owner_id || null,
     deviceId: row.device_id || null,
     remoteStatus: row.status || null, // o que o aparelho dono está fazendo agora (contas de outros aparelhos)
+    // Trava: o aparelho que está com a conta aberta (sessão ou navegador) e até quando
+    lease: row.lease_device ? { device: row.lease_device, until: row.lease_until ? Date.parse(row.lease_until) : 0 } : null,
   };
 }
 const eventFromRow = (r) => dropNulls({ t: Date.parse(r.t), kind: r.kind, action: r.action, level: r.level, msg: r.msg, detail: r.detail });
@@ -162,7 +164,10 @@ async function init({ client, user, device }) {
   const evSince = iso(Date.now() - EVENTS_DAYS * 86400000);
   const alSince = iso(Date.now() - ALERTS_DAYS * 86400000);
   const [accRows, prxRows, cfg, evRows, alRows, seRows] = await Promise.all([
-    fetchAll(() => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status').order('id'), 'contas'),
+    fetchAll(
+      () => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status, lease_device, lease_until').order('id'),
+      'contas',
+    ),
     fetchAll(() => sb.from('proxies').select('id, url, status, ms, data, owner_id').order('id'), 'proxies'),
     Promise.all([
       sb.from('user_config').select('data').maybeSingle(),
@@ -280,7 +285,7 @@ function subscribe() {
 async function reloadAccounts() {
   if (!sb) return accounts.length;
   const rows = await fetchAll(
-    () => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status').order('id'),
+    () => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status, lease_device, lease_until').order('id'),
     'contas',
   );
   const seen = new Set(rows.map((r) => r.id));
@@ -324,7 +329,7 @@ function flush() {
 // owner_id só vai junto quando a conta tem dono: o dono de uma conta sem dono é gravado por fora
 // (cadastro do 1º usuário ou "npm run usuario"), e o motor não pode sobrescrever com vazio.
 function accountToRow(a) {
-  const { live, loginOpen, id, platform, username, events, alerts, history, ownerId, deviceId: dev, remoteStatus, ...data } = a;
+  const { live, loginOpen, id, platform, username, events, alerts, history, ownerId, deviceId: dev, remoteStatus, lease, ...data } = a;
   return { id, platform, username, data, owner_id: ownerId || userId, device_id: dev || deviceId };
 }
 const proxyToRow = ({ id, url, status, ms, ownerId, ...rest }) => ({ id, url, status, ms, data: rest, owner_id: ownerId || userId });
@@ -666,6 +671,46 @@ async function claimAccount(id) {
   return a;
 }
 
+// ---------- Trava (uma conta nunca roda em dois aparelhos) ----------
+// Pegar a trava é uma operação só no banco: só passa se a conta é deste aparelho e nenhum outro aparelho está
+// com uma trava ainda válida. Sem internet, não passa (não abre nada sem ter certeza).
+async function takeLease(id) {
+  if (!sb || !deviceId) return true; // testes e simulador
+  const now = new Date();
+  const r = await sb
+    .from('accounts')
+    .update({ lease_device: deviceId, lease_until: iso(now.getTime() + rules.LEASE_MS) })
+    .eq('id', id)
+    .eq('device_id', deviceId)
+    .or(`lease_device.is.null,lease_until.is.null,lease_until.lt."${now.toISOString()}",lease_device.eq.${deviceId}`)
+    .select('id');
+  if (r.error) throw new Error(`Sem conexão com o Supabase para travar a conta: ${r.error.message}`);
+  if (!r.data.length) return false;
+  const a = get(id);
+  if (a) a.lease = { device: deviceId, until: now.getTime() + rules.LEASE_MS };
+  return true;
+}
+
+// Renova a trava das contas abertas aqui (a cada minuto)
+async function renewLeases(ids) {
+  if (!sb || !deviceId || !ids.length) return;
+  const until = Date.now() + rules.LEASE_MS;
+  const r = await sb
+    .from('accounts')
+    .update({ lease_until: iso(until) })
+    .in('id', ids)
+    .eq('lease_device', deviceId);
+  if (check('renovar a trava', r)) for (const id of ids) if (get(id)) get(id).lease = { device: deviceId, until };
+}
+
+// Solta a trava (sessão e navegador fechados)
+async function dropLease(id) {
+  const a = get(id);
+  if (a) a.lease = null;
+  if (!sb || !deviceId) return;
+  await sb.from('accounts').update({ lease_device: null, lease_until: null }).eq('id', id).eq('lease_device', deviceId);
+}
+
 // Conta deste aparelho vai para outro (o outro aparelho pediu): só troca o device_id; quem roda passa a ser o outro
 async function releaseAccount(id, toDevice) {
   const a = get(id);
@@ -741,6 +786,9 @@ module.exports = {
   recentEvents,
   reloadAccounts,
   claimAccount,
+  takeLease,
+  renewLeases,
+  dropLease,
   releaseAccount,
   forget,
   publishStatus,

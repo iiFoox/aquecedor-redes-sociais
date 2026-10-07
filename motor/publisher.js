@@ -26,7 +26,18 @@ function statusOf(a) {
   };
 }
 
+let lastLease = 0;
+
 async function tick(force = false) {
+  // Trava das contas abertas aqui (sessão ou navegador): renova a cada minuto
+  if (Date.now() - lastLease >= 60000) {
+    lastLease = Date.now();
+    const open = store
+      .mine()
+      .filter((a) => runner.getSession(a.id) || runner.isBrowserOpen(a.id))
+      .map((a) => a.id);
+    await store.renewLeases(open).catch(() => {});
+  }
   for (const a of store.mine()) {
     const st = statusOf(a);
     // O texto ao vivo muda o tempo todo: entra na comparação só o que importa (estado e números)

@@ -188,3 +188,12 @@ test('captcha e bloqueio seguram a conta até você resolver (não voltam sozinh
     assert.equal(rules.decide(acc, ctx), 'precisa-atencao', kind);
   }
 });
+
+test('trava: outro aparelho com a conta aberta segura; trava vencida ou minha não', () => {
+  const now = Date.parse('2026-10-07T12:00:00Z');
+  assert.equal(rules.leaseHeld({ lease: null }, 'A', now), false);
+  assert.equal(rules.leaseHeld({ lease: { device: 'B', until: now + 60000 } }, 'A', now), true);
+  assert.equal(rules.leaseHeld({ lease: { device: 'B', until: now - 1 } }, 'A', now), false);
+  assert.equal(rules.leaseHeld({ lease: { device: 'A', until: now + 60000 } }, 'A', now), false);
+  assert.equal(rules.LEASE_MS, 5 * 60000);
+});

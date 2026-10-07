@@ -6,6 +6,13 @@ const human = require('./human');
 const TZ = process.env.APP_TZ || 'America/Sao_Paulo';
 const DAY_MS = 86400000;
 const GOAL_CAP = 1.2; // nenhuma meta passa de 120% do plano do dia
+const LEASE_MS = 5 * 60000; // trava da conta: renovada a cada minuto enquanto ela está aberta num aparelho
+
+// Outro aparelho está com a conta aberta agora? (trava ainda válida e não é deste aparelho)
+function leaseHeld(account, me, now = Date.now()) {
+  const l = account && account.lease;
+  return !!l && l.device !== me && l.until > now;
+}
 const ALERT_GROUP_MS = 30 * 60000; // alerta igual dentro de 30 min vira o mesmo ("4×")
 const GAP_MIN = 45; // intervalo antigo (contas sem "nextAfter"), em minutos
 
@@ -415,6 +422,8 @@ function decide(account, ctx) {
 module.exports = {
   TZ,
   GOAL_CAP,
+  LEASE_MS,
+  leaseHeld,
   localDate,
   localMinutes,
   toMinutes,
