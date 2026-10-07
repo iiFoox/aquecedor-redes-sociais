@@ -165,10 +165,28 @@ const ACTIVITIES = {
         .textContent({ timeout: 1000 })
         .catch(() => '');
       const isNiche = bot.isNiche(text, account.interests || []);
-      const { ms, outcome } = human.watchPlan(null, { niche: isNiche, persona: bot.persona, mood: bot.mood, rng: bot.random });
+      const info = await bot.videoInfo();
+      const { ms, outcome } = human.watchPlan(info ? info.duration : null, {
+        niche: isNiche,
+        persona: bot.persona,
+        mood: bot.mood,
+        rng: bot.random,
+      });
       const sec = Math.round(ms / 1000);
       const note = { skip: ' (pulando)', half: ' (até a metade)', full: ' (inteiro)', loop: ' (revendo, sinal de interesse)' }[outcome];
-      await bot.watch(ms, `Assistindo reel ${i}/${n} por ${sec}s${note}${isNiche ? ' · nicho' : ''}`);
+      // Meta de curtidas batida = chance zero, com ou sem nicho. A curtida sai num momento sorteado do reel.
+      const likeP = human.likeProbability(likeChance(ctl, 0.4), { niche: isNiche, persona: bot.persona });
+      const willLike = ms > 12000 && bot.random() < likeP;
+      await bot.watchWithLike(
+        ms,
+        `Assistindo reel ${i}/${n} por ${sec}s${note}${isNiche ? ' · nicho' : ''}`,
+        willLike &&
+          (async () => {
+            if (!(await bot.clickVisible(SEL.like, { minSize: 20 }))) return false;
+            ctl.action('like', 'Reel');
+            return true;
+          }),
+      );
       ctl.action('reel', `${sec}s`);
 
       // Às vezes pausa o reel com um clique, espera e volta
@@ -179,15 +197,18 @@ const ACTIVITIES = {
         await page.mouse.click(bot.rand(500, 700), bot.rand(300, 500)); // despausa
       }
 
-      // Meta de curtidas batida = chance zero, com ou sem nicho
-      const likeP = human.likeProbability(likeChance(ctl, 0.4), { niche: isNiche, persona: bot.persona });
-      if (ms > 12000 && bot.random() < likeP) {
-        if (await bot.clickVisible(SEL.like, { minSize: 20 })) ctl.action('like', 'Reel');
-      }
       ctl.status('Passando para o próximo reel');
       await bot.moveTo(bot.rand(560, 720), bot.rand(300, 500));
       await bot.scroll(bot.rand(700, 900));
       await bot.pause('next');
+      // Às vezes volta um pouco para rever o reel anterior e segue (não conta como reel novo)
+      if (i < n && bot.random() < 0.04) {
+        ctl.status('Voltou ao reel anterior');
+        await bot.scroll(-bot.rand(700, 900));
+        await bot.watch(bot.rand(1500, 5000), 'Revendo o reel anterior');
+        await bot.scroll(bot.rand(700, 900));
+        await bot.pause('next');
+      }
     }
     return true;
   },
@@ -224,7 +245,10 @@ const ACTIVITIES = {
   },
 
   async afk({ bot }) {
-    await bot.pause('distraction', 'Distração: saiu da tela por um tempo');
+    // Metade das vezes "vai para outra aba"; nas outras, só para de mexer (celular, café)
+    const ms = human.pause('distraction', { rng: bot.random, persona: bot.persona });
+    if (bot.random() < 0.5) await bot.awayTab(ms);
+    else await bot.watch(ms, 'Distração: saiu da tela por um tempo');
     bot.rest(); // voltou descansado
     return true;
   },

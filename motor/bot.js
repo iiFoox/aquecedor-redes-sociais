@@ -172,6 +172,59 @@ function createBot(page, ctl, opts = {}) {
     return true;
   }
 
+  // Duração do vídeo que está mais visível na tela (elemento <video> padrão, sem seletor de plataforma).
+  // null se não houver vídeo ou a duração ainda não carregou.
+  async function videoInfo() {
+    const info = await page
+      .evaluate(() => {
+        /* global document, innerWidth, innerHeight */ // roda dentro da página
+        let best = null;
+        let area = 0;
+        for (const v of document.querySelectorAll('video')) {
+          const r = v.getBoundingClientRect();
+          const w = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
+          const h = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+          if (w * h > area) {
+            area = w * h;
+            best = v;
+          }
+        }
+        return best && Number.isFinite(best.duration) && best.duration > 0 ? { duration: best.duration, current: best.currentTime } : null;
+      })
+      .catch(() => null);
+    return info && typeof info.duration === 'number' ? info : null;
+  }
+
+  // Assiste `ms`; se `beforeLike` vier, para no meio (momento sorteado), chama, e termina de assistir.
+  // A curtida acontece num ponto plausível do vídeo, não sempre no fim.
+  async function watchWithLike(ms, label, like) {
+    if (!like) return watch(ms, label);
+    const at = Math.round(ms * (0.3 + rng() * 0.6));
+    await watch(at, label);
+    const t = clock.now();
+    const ok = await like();
+    const restMs = ms - at - (clock.now() - t); // desconta o tempo que o clique levou de verdade
+    if (restMs > 400) await watch(restMs, ok ? 'Continua assistindo depois de curtir' : label);
+    return ok;
+  }
+
+  // Distração "trocando de aba": abre uma aba em branco por um tempo e volta para a da sessão.
+  // O site vê a aba ficar escondida e voltar, como quando a pessoa olha outra coisa. Nada é aberto.
+  async function awayTab(ms, label = 'Distração: foi para outra aba') {
+    let other = null;
+    try {
+      other = await page.context().newPage();
+    } catch {
+      other = null;
+    }
+    try {
+      await hold(ms, label, 'pause');
+    } finally {
+      if (other) await other.close().catch(() => {});
+      await page.bringToFront().catch(() => {});
+    }
+  }
+
   async function goto(url, label) {
     ctl.status(label || 'Navegando');
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -191,6 +244,9 @@ function createBot(page, ctl, opts = {}) {
     wait,
     pause,
     watch,
+    watchWithLike,
+    videoInfo,
+    awayTab,
     moveTo,
     fidget,
     click,

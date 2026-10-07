@@ -47,7 +47,10 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
       click: async () => events.push({ type: 'click' }),
       move: async () => {},
     },
-    evaluate: async () => null,
+    // Duração do vídeo visível: de ~6 s a 90 s, a maioria perto de 20 s (como num feed de vídeos curtos)
+    evaluate: async () => ({ duration: Math.min(90, Math.max(6, 20 * Math.exp(0.6 * (rng() + rng() + rng() - 1.5) * 2))), current: 0 }),
+    context: () => ({ newPage: async () => ({ close: async () => events.push({ type: 'tab', open: false }) }) }),
+    bringToFront: async () => events.push({ type: 'tab', open: true }),
     // O cursor falso avisa a página do clique, e a página reage como o site faria
     _clicked(e) {
       events.push({ type: 'click', sel: e.sel });

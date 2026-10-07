@@ -94,10 +94,23 @@ const ACTIVITIES = {
         .textContent({ timeout: 1000 })
         .catch(() => '');
       const niche = bot.isNiche(desc, account.interests || []);
-      const { ms: waitTime, outcome } = watchFor(bot, niche);
-      await bot.watch(
+      // Tempo assistido a partir da duração real do vídeo (se deu para ler)
+      const info = await bot.videoInfo();
+      const { ms: waitTime, outcome } = watchFor(bot, niche, info ? info.duration : null);
+      // Decide antes se vai curtir e curte num momento sorteado do vídeo.
+      // Meta de curtidas batida = chance zero (antes o nicho furava e passava do teto de 120%).
+      const likeP = human.likeProbability(likeChance(ctl, 0.25), { niche, persona: bot.persona });
+      const willLike = waitTime > 8000 && bot.random() < likeP;
+      await bot.watchWithLike(
         waitTime,
         `Assistindo vídeo ${i}/${n} por ${Math.round(waitTime / 1000)}s${WATCH_NOTE[outcome]}${niche ? ' · nicho' : ''}`,
+        willLike &&
+          (async () => {
+            ctl.status('Gostou do vídeo, curtindo');
+            if (!(await bot.clickVisible(SEL.like))) return false;
+            ctl.action('like', 'Vídeo do Para Você');
+            return true;
+          }),
       );
       ctl.action('watch', `${Math.round(waitTime / 1000)}s`);
 
@@ -111,16 +124,6 @@ const ACTIVITIES = {
         }
       }
 
-      // Chance de curtir: a do plano (adaptativa), mais alta no nicho, com a inclinação da conta.
-      // Meta de curtidas batida = chance zero (antes o nicho furava e passava do teto de 120%).
-      const likeP = human.likeProbability(likeChance(ctl, 0.25), { niche, persona: bot.persona });
-      if (waitTime > 8000 && bot.random() < likeP) {
-        ctl.status('Gostou do vídeo, curtindo');
-        if (await bot.clickVisible(SEL.like)) {
-          ctl.action('like', 'Vídeo do Para Você');
-          await bot.pause('afterAction', 'Continua assistindo após curtir');
-        }
-      }
       if (waitTime > 15000 && ctl.left('follow') > 0 && bot.random() < 0.35) {
         ctl.status('Assistiu até o fim, seguindo o criador');
         if (await bot.clickVisible(SEL.feedFollow)) {
@@ -132,6 +135,15 @@ const ACTIVITIES = {
       ctl.status('Indo para o próximo vídeo');
       await page.keyboard.press('ArrowDown');
       await bot.pause('next');
+      // Às vezes volta ao anterior ("espera, o que era aquilo?"), olha uns segundos e segue.
+      // Não conta como vídeo novo.
+      if (i < n && bot.random() < 0.04) {
+        ctl.status('Voltou ao vídeo anterior');
+        await page.keyboard.press('ArrowUp');
+        await bot.watch(bot.rand(1500, 6000), 'Revendo o vídeo anterior');
+        await page.keyboard.press('ArrowDown');
+        await bot.pause('next');
+      }
     }
     return true;
   },
@@ -151,18 +163,23 @@ const ACTIVITIES = {
     const n = bot.rand(3, 6);
     for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('watch'); i++) {
       // Veio de uma busca do nicho: conta como conteúdo do nicho
-      const { ms, outcome } = watchFor(bot, true);
-      await bot.watch(ms, `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${WATCH_NOTE[outcome]}`);
-      ctl.action('watch', `Busca: ${term}`);
-      if (
+      const info = await bot.videoInfo();
+      const { ms, outcome } = watchFor(bot, true, info ? info.duration : null);
+      const willLike =
         ms > 8000 &&
-        bot.random() < human.likeProbability(likeChance(ctl, 0.45), { niche: true, nicheMin: 0.45, persona: bot.persona }) &&
         ctl.left('like') > 0 &&
-        (await bot.clickVisible(SEL.browseLike))
-      ) {
-        ctl.action('like', `Busca: ${term}`);
-        await bot.pause('afterAction');
-      }
+        bot.random() < human.likeProbability(likeChance(ctl, 0.45), { niche: true, nicheMin: 0.45, persona: bot.persona });
+      await bot.watchWithLike(
+        ms,
+        `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${WATCH_NOTE[outcome]}`,
+        willLike &&
+          (async () => {
+            if (!(await bot.clickVisible(SEL.browseLike))) return false;
+            ctl.action('like', `Busca: ${term}`);
+            return true;
+          }),
+      );
+      ctl.action('watch', `Busca: ${term}`);
       await page.keyboard.press('ArrowDown');
       await bot.pause('next');
     }
@@ -199,7 +216,10 @@ const ACTIVITIES = {
   },
 
   async afk({ bot }) {
-    await bot.pause('distraction', 'Distração: saiu da tela por um tempo');
+    // Metade das vezes "vai para outra aba"; nas outras, só para de mexer (celular, café)
+    const ms = human.pause('distraction', { rng: bot.random, persona: bot.persona });
+    if (bot.random() < 0.5) await bot.awayTab(ms);
+    else await bot.watch(ms, 'Distração: saiu da tela por um tempo');
     bot.rest(); // voltou descansado
     return true;
   },

@@ -144,3 +144,69 @@ test('simulador: ações não acontecem em intervalos fixos', async () => {
   assert.ok(sd / m > 0.5, `variação baixa demais entre ações: ${(sd / m).toFixed(2)}`);
   assert.ok(new Set(gaps).size > gaps.length * 0.8, 'intervalos repetidos');
 });
+
+// ---------- Robô com página e relógio falsos ----------
+const { createBot } = require('../motor/bot');
+const { createCtl } = require('../motor/ctl');
+const { createFakePage, createFakeCursor, createFakeClock } = require('../motor/sim/fakePage');
+
+function fakeBot(seed = 1) {
+  const clock = createFakeClock(Date.parse('2026-10-08T12:00:00-03:00'));
+  const state = {
+    stop: false,
+    stats: {},
+    startedAt: clock.now(),
+    endsAt: clock.now() + 3600000,
+    lastProgress: clock.now(),
+    lastBeat: clock.now(),
+  };
+  const ctl = createCtl({
+    state,
+    plan: { like: 5 },
+    done: () => ({}),
+    now: clock.now,
+    hooks: { status() {}, action() {}, log() {}, alert() {} },
+  });
+  const rng = human.makeRng(seed);
+  const page = createFakePage({ rng });
+  const bot = createBot(page, ctl, { rng, clock, cursor: createFakeCursor(page), persona: human.makePersona(seed) });
+  return { bot, clock, page, state };
+}
+
+test('curtida acontece no meio do vídeo, em momentos diferentes', async () => {
+  const fractions = [];
+  for (let seed = 1; seed <= 40; seed++) {
+    const { bot, clock } = fakeBot(seed);
+    const start = clock.now();
+    let at = null;
+    await bot.watchWithLike(20000, 'vídeo', async () => {
+      at = clock.now() - start;
+      return true;
+    });
+    assert.ok(clock.now() - start >= 19000, 'deveria terminar de assistir depois de curtir');
+    fractions.push(at / 20000);
+  }
+  assert.ok(Math.min(...fractions) >= 0.3 && Math.max(...fractions) <= 0.95);
+  assert.ok(new Set(fractions.map((f) => f.toFixed(2))).size > 25, 'curtidas sempre no mesmo segundo');
+});
+
+test('esperas longas mexem o mouse; troca de aba volta para a aba da sessão', async () => {
+  const { bot, page } = fakeBot(3);
+  await bot.watch(40000, 'vídeo longo');
+  assert.ok(page.events.filter((e) => e.type === 'move').length >= 2, 'mouse parado durante 40 s');
+  await bot.awayTab(20000);
+  const tabs = page.events.filter((e) => e.type === 'tab');
+  assert.deepEqual(
+    tabs.map((e) => e.open),
+    [false, true],
+  );
+});
+
+test('duração real do vídeo muda o tempo assistido', async () => {
+  const { bot } = fakeBot(4);
+  const info = await bot.videoInfo();
+  assert.ok(info.duration >= 6 && info.duration <= 90);
+  const short = human.watchPlan(8, { rng: () => 0.99 });
+  const long = human.watchPlan(60, { rng: () => 0.99 });
+  assert.ok(long.ms > short.ms * 4);
+});
