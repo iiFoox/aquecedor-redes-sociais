@@ -19,13 +19,15 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
   let typed = '';
   const el = (sel, i) => ({
     sel,
-    // O vídeo ocupa o meio da tela; o resto são botões pequenos
+    // O vídeo ocupa o meio da tela, o painel de comentários a direita; o resto são botões pequenos
     boundingBox: async () =>
       sel === 'video'
         ? i === 0
           ? { x: 440, y: 40, width: 400, height: 710 }
           : null
-        : { x: 560 + i * 8, y: 180 + i * 60, width: 48, height: 48 },
+        : /CommentMain/.test(sel)
+          ? { x: 990, y: 60, width: 352, height: 624 }
+          : { x: 560 + i * 8, y: 180 + i * 60, width: 48, height: 48 },
     scrollIntoViewIfNeeded: async () => {},
     inputValue: async () => typed,
     isVisible: async () => !PROBLEM.test(sel),

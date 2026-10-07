@@ -306,3 +306,42 @@ test('busca do TikTok: clica na caixa, digita, aperta Enter e conta uma busca', 
   }
   assert.ok(typedRuns > 0, 'nenhuma busca digitada');
 });
+
+test('comentários do TikTok: rola com o mouse em cima do painel e fecha no X ou no ícone, nunca no Esc', async () => {
+  const { simulateSession } = require('../motor/sim/simulate');
+  const tiktok = require('../motor/platforms/tiktok');
+  let opened = 0;
+  let scrolled = 0;
+  for (let seed = 1; seed <= 15; seed++) {
+    const r = await simulateSession({
+      account: { platform: 'tiktok', username: 't', interests: [], persona: human.makePersona(seed) },
+      platform: tiktok,
+      plan: { minutes: 25, watch: 40, like: 4, follow: 0, profile: 0, search: 0 },
+      today: {},
+      clock: createFakeClock(Date.parse('2026-10-08T15:00:00-03:00')),
+      rng: human.makeRng(seed),
+    });
+    const ev = r.events;
+    assert.ok(!ev.some((e) => e.type === 'key' && e.key === 'Escape'), 'o Esc não fecha o painel de comentários');
+    for (let i = 0; i < ev.length; i++) {
+      if (ev[i].type !== 'click' || !/comment-icon/.test(ev[i].sel || '')) continue;
+      const close = ev.findIndex((x, j) => j > i && x.type === 'click' && /exit|comment-icon/.test(x.sel || ''));
+      assert.ok(close > i, 'abriu os comentários e não fechou');
+      opened++;
+      const between = ev.slice(i + 1, close);
+      if (between.some((x) => x.type === 'wheel')) scrolled++;
+      // Antes de cada rolagem, o mouse está em cima do painel
+      between.forEach((x, k) => {
+        if (x.type !== 'wheel') return;
+        const move = between
+          .slice(0, k)
+          .filter((y) => y.type === 'move')
+          .pop();
+        assert.ok(move && move.x >= 990 && move.x <= 1342, 'rolou com o mouse fora do painel');
+      });
+      i = close; // o clique que fechou não é uma nova abertura
+    }
+  }
+  assert.ok(opened > 3, `abriu comentários ${opened} vezes`);
+  assert.ok(scrolled > 0 && scrolled < opened, `rolou ${scrolled} de ${opened}: deveria rolar às vezes, não sempre`);
+});

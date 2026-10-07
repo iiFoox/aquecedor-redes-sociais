@@ -12,6 +12,10 @@ const SEL = {
   videoLink: 'a[href*="/video/"]',
   close: '[data-e2e="browse-close"]',
   searchInput: 'input[data-e2e="search-user-input"]',
+  // Comentários do Para Você: painel à direita, rolável; o X tem aria-label "exit". O Esc NÃO fecha o painel.
+  commentIcon: '[data-e2e="comment-icon"]',
+  commentPanel: '[class*="DivCommentMain"]',
+  commentClose: 'button[aria-label="exit"]',
   login: '[data-e2e="top-login-button"], #header-login-button',
   captcha: '#captcha-verify-container, #captcha_container, .captcha-verify-container, [class*="captcha_verify"], [class*="CaptchaVerify"]',
   popup: 'button:has-text("Agora não"), button:has-text("Not now"), button:has-text("Pular"), button:has-text("Skip")',
@@ -108,6 +112,34 @@ async function typedSearch({ page, bot, ctl }, term) {
   return true;
 }
 
+// Abre os comentários, lê, às vezes rola a lista e fecha (no X ou no ícone de novo, como gente faz)
+async function browseComments({ page, bot, ctl }) {
+  ctl.status('Abriu os comentários');
+  if (!(await bot.clickVisible(SEL.commentIcon))) return;
+  await bot.pause('decide');
+  await bot.pause('glance', 'Lendo os comentários...');
+  const panel = await page
+    .locator(SEL.commentPanel)
+    .first()
+    .boundingBox()
+    .catch(() => null);
+  if (panel && panel.height > 150) {
+    const rounds = bot.rand(0, 3);
+    for (let i = 0; i < rounds; i++) {
+      // A rodinha só rola o painel com o mouse em cima dele
+      await bot.moveTo(
+        Math.round(panel.x + panel.width * (0.25 + bot.random() * 0.5)),
+        Math.round(panel.y + panel.height * (0.3 + bot.random() * 0.4)),
+      );
+      await bot.scroll(bot.rand(200, 650));
+      await bot.pause('glance', 'Rolando os comentários');
+    }
+  }
+  const closed = (bot.random() < 0.7 && (await bot.clickVisible(SEL.commentClose))) || (await bot.clickVisible(SEL.commentIcon));
+  if (!closed) await page.keyboard.press('Escape');
+  await bot.pause('next');
+}
+
 async function dismissPopups(bot) {
   if (await bot.clickVisible(SEL.popup)) await bot.pause('decide', 'Fechando pop-up');
 }
@@ -144,12 +176,7 @@ const ACTIVITIES = {
 
       // Às vezes abre os comentários, dá uma olhada e fecha
       if (bot.random() < 0.15) {
-        ctl.status('Abriu os comentários');
-        if (await bot.clickVisible('[data-e2e="comment-icon"]')) {
-          await bot.pause('glance', 'Lendo os comentários...');
-          await page.keyboard.press('Escape'); // Fecha
-          await bot.pause('next');
-        }
+        await browseComments({ page, bot, ctl });
       }
 
       if (waitTime > 15000 && ctl.left('follow') > 0 && bot.random() < 0.35) {
