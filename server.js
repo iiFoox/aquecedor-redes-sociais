@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const store = require('./core/store');
 const runner = require('./core/runner');
 const platforms = require('./platforms');
@@ -7,6 +8,19 @@ const { PHASES, READY_DAY, phaseFor } = require('./platforms/phases');
 const { computeHealth, completion } = require('./core/metrics');
 
 const app = express();
+
+// Senha do painel (opcional): PANEL_PASSWORD no .env. Usuário qualquer, senha = PANEL_PASSWORD
+const PANEL_PASSWORD = process.env.PANEL_PASSWORD;
+if (PANEL_PASSWORD) {
+  const expected = Buffer.from(PANEL_PASSWORD);
+  app.use((req, res, next) => {
+    const [, b64 = ''] = (req.headers.authorization || '').split(' ');
+    const pass = Buffer.from(Buffer.from(b64, 'base64').toString().split(':').slice(1).join(':'));
+    if (pass.length === expected.length && crypto.timingSafeEqual(pass, expected)) return next();
+    res.set('WWW-Authenticate', 'Basic realm="WarmUp Studio"').status(401).send('Senha necessária');
+  });
+}
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -229,21 +243,39 @@ app.get('/api/live/:id', (req, res) => {
 
 process.on('SIGINT', async () => {
   console.log('\n💾 Salvando no Supabase antes de sair...');
-  await runner.closeAll();
+  // Espera as sessões fecharem e gravarem o histórico (até 20s) antes do último save
+  await Promise.race([runner.closeAll(), new Promise((r) => setTimeout(r, 20000))]);
   await Promise.race([store.flush(), new Promise((r) => setTimeout(r, 8000))]);
   process.exit(0);
 });
 
 const PORT = process.env.PORT || 3001; // Trocado para 3001 para desviar de processos ocupando a porta 3000
 store.init().then(() => {
-  app.listen(PORT, () => console.log(`🔥 WarmUp Studio em http://localhost:${PORT} (Supabase Sync ON)`));
+  // Só nesta máquina por padrão. Para abrir na rede, HOST=0.0.0.0 no .env (e defina PANEL_PASSWORD)
+  const HOST = process.env.HOST || '127.0.0.1';
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !PANEL_PASSWORD) {
+    console.warn('⚠️  Painel aberto na rede SEM senha. Defina PANEL_PASSWORD no .env.');
+  }
+  app.listen(PORT, HOST, () => console.log(`🔥 WarmUp Studio em http://localhost:${PORT} (Supabase Sync ON)`));
 }).catch(err => {
   console.error('Falha ao conectar no Supabase:', err);
   process.exit(1);
 });
 
 // ---------- SCHEDULER LOOP ----------
+// Um ciclo pode levar mais de 60s (esperas entre contas): nunca roda dois ao mesmo tempo
+let scheduling = false;
 setInterval(async () => {
+  if (scheduling) return;
+  scheduling = true;
+  try {
+    await schedulerTick();
+  } finally {
+    scheduling = false;
+  }
+}, 60000);
+
+async function schedulerTick() {
   const conf = store.getConfig();
   if (!conf.active) return;
 
@@ -285,4 +317,4 @@ setInterval(async () => {
       console.error(`[Scheduler] Erro em ${acc.username}:`, e.message);
     }
   }
-}, 60000);
+}

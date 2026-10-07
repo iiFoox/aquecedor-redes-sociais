@@ -31,13 +31,16 @@ begin
   end loop;
 end $$;
 
--- Se o RLS estiver ligado, a chave do app (anon) precisa poder ler, gravar e apagar
+-- Só o servidor acessa o banco, com a chave secreta (service_role ignora o RLS).
+-- RLS ligado e SEM policy para anon/authenticated: a chave pública não lê nem grava nada.
+-- ATENÇÃO: troque SUPABASE_KEY no .env pela chave secreta ANTES de rodar isto.
 do $$
 declare t text;
 begin
   foreach t in array array['accounts', 'proxies', 'config'] loop
+    execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "app_all" on public.%I', t);
-    execute format('create policy "app_all" on public.%I for all to anon using (true) with check (true)', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
   end loop;
 end $$;
 

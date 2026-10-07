@@ -205,7 +205,7 @@ async function startSession(account) {
   emit({ type: 'session', id, running: true });
   const pend = goalKeys.filter((k) => left(k) > 0).map((k) => `${k} ${left(k)}`).join(', ');
   ctl.log(`Sessão iniciada: Dia ${day}, Fase ${phase.n} (${phase.name}). Faltam: ${pend}. Roda até bater as metas (teto de segurança ${capMin} min)`);
-  run(account, platform, s, ctl);
+  s.done = run(account, platform, s, ctl);
 }
 
 async function run(account, platform, s, ctl) {
@@ -268,8 +268,11 @@ function stopSession(id) {
 }
 
 async function closeAll() {
-  Object.values(sessions).forEach((s) => (s.stop = true));
+  const running = Object.values(sessions);
+  running.forEach((s) => (s.stop = true));
   await Promise.all(Object.values(loginCtx).map((c) => c.close().catch(() => {})));
+  // Espera cada sessão fechar o navegador e gravar o histórico (store.addSession)
+  await Promise.all(running.map((s) => s.done).filter(Boolean));
 }
 
 async function pingProxy(url) {

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 // Credenciais ficam no .env (fora do Git). Modelo em .env.example.
@@ -7,7 +8,11 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.error('❌ Faltam SUPABASE_URL e SUPABASE_KEY. Copie .env.example para .env e preencha.');
   process.exit(1);
 }
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Só o servidor fala com o banco: use a chave secreta (sb_secret_... ou service_role), não a anon.
+if (SUPABASE_KEY.startsWith('sb_publishable_') || /"role":"anon"/.test(Buffer.from(SUPABASE_KEY.split('.')[1] || '', 'base64').toString())) {
+  console.warn('⚠️  SUPABASE_KEY é a chave pública (anon). Troque pela chave secreta no .env e rode setup/supabase.sql.');
+}
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
 
 const localDate = (d = new Date()) => d.toLocaleDateString('sv-SE');
 
@@ -84,6 +89,7 @@ async function init() {
       const dev = devices[Math.floor(Math.random() * devices.length)];
       a.viewport = { w: dev.w, h: dev.h };
       a.userAgent = dev.ua;
+      dirty.accounts.add(a.id);
     }
   }
   console.log(`✅ Sincronização Supabase concluída! (${accounts.length} conta(s), ${proxies.length} proxy(s))`);
@@ -91,7 +97,12 @@ async function init() {
 
 let timer = null;
 const deleted = { accounts: new Set(), proxies: new Set() };
-function persist() {
+// Só o que mudou vai pro banco (antes regravava todas as contas a cada 1,5s)
+const dirty = { accounts: new Set(), proxies: false, config: false };
+function persist(kind, id) {
+  if (kind === 'account') dirty.accounts.add(id);
+  else if (kind === 'proxies') dirty.proxies = true;
+  else if (kind === 'config') dirty.config = true;
   clearTimeout(timer);
   timer = setTimeout(flush, 1500); // Write-Through Cache
 }
@@ -106,24 +117,32 @@ function flush() {
 
 async function doFlush() {
   try {
-    if (accounts.length) {
+    // Tira o lote atual; o que mudar durante o save entra no próximo flush
+    const accIds = [...dirty.accounts];
+    dirty.accounts.clear();
+    const dirtyAccs = accounts.filter((a) => accIds.includes(a.id));
+    if (dirtyAccs.length) {
       // Colunas fixas + todo o resto em "data" (jsonb): nunca mais quebra por coluna faltando
-      const rows = accounts.map((a) => {
+      const rows = dirtyAccs.map((a) => {
         const { live, loginOpen, id, platform, username, ...rest } = a;
         return { id, platform, username, data: rest };
       });
-      check('salvar accounts', await supabase.from('accounts').upsert(rows));
+      if (!check('salvar accounts', await supabase.from('accounts').upsert(rows))) accIds.forEach((i) => dirty.accounts.add(i));
     }
-    if (proxies.length) {
+    if (dirty.proxies && proxies.length) {
+      dirty.proxies = false;
       const rows = proxies.map(({ id, url, status, ms, ...rest }) => ({ id, url, status, ms, data: rest }));
-      check('salvar proxies', await supabase.from('proxies').upsert(rows));
+      if (!check('salvar proxies', await supabase.from('proxies').upsert(rows))) dirty.proxies = true;
     }
     for (const [table, ids] of Object.entries(deleted)) {
       if (!ids.size) continue;
       const list = [...ids];
       if (check(`apagar ${table}`, await supabase.from(table).delete().in('id', list))) list.forEach((i) => ids.delete(i));
     }
-    check('salvar config', await supabase.from('config').upsert({ id: 'main', data: config }));
+    if (dirty.config) {
+      dirty.config = false;
+      if (!check('salvar config', await supabase.from('config').upsert({ id: 'main', data: config }))) dirty.config = true;
+    }
   } catch (e) {
     console.error('Erro ao sincronizar dados com Supabase:', e.message);
   }
@@ -146,7 +165,7 @@ function planOf(a, gen) {
   const d = todayOf(a.id);
   if (!d.plan) {
     d.plan = gen(dayOf(a));
-    persist();
+    persist('account', a.id);
   }
   return d.plan;
 }
@@ -167,7 +186,7 @@ function add(data) {
   ];
   const dev = devices[Math.floor(Math.random() * devices.length)];
   const a = {
-    id: Date.now().toString(36),
+    id: crypto.randomUUID(),
     startedAt: new Date().toISOString(),
     viewport: { w: dev.w, h: dev.h },
     userAgent: dev.ua,
@@ -179,7 +198,7 @@ function add(data) {
     ...data,
   };
   accounts.push(a);
-  persist();
+  persist('account', a.id);
   return a;
 }
 
@@ -195,14 +214,14 @@ function recordAction(id, action, detail = '') {
   const d = todayOf(id);
   d[action] = (d[action] || 0) + 1;
   pushEvent(a, { kind: 'action', action, detail });
-  persist();
+  persist('account', id);
 }
 
 function addLog(id, msg, level = 'info') {
   const a = get(id);
   if (!a) return;
   pushEvent(a, { kind: 'log', msg, level });
-  persist();
+  persist('account', id);
 }
 
 function addAlert(id, level, msg) {
@@ -211,7 +230,7 @@ function addAlert(id, level, msg) {
   a.alerts.push({ t: Date.now(), level, msg });
   if (a.alerts.length > 100) a.alerts.shift();
   pushEvent(a, { kind: 'alert', level, msg });
-  persist();
+  persist('account', id);
 }
 
 function addSession(id, session) {
@@ -222,7 +241,7 @@ function addSession(id, session) {
   const d = todayOf(id);
   d.sessions = (d.sessions || 0) + 1;
   d.minutes = +((d.minutes || 0) + session.minutes).toFixed(1);
-  persist();
+  persist('account', id);
 }
 
 function lastDays(a, n) {
@@ -243,9 +262,9 @@ function recentEvents(limit = 60) {
 
 const allProxies = () => proxies;
 function addProxy(url) {
-  const p = { id: Date.now().toString(36), url, status: 'unknown', ms: 0, lastCheck: null };
+  const p = { id: crypto.randomUUID(), url, status: 'unknown', ms: 0, lastCheck: null };
   proxies.push(p);
-  persist();
+  persist('proxies');
   return p;
 }
 function removeProxy(id) {
@@ -255,13 +274,13 @@ function removeProxy(id) {
 }
 function updateProxy(id, updates) {
   const p = proxies.find(x => x.id === id);
-  if (p) { Object.assign(p, updates); persist(); }
+  if (p) { Object.assign(p, updates); persist('proxies'); }
 }
 
 const getConfig = () => config;
 function setConfig(newConf) {
   config = { ...config, ...newConf };
-  persist();
+  persist('config');
   return config;
 }
 

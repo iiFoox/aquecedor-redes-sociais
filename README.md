@@ -6,7 +6,7 @@ Painel para aquecer contas de TikTok e Instagram com Playwright, salvando tudo n
 
 ```
 npm install
-cp .env.example .env   # preencha com a URL e a chave anon do Supabase
+cp .env.example .env   # preencha com a URL e a chave SECRETA do Supabase
 node server.js
 ```
 
