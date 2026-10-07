@@ -21,6 +21,7 @@
     "autostart:ligar": "node scripts/servico.js autostart:ligar",
     "autostart:desligar": "node scripts/servico.js autostart:desligar",
     "restaurar": "node scripts/restaurar.js",
+    "simular": "node scripts/simular.js",
     "test": "node --test",
     "lint": "eslint .",
     "format": "prettier --write .",

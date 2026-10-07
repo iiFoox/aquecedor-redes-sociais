@@ -11,6 +11,7 @@ cp .env.example .env   # SUPABASE_URL + chave SECRETA do Supabase
 npm start              # motor + painel no terminal; painel em http://localhost:3001
 npm run ligar          # o mesmo em segundo plano pelo PM2 (desligar / status / logs / autostart:ligar)
 npm run restaurar      # restaura data/profiles de um backup (motor desligado)
+npm run simular -- alemdofato5 7   # simula 7 dias sem abrir navegador (só lê o Supabase)
 npm run build          # gera o painel (web/dist); npm start e npm run ligar fazem isso sozinhos
 npm run dev:web        # painel com recarga automática em http://localhost:5173 (precisa do motor ligado)
 npm test               # testes (node:test, inclusive os .ts do painel)
@@ -26,6 +27,9 @@ npm run format         # Prettier
   - `store.js`: estado em memória + gravação em lote no Supabase.
   - `runner.js`: sessões, navegador manual (login/captcha), vigia de sessão travada e prints de erro.
   - `scheduler.js`: piloto automático, teste dos proxies a cada 30 min e fim das férias.
+  - `human.js`: comportamento humano (pausas de cauda longa, personalidade da conta, destino de cada vídeo, rolagem com inércia).
+    `bot.js` usa isso; `ctl.js` é o controle da sessão (o mesmo na sessão real e no simulador).
+  - `sim/`: simulador com relógio e página falsos (`npm run simular -- <conta|nova-tiktok> <dias>`). Roda o código real das plataformas.
   - `backup.js`: backup diário dos perfis (04:00, sem cache, 7 últimos). `proxycheck.js`: teste de proxy sem navegador.
   - `platforms/`: TikTok e Instagram. Cada atividade declara as metas que conta (`produces`) e as que adianta (`advances`).
   - `api/`: rotas. `validate.js`: validação (zod) de tudo que entra.
@@ -41,7 +45,8 @@ npm run format         # Prettier
 
 - O ID de uma conta e a pasta `data/profiles/<id>` nunca mudam: mudar perde o login.
 - Testes nunca abrem o TikTok ou o Instagram.
-- Não aumentar a atividade das contas além do plano de fases. Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).
+- Não aumentar a atividade das contas além do plano de fases. Humanizar muda COMO e QUANDO, nunca QUANTO
+  (o simulador e tests/human.test.js conferem o teto de 120%). Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).
 - Captcha, bloqueio ou falta de login: a sessão para na hora e a conta fica com `attention` até o dono resolver
   (captcha: botão "Abrir navegador"; bloqueio: "Liberar"; login: "Login"). Nada volta sozinho.
 - Nunca trocar o proxy de uma conta sozinho: proxy fora do ar faz a conta esperar ("proxy-fora").

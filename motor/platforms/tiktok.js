@@ -1,4 +1,5 @@
-const { AbortError, isFatal, weighted, pick } = require('../bot');
+const { AbortError, isFatal } = require('../bot');
+const human = require('../human');
 const { phaseIndex } = require('./phases');
 
 const HOME = 'https://www.tiktok.com/foryou';
@@ -39,14 +40,10 @@ const ACTIVITY_GOALS = {
   profile: { produces: ['profile'], advances: ['profile', 'follow'] },
 };
 
-// Tempo de visualização variado: maioria pula rápido, alguns assiste até o fim
-function watchTime(bot) {
-  const r = Math.random();
-  if (r < 0.5) return bot.rand(2500, 7000);
-  if (r < 0.85) return bot.rand(8000, 18000);
-  return bot.rand(20000, 45000);
-}
-const watchNote = (ms) => (ms > 18000 ? ' (completo, sinal de interesse)' : ms < 7000 ? ' (pulando rápido)' : '');
+// Tempo assistido: depende da duração do vídeo, do nicho e da paciência da conta (human.watchPlan)
+const WATCH_NOTE = { skip: ' (pulando)', half: ' (até a metade)', full: ' (inteiro)', loop: ' (revendo, sinal de interesse)' };
+const watchFor = (bot, niche, duration = null) =>
+  human.watchPlan(duration, { niche, persona: bot.persona, mood: bot.mood, rng: bot.random });
 
 // Chance de curtir adaptativa: se as curtidas estão atrasadas em relação aos vídeos
 // que ainda faltam, a chance sobe (com teto de 70% pra não virar padrão de robô).
@@ -82,7 +79,7 @@ async function detectProblem(page) {
 }
 
 async function dismissPopups(bot) {
-  if (await bot.clickVisible(SEL.popup)) await bot.wait(800, 1500, 'Fechando pop-up');
+  if (await bot.clickVisible(SEL.popup)) await bot.pause('decide', 'Fechando pop-up');
 }
 
 const ACTIVITIES = {
@@ -90,80 +87,84 @@ const ACTIVITIES = {
     if (!page.url().includes('/foryou')) await bot.goto(HOME, 'Abrindo o Para Você');
     const n = bot.rand(5, 12);
     for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('watch'); i++) {
-      const ms = watchTime(bot);
-
-      // Tenta extrair a legenda para checar nicho (com timeout de 1s pra não travar o Playwright)
+      // Legenda para checar o nicho (timeout de 1 s pra não travar)
       const desc = await page
         .locator('[data-e2e="video-desc"]')
         .first()
         .textContent({ timeout: 1000 })
         .catch(() => '');
-      const isNiche = await bot.readNiche(desc, account.interests || []);
-
-      const waitTime = isNiche ? bot.rand(12000, 22000) : ms;
-      await bot.wait(waitTime, waitTime, `Assistindo vídeo ${i}/${n} por ${Math.round(waitTime / 1000)}s${watchNote(waitTime)}`);
+      const niche = bot.isNiche(desc, account.interests || []);
+      const { ms: waitTime, outcome } = watchFor(bot, niche);
+      await bot.watch(
+        waitTime,
+        `Assistindo vídeo ${i}/${n} por ${Math.round(waitTime / 1000)}s${WATCH_NOTE[outcome]}${niche ? ' · nicho' : ''}`,
+      );
       ctl.action('watch', `${Math.round(waitTime / 1000)}s`);
 
-      // Erro humano intencional: abrir os comentários e fechar
-      if (Math.random() < 0.15) {
-        ctl.status('Erro humano: abriu comentários');
+      // Às vezes abre os comentários, dá uma olhada e fecha
+      if (bot.random() < 0.15) {
+        ctl.status('Abriu os comentários');
         if (await bot.clickVisible('[data-e2e="comment-icon"]')) {
-          await bot.wait(2000, 5000, 'Lendo os comentários...');
+          await bot.pause('glance', 'Lendo os comentários...');
           await page.keyboard.press('Escape'); // Fecha
-          await bot.wait(1000, 2000);
+          await bot.pause('next');
         }
       }
 
-      if (waitTime > 8000 && Math.random() < (isNiche ? Math.max(0.6, likeChance(ctl, 0.25)) : likeChance(ctl, 0.25))) {
+      // Chance de curtir: a do plano (adaptativa), mais alta no nicho, com a inclinação da conta.
+      // Meta de curtidas batida = chance zero (antes o nicho furava e passava do teto de 120%).
+      const likeP = human.likeProbability(likeChance(ctl, 0.25), { niche, persona: bot.persona });
+      if (waitTime > 8000 && bot.random() < likeP) {
         ctl.status('Gostou do vídeo, curtindo');
         if (await bot.clickVisible(SEL.like)) {
           ctl.action('like', 'Vídeo do Para Você');
-          await bot.wait(800, 2000, 'Continua assistindo após curtir');
+          await bot.pause('afterAction', 'Continua assistindo após curtir');
         }
       }
-      if (waitTime > 15000 && ctl.left('follow') > 0 && Math.random() < 0.35) {
+      if (waitTime > 15000 && ctl.left('follow') > 0 && bot.random() < 0.35) {
         ctl.status('Assistiu até o fim, seguindo o criador');
         if (await bot.clickVisible(SEL.feedFollow)) {
           ctl.action('follow', 'Criador do vídeo');
-          await bot.wait(1000, 2500);
+          await bot.pause('afterAction');
         }
       }
       await bot.guard();
       ctl.status('Indo para o próximo vídeo');
       await page.keyboard.press('ArrowDown');
-      await bot.wait(700, 1500);
+      await bot.pause('next');
     }
     return true;
   },
 
   async search({ page, bot, ctl, account }) {
-    const term = pick(account.interests).trim();
+    const term = bot.pick(account.interests).trim();
     await bot.goto(`https://www.tiktok.com/search/video?q=${encodeURIComponent(term)}`, `Buscando "${term}"`);
     ctl.action('search', term);
-    await bot.wait(2000, 4000, 'Olhando os resultados da busca');
+    await bot.pause('read', 'Olhando os resultados da busca');
     await bot.scroll(bot.rand(200, 600));
-    await bot.wait(1500, 3000, 'Escolhendo um vídeo');
+    await bot.pause('decide', 'Escolhendo um vídeo');
     if (!(await bot.clickVisible(SEL.videoLink, { random: true, minSize: 80 }))) {
       ctl.log('Nenhum vídeo encontrado na busca', 'warn');
       return false;
     }
-    await bot.wait(2000, 3000, 'Abrindo o vídeo');
+    await bot.pause('load', 'Abrindo o vídeo');
     const n = bot.rand(3, 6);
     for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('watch'); i++) {
-      const ms = watchTime(bot);
-      await bot.wait(ms, ms, `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${watchNote(ms)}`);
+      // Veio de uma busca do nicho: conta como conteúdo do nicho
+      const { ms, outcome } = watchFor(bot, true);
+      await bot.watch(ms, `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${WATCH_NOTE[outcome]}`);
       ctl.action('watch', `Busca: ${term}`);
       if (
         ms > 8000 &&
-        Math.random() < Math.max(0.45, likeChance(ctl, 0.45)) &&
+        bot.random() < human.likeProbability(likeChance(ctl, 0.45), { niche: true, nicheMin: 0.45, persona: bot.persona }) &&
         ctl.left('like') > 0 &&
         (await bot.clickVisible(SEL.browseLike))
       ) {
         ctl.action('like', `Busca: ${term}`);
-        await bot.wait(800, 1800);
+        await bot.pause('afterAction');
       }
       await page.keyboard.press('ArrowDown');
-      await bot.wait(800, 1500);
+      await bot.pause('next');
     }
     if (!(await bot.clickVisible(SEL.close))) await page.keyboard.press('Escape');
     return true;
@@ -171,26 +172,26 @@ const ACTIVITIES = {
 
   async profile({ page, bot, ctl }) {
     if (!page.url().includes('/foryou')) await bot.goto(HOME, 'Abrindo o Para Você');
-    await bot.wait(3000, 6000, 'Assistindo antes de abrir o perfil');
+    await bot.pause('read', 'Assistindo antes de abrir o perfil');
     if (!(await bot.clickVisible(SEL.avatar))) {
       ctl.log('Avatar do criador não encontrado', 'warn');
       return false;
     }
-    await bot.wait(3000, 5000, 'Abrindo o perfil do criador');
+    await bot.pause('load', 'Abrindo o perfil do criador');
     const handle = (page.url().split('/@')[1] || '').split(/[/?]/)[0];
     ctl.action('profile', handle ? `@${handle}` : 'Perfil');
     const rounds = bot.rand(1, 3);
     for (let i = 0; i < rounds; i++) {
       ctl.status('Rolando o perfil');
       await bot.scroll(bot.rand(300, 700));
-      await bot.wait(2000, 4500, 'Olhando os vídeos do perfil');
+      await bot.pause('glance', 'Olhando os vídeos do perfil');
     }
-    if (ctl.left('follow') > 0 && Math.random() < 0.55) {
+    if (ctl.left('follow') > 0 && bot.random() < 0.55) {
       await bot.scroll(-2500);
-      await bot.wait(800, 1500);
+      await bot.pause('decide');
       if (await bot.clickVisible(SEL.follow)) {
         ctl.action('follow', handle ? `@${handle}` : 'Pelo perfil');
-        await bot.wait(1500, 3000, 'Pausa após seguir');
+        await bot.pause('afterAction', 'Pausa após seguir');
       }
     }
     await bot.goto(HOME, 'Voltando ao Para Você');
@@ -198,8 +199,7 @@ const ACTIVITIES = {
   },
 
   async afk({ bot }) {
-    const ms = bot.rand(35000, 90000);
-    await bot.wait(ms, ms, 'Distração (AFK): O humano foi ao banheiro ou minimizou a janela');
+    await bot.pause('distraction', 'Distração: saiu da tela por um tempo');
     bot.rest(); // voltou descansado
     return true;
   },
@@ -219,7 +219,9 @@ async function run({ page, bot, ctl, account }) {
   const interests = account.interests || [];
   if (!interests.length) skip.add('search');
   let last = null;
-  let lastAfk = Date.now();
+  let lastAfk = bot.now();
+  // Distrações: o intervalo médio entre elas é sorteado por sessão (personalidade + acaso)
+  const afkGap = human.distractionGapMin(bot.persona, bot.random) * 60000;
   // Atividade liberada: não falhou nesta sessão, não passa nenhuma meta do teto e ainda adianta alguma
   const can = (act) => !skip.has(act) && ctl.allowed(ACTIVITY_GOALS[act], account) && ctl.useful(ACTIVITY_GOALS[act]);
 
@@ -237,11 +239,11 @@ async function run({ page, bot, ctl, account }) {
     if (can('profile')) opts.push(['profile', ctl.left('follow') > 0 ? 2 : needFyp ? 1.5 : 4]);
     // O que falta só sairia passando do teto de 120% do plano: encerra em vez de forçar
     if (!opts.length) return 'limit';
-    // AFK: nunca duas vezes seguidas e no máximo ~1 a cada 6 min
-    if (last !== 'afk' && Date.now() - lastAfk > 6 * 60000) opts.push(['afk', 0.5]);
-    const act = weighted(opts);
+    // Distração: nunca duas vezes seguidas e só depois do intervalo sorteado desta sessão
+    if (last !== 'afk' && bot.now() - lastAfk > afkGap) opts.push(['afk', 0.5]);
+    const act = bot.weighted(opts);
     last = act;
-    if (act === 'afk') lastAfk = Date.now();
+    if (act === 'afk') lastAfk = bot.now();
     ctl.log(`Próxima atividade: ${ACT_LABEL[act]}`);
     let ok = false;
     try {
@@ -263,7 +265,7 @@ async function run({ page, bot, ctl, account }) {
     }
     await dismissPopups(bot);
     await bot.guard();
-    if (!ctl.goalsDone([...skip])) await bot.wait(3000, 9000, 'Pausa natural entre atividades');
+    if (!ctl.goalsDone([...skip])) await bot.pause('between', 'Pausa natural entre atividades');
   }
 }
 
@@ -275,16 +277,16 @@ module.exports = {
   actions: ACTIONS,
   activities: ACTIVITY_GOALS,
   plans: PLANS,
-  planForDay: (day) => {
+  planForDay: (day, rng = Math.random) => {
     const base = PLANS[phaseIndex(day)];
     return {
-      minutes: Math.max(3, base.minutes + Math.floor(Math.random() * 5) - 2), // -2 a +2 min
-      watch: Math.max(5, base.watch + Math.floor(Math.random() * 11) - 5), // -5 a +5 videos
-      like: Math.max(1, base.like + Math.floor(Math.random() * 5) - 2),
+      minutes: Math.max(3, base.minutes + Math.floor(rng() * 5) - 2), // -2 a +2 min
+      watch: Math.max(5, base.watch + Math.floor(rng() * 11) - 5), // -5 a +5 videos
+      like: Math.max(1, base.like + Math.floor(rng() * 5) - 2),
       // Fase sem follow continua sem follow (o sorteio não pode criar 1 follow na fase 1)
-      follow: base.follow === 0 ? 0 : Math.max(0, base.follow + Math.floor(Math.random() * 3) - 1),
-      profile: Math.max(0, base.profile + Math.floor(Math.random() * 3) - 1),
-      search: Math.max(0, base.search + Math.floor(Math.random() * 2)),
+      follow: base.follow === 0 ? 0 : Math.max(0, base.follow + Math.floor(rng() * 3) - 1),
+      profile: Math.max(0, base.profile + Math.floor(rng() * 3) - 1),
+      search: Math.max(0, base.search + Math.floor(rng() * 2)),
     };
   },
   detectProblem,

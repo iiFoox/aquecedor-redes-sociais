@@ -1,0 +1,60 @@
+// Controle de uma sessão: o que falta, tetos, cansaço do motor e o registro do que aconteceu.
+// Usado pela sessão real (runner.js) e pelo simulador (motor/sim), com o mesmo comportamento.
+const rules = require('./rules');
+
+const STALL_MS = 10 * 60000; // 10 min sem progresso nas metas = travou
+
+/**
+ * state: estado da sessão ({ stop, stats, startedAt, endsAt, lastProgress, lastBeat, status... })
+ * plan: plano do dia. done(): o que já foi feito hoje.
+ * now(): relógio (o simulador passa um relógio falso).
+ * hooks: { status(text, until), action(type, detail), log(msg, level), alert(level, msg, kind) }
+ */
+function createCtl({ state, plan, done, now = Date.now, hooks }) {
+  const goalKeys = Object.keys(plan).filter((k) => k !== 'minutes' && plan[k] > 0);
+  const left = (k) => (plan[k] || 0) - (done()[k] || 0);
+  state.samples = state.samples || {};
+  return {
+    stats: state.stats,
+    plan,
+    goalKeys,
+    now,
+    shouldStop: () => state.stop,
+    timeLeft: () => state.endsAt - now(),
+    elapsed: () => now() - state.startedAt,
+    left,
+    // Meta já no teto de 120% do plano do dia
+    capped: (k) => rules.isCapped(plan, done(), k),
+    allowed: (act, acc) => rules.activityAllowed(act, plan, done(), acc),
+    useful: (act) => rules.activityUseful(act, plan, done()),
+    // Todas as metas batidas? (ignora metas marcadas como inalcançáveis nesta sessão)
+    goalsDone: (skip = []) => goalKeys.every((k) => skip.includes(k) || left(k) <= 0),
+    stalled: () => now() - state.lastProgress > STALL_MS,
+    status(text, ms) {
+      state.lastBeat = now();
+      state.status = text;
+      state.statusAt = now();
+      state.statusUntil = ms ? now() + ms : null;
+      hooks.status(text, state.statusUntil);
+    },
+    action(type, detail = '') {
+      state.lastBeat = now();
+      if (goalKeys.includes(type) && left(type) > 0) state.lastProgress = now();
+      state.stats[type] = (state.stats[type] || 0) + 1;
+      hooks.action(type, detail);
+    },
+    log(msg, level = 'info') {
+      state.lastBeat = now();
+      hooks.log(msg, level);
+    },
+    alert(level, msg, kind) {
+      hooks.alert(level, msg, kind);
+    },
+    // Amostra de tempo (pausas, tempo por vídeo, digitação): vira o resumo "Naturalidade" da sessão
+    sample(kind, ms) {
+      (state.samples[kind] = state.samples[kind] || []).push(Math.round(ms));
+    },
+  };
+}
+
+module.exports = { createCtl, STALL_MS };

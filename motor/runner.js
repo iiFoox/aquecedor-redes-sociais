@@ -9,6 +9,8 @@ const rules = require('./rules');
 const platforms = require('./platforms');
 const { phaseFor } = require('./platforms/phases');
 const { createBot, AbortError } = require('./bot');
+const { createCtl } = require('./ctl');
+const human = require('./human');
 const { checkProxy } = require('./proxycheck');
 
 const hub = new EventEmitter();
@@ -175,9 +177,7 @@ async function startSession(account) {
 
   // Sem timer fixo: a sessão roda até bater as metas. Só existe um teto de segurança
   // (2,5x o tempo estimado, entre 30 e 90 min) e um detector de travamento (10 min sem progresso).
-  const capMin = Math.min(90, Math.max(30, Math.round(plan.minutes * 2.5)));
-  const STALL_MS = 10 * 60000;
-  const goalKeys = Object.keys(plan).filter((k) => k !== 'minutes' && plan[k] > 0);
+  const capMin = rules.sessionCap(plan);
 
   const s = (sessions[id] = {
     stop: false,
@@ -197,46 +197,27 @@ async function startSession(account) {
     killed: null,
   });
 
-  const done = () => store.todayOf(id);
-  const left = (k) => (plan[k] || 0) - (done()[k] || 0);
-  const ctl = {
-    stats: s.stats,
+  const ctl = createCtl({
+    state: s,
     plan,
-    shouldStop: () => s.stop,
-    timeLeft: () => s.endsAt - Date.now(),
-    elapsed: () => Date.now() - s.startedAt,
-    left,
-    // Meta já no teto de 120% do plano do dia
-    capped: (k) => rules.isCapped(plan, done(), k),
-    allowed: (act, acc) => rules.activityAllowed(act, plan, done(), acc),
-    useful: (act) => rules.activityUseful(act, plan, done()),
-    // Todas as metas batidas? (ignora metas marcadas como inalcançáveis nesta sessão)
-    goalsDone: (skip = []) => goalKeys.every((k) => skip.includes(k) || left(k) <= 0),
-    stalled: () => Date.now() - s.lastProgress > STALL_MS,
-    status(text, ms) {
-      s.lastBeat = Date.now();
-      s.status = text;
-      s.statusAt = Date.now();
-      s.statusUntil = ms ? Date.now() + ms : null;
-      emit({ type: 'status', id, text, until: s.statusUntil });
+    done: () => store.todayOf(id),
+    hooks: {
+      status: (text, until) => emit({ type: 'status', id, text, until }),
+      action(type, detail) {
+        store.recordAction(id, type, detail);
+        emit({ type: 'action', id, action: type, detail, stats: s.stats });
+      },
+      log(msg, level) {
+        store.addLog(id, msg, level);
+        emit({ type: 'log', id, msg, level });
+      },
+      alert(level, msg, kind) {
+        store.addAlert(id, level, msg, kind);
+        emit({ type: 'alert', id, level, msg });
+      },
     },
-    action(type, detail = '') {
-      s.lastBeat = Date.now();
-      if (goalKeys.includes(type) && left(type) > 0) s.lastProgress = Date.now();
-      s.stats[type] = (s.stats[type] || 0) + 1;
-      store.recordAction(id, type, detail);
-      emit({ type: 'action', id, action: type, detail, stats: s.stats });
-    },
-    log(msg, level = 'info') {
-      s.lastBeat = Date.now();
-      store.addLog(id, msg, level);
-      emit({ type: 'log', id, msg, level });
-    },
-    alert(level, msg, kind) {
-      store.addAlert(id, level, msg, kind);
-      emit({ type: 'alert', id, level, msg });
-    },
-  };
+  });
+  const { goalKeys, left } = ctl;
 
   emit({ type: 'session', id, running: true });
   const pend = goalKeys
@@ -269,7 +250,8 @@ async function run(account, platform, s, ctl) {
     }
 
     await startScreencast(page, account.id);
-    const bot = createBot(page, ctl);
+    // Personalidade da conta + humor do dia (pequena variação de um dia para o outro)
+    const bot = createBot(page, ctl, { persona: account.persona, mood: human.dayMood(account.persona, rules.localDate()) });
     bot.guard = () => guard(page, platform, account);
     const reason = await platform.run({ page, bot, ctl, plan: s.plan, account });
     if (reason === 'goals') ctl.log('Todas as metas do dia foram batidas ✔');

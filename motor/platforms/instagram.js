@@ -1,4 +1,5 @@
-const { AbortError, isFatal, weighted, pick } = require('../bot');
+const { AbortError, isFatal } = require('../bot');
+const human = require('../human');
 const { phaseIndex } = require('./phases');
 
 const HOME = 'https://www.instagram.com/';
@@ -83,7 +84,7 @@ async function detectProblem(page) {
 
 async function dismissPopups(bot) {
   for (let i = 0; i < 2; i++) {
-    if (await bot.clickVisible(SEL.popup)) await bot.wait(800, 1600, 'Fechando pop-up');
+    if (await bot.clickVisible(SEL.popup)) await bot.pause('decide', 'Fechando pop-up');
     else break;
   }
 }
@@ -102,25 +103,29 @@ const ACTIVITIES = {
         .first()
         .textContent({ timeout: 1000 })
         .catch(() => '');
-      const isNiche = await bot.readNiche(text, account.interests || []);
-      const waitTime = isNiche ? bot.rand(12000, 22000) : bot.rand(2000, 8000);
+      const isNiche = bot.isNiche(text, account.interests || []);
+      const t0 = bot.now();
+      if (isNiche) await bot.readNiche(text, account.interests || []);
+      else await bot.pause('read', 'Lendo o post');
+      const waitTime = bot.now() - t0;
 
-      await bot.wait(waitTime, waitTime, 'Lendo o post como uma pessoa faria');
-
-      if (Math.random() < 0.12) {
-        ctl.status('Erro humano: abriu comentários do post');
+      // Às vezes abre os comentários, dá uma olhada e fecha
+      if (bot.random() < 0.12) {
+        ctl.status('Abriu os comentários do post');
         if (await bot.clickVisible('svg[aria-label="Comentar"], svg[aria-label="Comment"]', { minSize: 15 })) {
-          await bot.wait(1500, 3500, 'Olhando comentários...');
+          await bot.pause('glance', 'Olhando comentários...');
           await page.keyboard.press('Escape');
-          await bot.wait(1000, 2000);
+          await bot.pause('next');
         }
       }
 
-      if (waitTime > 4000 && Math.random() < (isNiche ? Math.max(0.6, likeChance(ctl, 0.3)) : likeChance(ctl, 0.3))) {
+      // Meta de curtidas batida = chance zero, com ou sem nicho
+      const likeP = human.likeProbability(likeChance(ctl, 0.3), { niche: isNiche, persona: bot.persona });
+      if (waitTime > 4000 && bot.random() < likeP) {
         ctl.status('Decidiu curtir este post');
         if (await bot.clickVisible(SEL.like, { minSize: 20 })) {
           ctl.action('like', 'Post do feed');
-          await bot.wait(1500, 4000, 'Pausa após curtir');
+          await bot.pause('afterAction', 'Pausa após curtir');
         }
       }
     }
@@ -134,16 +139,18 @@ const ACTIVITIES = {
       ctl.log('Não encontrei stories disponíveis', 'warn');
       return false;
     }
-    await bot.wait(1500, 2500, 'Abrindo story');
+    await bot.pause('load', 'Abrindo story');
     const n = Math.min(ctl.left('story'), bot.rand(3, 6));
     for (let i = 1; i <= n; i++) {
-      await bot.wait(3000, 8000, `Assistindo story ${i}/${n}`);
+      // Story: a maioria passa em poucos segundos; às vezes fica até o fim (~15 s)
+      const sms = Math.round(human.bounded(bot.random, 5200 * (bot.persona ? bot.persona.patience : 1), 0.45, 1500, 15500));
+      await bot.watch(sms, `Assistindo story ${i}/${n}`);
       ctl.action('story', `Story ${i}/${n}`);
       if (ctl.timeLeft() <= 0) break;
       await page.keyboard.press('ArrowRight');
     }
     await page.keyboard.press('Escape');
-    await bot.wait(1000, 2000);
+    await bot.pause('next');
     return true;
   },
 
@@ -157,67 +164,67 @@ const ACTIVITIES = {
         .first()
         .textContent({ timeout: 1000 })
         .catch(() => '');
-      const isNiche = await bot.readNiche(text, account.interests || []);
-
-      let ms = Math.random() < 0.25 ? bot.rand(12000, 30000) : bot.rand(4000, 11000);
-      if (isNiche) ms = bot.rand(18000, 35000);
-
+      const isNiche = bot.isNiche(text, account.interests || []);
+      const { ms, outcome } = human.watchPlan(null, { niche: isNiche, persona: bot.persona, mood: bot.mood, rng: bot.random });
       const sec = Math.round(ms / 1000);
-      await bot.wait(ms, ms, `Assistindo reel ${i}/${n} por ${sec}s${ms > 12000 ? ' (até o fim, sinal de interesse)' : ''}`);
+      const note = { skip: ' (pulando)', half: ' (até a metade)', full: ' (inteiro)', loop: ' (revendo, sinal de interesse)' }[outcome];
+      await bot.watch(ms, `Assistindo reel ${i}/${n} por ${sec}s${note}${isNiche ? ' · nicho' : ''}`);
       ctl.action('reel', `${sec}s`);
 
-      if (Math.random() < 0.1) {
-        ctl.status('Erro humano: pausou reel');
+      // Às vezes pausa o reel com um clique, espera e volta
+      if (bot.random() < 0.1) {
+        ctl.status('Pausou o reel');
         await page.mouse.click(bot.rand(500, 700), bot.rand(300, 500));
-        await bot.wait(2000, 5000);
+        await bot.pause('glance');
         await page.mouse.click(bot.rand(500, 700), bot.rand(300, 500)); // despausa
       }
 
-      if (ms > 12000 && Math.random() < (isNiche ? Math.max(0.6, likeChance(ctl, 0.4)) : likeChance(ctl, 0.4))) {
+      // Meta de curtidas batida = chance zero, com ou sem nicho
+      const likeP = human.likeProbability(likeChance(ctl, 0.4), { niche: isNiche, persona: bot.persona });
+      if (ms > 12000 && bot.random() < likeP) {
         if (await bot.clickVisible(SEL.like, { minSize: 20 })) ctl.action('like', 'Reel');
       }
       ctl.status('Passando para o próximo reel');
       await bot.moveTo(bot.rand(560, 720), bot.rand(300, 500));
       await bot.scroll(bot.rand(700, 900));
-      await bot.wait(800, 1600);
+      await bot.pause('next');
     }
     return true;
   },
 
   async explore({ page, bot, ctl, account }) {
-    const tag = account.interests.length ? pick(account.interests).replace(/^#/, '').trim() : null;
+    const tag = account.interests.length ? bot.pick(account.interests).replace(/^#/, '').trim() : null;
     const url = tag ? `${HOME}explore/tags/${encodeURIComponent(tag)}/` : `${HOME}explore/`;
     await bot.goto(url, tag ? `Explorando a hashtag #${tag}` : 'Abrindo o Explorar');
     if (ctl.left('explore') > 0) ctl.action('explore', tag ? `#${tag}` : 'Explorar');
     await bot.scroll(bot.rand(300, 700));
-    await bot.wait(2000, 4000, 'Olhando a grade de publicações');
+    await bot.pause('read', 'Olhando a grade de publicações');
     const posts = bot.rand(2, 4);
     for (let i = 1; i <= posts && ctl.timeLeft() > 0; i++) {
       ctl.status(`Abrindo publicação ${i}/${posts}`);
       if (!(await bot.clickVisible(SEL.post, { random: true, minSize: 80 }))) break;
-      await bot.wait(3000, 8000, 'Vendo a publicação');
-      if (ctl.left('like') > 0 && Math.random() < 0.5 && (await bot.clickVisible(SEL.like, { minSize: 20 }))) {
+      await bot.pause('read', 'Vendo a publicação');
+      if (ctl.left('like') > 0 && bot.random() < 0.5 && (await bot.clickVisible(SEL.like, { minSize: 20 }))) {
         ctl.action('like', tag ? `#${tag}` : 'Explorar');
-        await bot.wait(1000, 3000, 'Pausa após curtir');
+        await bot.pause('afterAction', 'Pausa após curtir');
       }
-      if (ctl.left('follow') > 0 && Math.random() < 0.55) {
+      if (ctl.left('follow') > 0 && bot.random() < 0.55) {
         const btn = page.getByRole('button', { name: /^(Seguir|Follow)$/ }).first();
         if (await btn.isVisible().catch(() => false)) {
           ctl.status('Seguindo o autor da publicação');
           await bot.click(btn);
           ctl.action('follow', tag ? `Autor em #${tag}` : 'Autor no Explorar');
-          await bot.wait(2000, 5000, 'Pausa após seguir');
+          await bot.pause('afterAction', 'Pausa após seguir');
         }
       }
       await page.keyboard.press('Escape');
-      await bot.wait(2000, 6000, 'Voltando à grade');
+      await bot.pause('decide', 'Voltando à grade');
     }
     return true;
   },
 
   async afk({ bot }) {
-    const ms = bot.rand(35000, 90000); // Fica de 35s a 1.5 min sem fazer nada
-    await bot.wait(ms, ms, 'Distração (AFK): O humano foi ao banheiro ou minimizou a janela');
+    await bot.pause('distraction', 'Distração: saiu da tela por um tempo');
     bot.rest(); // voltou descansado
     return true;
   },
@@ -235,7 +242,9 @@ async function run({ page, bot, ctl, account }) {
   const fails = {};
   const skip = new Set(); // metas inalcançáveis NESTA sessão (ex: conta nova sem stories pra ver)
   let last = null;
-  let lastAfk = Date.now();
+  let lastAfk = bot.now();
+  // Distrações: o intervalo médio entre elas é sorteado por sessão (personalidade + acaso)
+  const afkGap = human.distractionGapMin(bot.persona, bot.random) * 60000;
   // Atividade liberada: não falhou nesta sessão, não passa nenhuma meta do teto e ainda adianta alguma
   const can = (act) => !skip.has(SKIP_KEY[act]) && ctl.allowed(ACTIVITY_GOALS[act], account) && ctl.useful(ACTIVITY_GOALS[act]);
 
@@ -252,11 +261,11 @@ async function run({ page, bot, ctl, account }) {
     if (can('explore')) opts.push(['explore', 2]);
     // O que falta só sairia passando do teto de 120% do plano: encerra em vez de forçar
     if (!opts.length) return 'limit';
-    // AFK: nunca duas vezes seguidas e no máximo ~1 a cada 6 min
-    if (last !== 'afk' && Date.now() - lastAfk > 6 * 60000) opts.push(['afk', 0.5]);
-    const act = weighted(opts);
+    // Distração: nunca duas vezes seguidas e só depois do intervalo sorteado desta sessão
+    if (last !== 'afk' && bot.now() - lastAfk > afkGap) opts.push(['afk', 0.5]);
+    const act = bot.weighted(opts);
     last = act;
-    if (act === 'afk') lastAfk = Date.now();
+    if (act === 'afk') lastAfk = bot.now();
     ctl.log(`Próxima atividade: ${ACT_LABEL[act]}`);
     let ok = false;
     try {
@@ -283,7 +292,7 @@ async function run({ page, bot, ctl, account }) {
     }
     await dismissPopups(bot);
     await bot.guard();
-    if (!ctl.goalsDone([...skip])) await bot.wait(4000, 12000, 'Pausa natural entre atividades');
+    if (!ctl.goalsDone([...skip])) await bot.pause('between', 'Pausa natural entre atividades');
   }
 }
 
@@ -295,17 +304,17 @@ module.exports = {
   actions: ACTIONS,
   activities: ACTIVITY_GOALS,
   plans: PLANS,
-  planForDay: (day) => {
+  planForDay: (day, rng = Math.random) => {
     const base = PLANS[phaseIndex(day)];
     // Adiciona "White Noise" (Ruído Branco) na variação do comportamento diário
     return {
-      minutes: Math.max(3, base.minutes + Math.floor(Math.random() * 5) - 2), // -2 a +2 min
-      like: Math.max(1, base.like + Math.floor(Math.random() * 3) - 1),
+      minutes: Math.max(3, base.minutes + Math.floor(rng() * 5) - 2), // -2 a +2 min
+      like: Math.max(1, base.like + Math.floor(rng() * 3) - 1),
       // Fase sem follow continua sem follow (o sorteio não pode criar 1 follow na fase 1)
-      follow: base.follow === 0 ? 0 : Math.max(0, base.follow + Math.floor(Math.random() * 3) - 1),
-      story: Math.max(1, base.story + Math.floor(Math.random() * 3) - 1),
-      reel: Math.max(1, base.reel + Math.floor(Math.random() * 3) - 1),
-      explore: Math.max(0, base.explore + Math.floor(Math.random() * 2)),
+      follow: base.follow === 0 ? 0 : Math.max(0, base.follow + Math.floor(rng() * 3) - 1),
+      story: Math.max(1, base.story + Math.floor(rng() * 3) - 1),
+      reel: Math.max(1, base.reel + Math.floor(rng() * 3) - 1),
+      explore: Math.max(0, base.explore + Math.floor(rng() * 2)),
     };
   },
   detectProblem,

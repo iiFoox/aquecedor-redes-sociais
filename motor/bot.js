@@ -1,10 +1,15 @@
-const rand = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const human = require('./human');
 
-function weighted(options) {
+const realClock = { now: () => Date.now(), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
+const sleep = realClock.sleep;
+
+// Inteiro entre a e b (inclusive)
+const rand = (a, b, rng = Math.random) => Math.floor(rng() * (b - a + 1)) + a;
+const pick = (arr, rng = Math.random) => arr[Math.floor(rng() * arr.length)];
+
+function weighted(options, rng = Math.random) {
   const total = options.reduce((s, [, w]) => s + w, 0);
-  let r = Math.random() * total;
+  let r = rng() * total;
   for (const [v, w] of options) if ((r -= w) <= 0) return v;
   return options[0][0];
 }
@@ -23,57 +28,91 @@ class AbortError extends Error {
 }
 const isFatal = (e) => e instanceof StopError || e instanceof AbortError;
 
-const { createCursor } = require('ghost-cursor');
-
 /**
- * Cria o "bot humano": todas as interações passam por aqui para
- * parecerem naturais (mouse em curva, pausas aleatórias, rolagem em passos).
+ * Cria o "bot humano": todas as interações passam por aqui para parecerem naturais
+ * (mouse em curva, pausas de cauda longa, rolagem com inércia, mouse que mexe enquanto espera).
+ *
+ * opts (o simulador troca tudo isso por versões falsas):
+ *  - persona: personalidade da conta (human.makePersona). Sem ela, usa valores médios.
+ *  - mood: humor do dia (human.dayMood)
+ *  - rng: sorteio. clock: { now, sleep }. cursor: cursor do mouse (padrão: ghost-cursor).
  */
-function createBot(page, ctl) {
-  const cursor = createCursor(page);
-  const pos = { x: rand(400, 800), y: rand(250, 550) };
+function createBot(page, ctl, opts = {}) {
+  const rng = opts.rng || Math.random;
+  const clock = opts.clock || realClock;
+  const persona = opts.persona || null;
+  const mood = opts.mood || null;
+  const cursor = opts.cursor || require('ghost-cursor').createCursor(page);
+  const pos = { x: rand(400, 800, rng), y: rand(250, 550, rng) };
   const vp = () => page.viewportSize() || { width: 1280, height: 800 };
+  const r = (a, b) => rand(a, b, rng);
   let fatigue = 1.0;
 
-  // Gaussiana para gerar tempo de espera orgânico tendendo para a média
-  function gaussianRand(min, max) {
-    let u = 0,
-      v = 0;
-    while (u === 0) u = Math.random();
-    while (v === 0) v = Math.random();
-    let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-    num = num / 10.0 + 0.5; // Aproxima de 0 a 1 (média em 0.5)
-    if (num < 0 || num > 1) return gaussianRand(min, max);
-    return Math.floor(num * (max - min) + min);
-  }
-
-  // Espera aleatória, interrompível, que informa ao painel o que está acontecendo
-  // Fadiga limitada a 1.6x (antes ia até 2.5x e deixava toda pausa gigante)
+  // Cansaço: sobe devagar com o uso (rolagens), com teto de 1,6x. Uma distração "descansa".
   const FATIGUE_MAX = 1.6;
   const rest = () => {
     fatigue = 1.0;
   };
 
-  async function wait(min, max = min, label) {
-    const ms = gaussianRand(min, max) * Math.min(fatigue, FATIGUE_MAX);
+  // Espera até `ms`, interrompível. Esperas longas mexem o mouse de leve, como quem está olhando a tela.
+  async function hold(ms, label, kind) {
     if (label) ctl.status(label, ms);
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
+    if (kind && ctl.sample) ctl.sample(kind, ms);
+    const end = clock.now() + ms;
+    let nextFidget = clock.now() + human.bounded(rng, 4000, 0.6, 1500, 15000);
+    while (clock.now() < end) {
       if (ctl.shouldStop()) throw new StopError();
-      await sleep(Math.min(400, end - Date.now()));
+      if (ms > 6000 && clock.now() >= nextFidget && clock.now() + 1500 < end) {
+        await fidget();
+        nextFidget = clock.now() + human.bounded(rng, 5000, 0.7, 1500, 20000);
+        continue;
+      }
+      await clock.sleep(Math.min(400, end - clock.now()));
     }
   }
 
-  // Movimento de mouse gerado pelo ghost-cursor (Curvas fluidas baseadas em Fitts)
+  // Espera entre min e max com cauda longa (a maioria perto do meio, às vezes bem mais).
+  // min === max: espera exatamente esse tempo (ex.: tempo já decidido para um vídeo).
+  async function wait(min, max = min, label) {
+    const ms = (min === max ? min : human.span(min, max, rng)) * Math.min(fatigue, FATIGUE_MAX);
+    await hold(Math.round(ms), label, 'pause');
+  }
+
+  // Espera de um tipo conhecido (load, read, decide, next...), com a curva própria (human.PAUSES)
+  async function pause(kind, label) {
+    await hold(human.pause(kind, { rng, persona, mood, fatigue: Math.min(fatigue, FATIGUE_MAX) }), label, 'pause');
+  }
+
+  // Tempo assistindo um vídeo (já decidido por human.watchPlan)
+  async function watch(ms, label) {
+    await hold(ms, label, 'watch');
+  }
+
+  // Movimento de mouse gerado pelo ghost-cursor (curvas com aceleração e leve erro no alvo)
   async function moveTo(x, y) {
     await cursor.moveTo({ x, y });
     pos.x = x;
     pos.y = y;
   }
 
+  // Mexidinha do mouse: perto de onde está; às vezes sai da área do vídeo para a lateral
+  async function fidget() {
+    const { width, height } = vp();
+    let x;
+    let y;
+    if (rng() < 0.2) {
+      x = rng() < 0.5 ? r(20, Math.round(width * 0.18)) : r(Math.round(width * 0.82), width - 20);
+      y = r(Math.round(height * 0.2), Math.round(height * 0.85));
+    } else {
+      x = Math.max(10, Math.min(width - 10, pos.x + r(-90, 90)));
+      y = Math.max(10, Math.min(height - 10, pos.y + r(-70, 70)));
+    }
+    await moveTo(x, y).catch(() => {});
+  }
+
   async function click(el, scroll = true) {
     if (scroll) await el.scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
-    // O ghost-cursor implementa overshoot natural e hesitação antes do clique
+    // O ghost-cursor faz a curva até o alvo, passa um pouco e corrige antes de clicar
     await cursor.click(el);
     return true;
   }
@@ -101,44 +140,69 @@ function createBot(page, ctl) {
     return out;
   }
 
-  async function clickVisible(selector, opts = {}) {
-    const els = await visible(selector, opts);
+  async function clickVisible(selector, opts2 = {}) {
+    const els = await visible(selector, opts2);
     if (!els.length) return false;
-    return click(opts.random ? pick(els) : els[0], false);
+    return click(opts2.random ? pick(els, rng) : els[0], false);
   }
 
+  // Rolagem com inércia (human.scrollSteps): acelera, desacelera e às vezes passa do ponto e volta
   async function scroll(amount) {
-    fatigue = Math.min(FATIGUE_MAX, fatigue + 0.03); // aumenta o cansaço a cada scroll (com teto)
-    const dir = Math.sign(amount) || 1;
-    let left = Math.abs(amount);
-    while (left > 0) {
+    fatigue = Math.min(FATIGUE_MAX, fatigue + 0.03);
+    for (const { dy, ms } of human.scrollSteps(amount, { persona, rng })) {
       if (ctl.shouldStop()) throw new StopError();
-      const d = Math.min(rand(60, 140), left);
-      await page.mouse.wheel(0, d * dir);
-      left -= d;
-      await sleep(rand(16, 50) * Math.min(fatigue, FATIGUE_MAX));
+      if (dy) await page.mouse.wheel(0, dy);
+      await clock.sleep(ms * Math.min(fatigue, FATIGUE_MAX));
     }
   }
 
-  async function readNiche(text, keywords) {
+  // Conteúdo do nicho? (só olha o texto; quem decide o tempo é quem chamou)
+  function isNiche(text, keywords) {
     if (!text || !keywords || !keywords.length) return false;
     const lower = text.toLowerCase();
-    if (keywords.some((k) => lower.includes(k.toLowerCase()))) {
-      ctl.log('Conteúdo do nicho encontrado! Dwell time (Pausa de leitura)...', 'info');
-      await wait(12000, 22000, '👀 Lendo conteúdo (Nicho)');
-      fatigue = Math.max(1.0, fatigue - 0.2); // Pausar ajuda a recuperar a fadiga
-      return true;
-    }
-    return false;
+    return keywords.some((k) => lower.includes(k.toLowerCase()));
+  }
+
+  // Conteúdo do nicho: lê com calma (pausa longa) e descansa um pouco do cansaço
+  async function readNiche(text, keywords) {
+    if (!isNiche(text, keywords)) return false;
+    ctl.log('Conteúdo do nicho encontrado: lendo com calma', 'info');
+    await pause('nicheRead', '👀 Lendo conteúdo do nicho');
+    fatigue = Math.max(1.0, fatigue - 0.2);
+    return true;
   }
 
   async function goto(url, label) {
     ctl.status(label || 'Navegando');
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await wait(2500, 5000, label ? `${label}: carregando` : 'Carregando página');
+    await pause('load', label ? `${label}: carregando` : 'Carregando página');
   }
 
-  return { page, rand, pick, wait, moveTo, click, visible, clickVisible, scroll, goto, readNiche, rest, guard: async () => {} };
+  return {
+    page,
+    persona,
+    mood,
+    rng,
+    random: rng,
+    rand: r,
+    pick: (arr) => pick(arr, rng),
+    weighted: (options) => weighted(options, rng),
+    now: clock.now,
+    wait,
+    pause,
+    watch,
+    moveTo,
+    fidget,
+    click,
+    visible,
+    clickVisible,
+    scroll,
+    goto,
+    isNiche,
+    readNiche,
+    rest,
+    guard: async () => {},
+  };
 }
 
 module.exports = { createBot, StopError, AbortError, isFatal, rand, pick, weighted, sleep };

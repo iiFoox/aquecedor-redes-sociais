@@ -179,6 +179,9 @@ function sessionsToday(history, now = new Date()) {
     });
 }
 
+// Teto de segurança da sessão, em minutos: 2,5x o tempo estimado do plano, entre 30 e 90 min
+const sessionCap = (plan) => Math.min(90, Math.max(30, Math.round((plan.minutes || 15) * 2.5)));
+
 // Quando a mesma conta pode abrir a próxima sessão (intervalo sorteado a cada vez)
 const nextAfter = (endedAt, rand = Math.random) => endedAt + Math.round(GAP_MIN + rand() * (GAP_MAX - GAP_MIN)) * 60000;
 
@@ -287,6 +290,7 @@ module.exports = {
   computeHealth,
   dayHistory,
   sessionsToday,
+  sessionCap,
   nextAfter,
   legacyGap,
   vacationDays,

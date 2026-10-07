@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const rules = require('./rules');
+const human = require('./human');
 
 const DEFAULT_CONFIG = {
   active: false,
@@ -141,6 +142,11 @@ function normalize(a) {
   a.events = [];
   a.alerts = [];
   a.history = [];
+  // Conta sem personalidade (criada antes dela existir): sorteia uma vez e grava
+  if (!a.persona) {
+    a.persona = human.makePersona();
+    dirty.accounts.add(a.id);
+  }
   // Conta antiga sem "hardware" fixo: sorteia um e grava
   if (!a.viewport || !a.userAgent) {
     const dev = pickDevice();
@@ -324,6 +330,7 @@ function add(data) {
     interests: [],
     daily: {},
     attention: null,
+    persona: human.makePersona(), // jeito fixo desta conta (human.js)
     ...data,
     events: [],
     alerts: [],
