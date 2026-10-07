@@ -20,7 +20,10 @@ let closing = false;
 
 async function main() {
   await store.init();
-  server = createApi().listen(PORT, '127.0.0.1', () => console.log(`⚙️  Motor pronto em 127.0.0.1:${PORT}`));
+  // Senha interna nova a cada vez que o motor liga (o painel lê de data/motor.token)
+  server = createApi({ token: require('./token').create() }).listen(PORT, '127.0.0.1', () =>
+    console.log(`⚙️  Motor pronto em 127.0.0.1:${PORT}`),
+  );
   server.on('error', (e) => {
     console.error(`❌ O motor não conseguiu usar a porta ${PORT}: ${e.message}`);
     process.exit(1);

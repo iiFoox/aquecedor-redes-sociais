@@ -4,6 +4,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const express = require('express');
+const motorToken = require('../motor/token');
 
 try {
   process.loadEnvFile(path.join(__dirname, '..', '.env'));
@@ -31,8 +32,9 @@ if (PANEL_PASSWORD) {
 
 // Repassa a requisição para o motor, sem ler o corpo (funciona também para o tempo real)
 app.use('/api', (req, res) => {
-  const headers = { ...req.headers, host: `127.0.0.1:${MOTOR_PORT}` };
+  const headers = { ...req.headers, host: `127.0.0.1:${MOTOR_PORT}`, [motorToken.HEADER]: motorToken.read() || '' };
   delete headers.authorization;
+  delete headers.cookie; // o motor não precisa dos cookies do painel
   const up = http.request({ hostname: '127.0.0.1', port: MOTOR_PORT, path: req.originalUrl, method: req.method, headers }, (r) => {
     res.writeHead(r.statusCode, r.headers);
     res.flushHeaders(); // tempo real: o navegador conecta na hora, sem esperar o primeiro evento

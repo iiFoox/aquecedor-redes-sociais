@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const express = require('express');
 const store = require('../store');
+const motorToken = require('../token');
 const runner = require('../runner');
 const { version } = require('../../package.json');
 
@@ -18,8 +19,21 @@ const AUTOSTART = path.join(
   'WarmUp Studio.vbs',
 );
 
-function createApi() {
+// token: senha interna (motor/token.js). Só o painel a conhece.
+function createApi({ token } = {}) {
   const app = express();
+
+  // Tranca: o endereço tem de ser este PC (barra truques de DNS) e o pedido tem de trazer a senha interna.
+  // /api/health fica aberto: só diz se o motor está ligado (o "npm run restaurar" usa).
+  app.use((req, res, next) => {
+    const port = req.socket.localPort;
+    if (![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host))
+      return res.status(403).json({ error: 'Endereço não permitido' });
+    if (req.path === '/api/health') return next();
+    if (!motorToken.same(req.headers[motorToken.HEADER], token))
+      return res.status(401).json({ error: 'Pedido recusado: só o painel fala com o motor' });
+    next();
+  });
   app.use(express.json({ limit: '200kb' }));
 
   app.get('/api/health', (_, res) => {
