@@ -106,7 +106,7 @@ async function ensureDevice() {
   if (saved.id && saved.userId === user.id) {
     const { data } = await client.from('devices').select('id, name').eq('id', saved.id).maybeSingle();
     if (data) {
-      device = { id: data.id, name: data.name };
+      device = { id: data.id, name: data.name, named: !!saved.named };
       return device;
     }
   }
@@ -117,7 +117,7 @@ async function ensureDevice() {
     .select('id, name')
     .single();
   if (error) throw new Error(`Não consegui registrar o aparelho: ${error.message}`);
-  device = { id: data.id, name: data.name };
+  device = { id: data.id, name: data.name, named: false };
   writeFile(DEVICE_FILE, JSON.stringify({ id: device.id, name: device.name, userId: user.id }, null, 2));
   return device;
 }
@@ -130,7 +130,8 @@ async function renameDevice(name) {
   const { error } = await client.from('devices').update({ name: n }).eq('id', device.id);
   if (error) throw new Error(error.message);
   device.name = n;
-  writeFile(DEVICE_FILE, JSON.stringify({ id: device.id, name: n, userId: user.id }, null, 2));
+  device.named = true; // você escolheu o nome (a primeira abertura do app para de perguntar)
+  writeFile(DEVICE_FILE, JSON.stringify({ id: device.id, name: n, userId: user.id, named: true }, null, 2));
   return device;
 }
 

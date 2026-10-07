@@ -5,6 +5,7 @@ const store = require('./store');
 const runner = require('./runner');
 const rules = require('./rules');
 const backup = require('./backup');
+const power = require('./power');
 const platforms = require('./platforms');
 
 const PROXY_EVERY_MS = 30 * 60000;
@@ -44,6 +45,7 @@ async function tick(now = new Date()) {
       running: !!runner.getSession(acc.id),
       browserOpen: runner.isBrowserOpen(acc.id),
       backupHold,
+      powerHold: power.hold(),
       proxyDown: proxyDown(acc),
       plan: () => store.planOf(acc, p.planForDay),
       slots: () => store.slotsOf(acc, p.planForDay),

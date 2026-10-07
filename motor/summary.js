@@ -7,6 +7,7 @@ const platforms = require('./platforms');
 const { READY_DAY, phaseFor } = require('./platforms/phases');
 const backup = require('./backup');
 const logins = require('./logins');
+const power = require('./power');
 
 const STATUS_FRESH_MS = 3 * 60000; // status mais velho que isso: o aparelho dono sumiu
 
@@ -35,6 +36,7 @@ function scheduleReason(a, p, plan, today) {
     running: !!runner.getSession(a.id),
     browserOpen: runner.isBrowserOpen(a.id),
     backupHold: backup.hold(),
+    powerHold: power.hold(),
     proxyDown: !!px && px.status === 'offline',
     plan,
     today,

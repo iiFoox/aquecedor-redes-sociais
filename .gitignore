@@ -6,3 +6,6 @@ data/
 
 # Painel gerado (npm run build)
 web/dist/
+
+# Aplicativo gerado (npm run instalador)
+release/

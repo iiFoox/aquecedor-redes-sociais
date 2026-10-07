@@ -8,6 +8,9 @@ Uso pessoal do dono, nas contas dele. Interface e mensagens em português do Bra
 ```
 npm install
 cp .env.example .env   # SUPABASE_URL + chave SECRETA do Supabase
+npm run app            # o aplicativo do Windows (Electron) a partir do projeto
+npm run instalador     # gera release/WarmUp-Studio-Setup-<versão>.exe (confere que nenhum segredo vai junto)
+npm run publicar       # gera e publica no bucket "downloads" (suba "version" no package.json antes)
 npm start              # motor + painel no terminal; painel em http://localhost:3001
 npm run ligar          # o mesmo em segundo plano pelo PM2 (desligar / status / logs / autostart:ligar)
 npm run restaurar      # restaura data/profiles de um backup (motor desligado)
@@ -60,7 +63,14 @@ npm run format         # Prettier
   `src/components/`, `src/lib/format.ts` (funções puras, testadas em `tests/web-format.test.ts`). Estilos em `src/styles.css`,
   com tokens de cor no `:root` e tema claro/escuro. Responsivo: funciona no celular, sem app instalável.
 - `supabase/`: `schema-base.sql` + `migrations/` (em ordem).
-- `scripts/`: `servico.js` (PM2 e inicialização do Windows) e `restaurar.js`. `ecosystem.config.js`: PM2.
+- `desktop/`: o aplicativo do Windows (app 4/5). `main.js` sobe motor e painel (Node do próprio Electron,
+  `ELECTRON_RUN_AS_NODE`), janela, bandeja com cor (`logic.trayState`), notificações, iniciar com o Windows,
+  aparelho acordado durante sessões, bateria (<20% segura sessão nova: `motor/power.js`) e suspensão (para as sessões).
+  Dados em `%APPDATA%WarmUp Studiodata`. Fala com o motor por `/api/_device/tray` e `/api/_device/power` (o navegador não alcança).
+  `updater.js`: atualização pelo bucket público `downloads`. O plano gratuito do Supabase aceita até 50 MB por arquivo:
+  o instalador vai em partes de 45 MB + `latest.json` (SHA-256 de cada parte e do todo) e é instalado em silêncio (`/S --force-run`).
+  `scripts/instalar.ps1`: primeira instalação num aparelho novo (`irm .../downloads/instalar.ps1 | iex`). Ícones: `npm run icones`.
+- `scripts/`: `servico.js` (PM2 e inicialização do Windows), `restaurar.js`, `publicar.js`, `app.js`. `ecosystem.config.js`: PM2.
 - `data/`: fora do Git. `profiles/<id>` (sessões logadas), `screens/<id>` (prints), `logs/` (PM2).
 
 ## Regras

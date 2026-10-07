@@ -64,6 +64,7 @@ function createApi({ token, deviceUser = () => (cloud.ready() ? cloud.user().id 
       version,
       uptime: Math.round(process.uptime()),
       pm2: process.env.pm_id !== undefined,
+      app: process.env.WU_APP === '1', // aberto pelo aplicativo do Windows (desktop/main.js)
       restarts: Number(process.env.restart_time) || 0,
       autostart: fs.existsSync(AUTOSTART),
       sessions: Object.keys(runner.activeSessions()).length,

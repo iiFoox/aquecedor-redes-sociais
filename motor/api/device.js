@@ -2,6 +2,10 @@
 const express = require('express');
 const cloud = require('../cloud');
 const boot = require('../boot');
+const store = require('../store');
+const runner = require('../runner');
+const power = require('../power');
+const platforms = require('../platforms');
 
 const router = express.Router();
 
@@ -13,7 +17,7 @@ router.get('/_device', (req, res) => {
     ready: boot.started(),
     mine: !!u && u.id === req.userId, // o aparelho é de quem está no painel
     email: u && u.id === req.userId ? u.email : null,
-    device: d && u && u.id === req.userId ? { id: d.id, name: d.name } : null,
+    device: d && u && u.id === req.userId ? { id: d.id, name: d.name, named: !!d.named } : null,
     vault: u && u.id === req.userId ? boot.vaultStatus() : null, // chave dos logins: ok | trancada | off
   });
 });
@@ -46,6 +50,57 @@ router.post('/_device/vault', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ---------- Para o aplicativo (desktop/main.js), com a senha interna ----------
+
+// Ícone da bandeja: situação geral (cor) e o que precisa de você (notificações)
+router.get('/_device/tray', (req, res) => {
+  const ready = boot.started();
+  const mine = ready ? store.mine() : [];
+  const sessions = runner.activeSessions();
+  res.json({
+    linked: !!cloud.user(),
+    ready,
+    email: cloud.user() ? cloud.user().email : null,
+    device: cloud.device() ? cloud.device().name : null,
+    accounts: mine.length,
+    running: Object.keys(sessions).length,
+    pilot: ready ? !!store.getConfig().active : false,
+    power: power.hold(),
+    vault: boot.vaultStatus(),
+    attention: mine
+      .filter((a) => a.attention)
+      .map((a) => ({
+        id: a.id,
+        username: a.username,
+        platform: platforms[a.platform] ? platforms[a.platform].name : a.platform,
+        kind: a.attention.kind,
+        msg: a.attention.msg,
+      })),
+  });
+});
+
+// Energia: { battery: { onBattery, level } } a cada mudança; { event: 'suspend' } antes de o Windows dormir
+router.post('/_device/power', async (req, res) => {
+  const b = req.body || {};
+  if (b.event === 'suspend') {
+    // Para as sessões direito (gravam o histórico) e fecha as janelas abertas
+    const open = Object.keys(runner.activeSessions());
+    for (const id of open) {
+      runner.stopSession(id);
+      store.addLog(id, 'O aparelho vai dormir: sessão encerrada', 'warn');
+    }
+    await Promise.race([runner.closeAll(), new Promise((r) => setTimeout(r, 15000))]);
+    await store.flush().catch(() => {});
+    return res.json({ ok: true, stopped: open.length });
+  }
+  if (b.battery && typeof b.battery === 'object') {
+    const r = power.setBattery({ onBattery: !!b.battery.onBattery, level: Number.isFinite(b.battery.level) ? b.battery.level : null });
+    if (r.changed) console.log(r.hold ? `🔋 Bateria abaixo de ${power.LOW}%: sem sessão nova até ligar na tomada` : '🔌 Energia ok: piloto liberado');
+    return res.json({ ok: true, hold: r.hold, changed: r.changed });
+  }
+  res.status(400).json({ error: 'Pedido inválido' });
 });
 
 router.put('/_device', async (req, res) => {

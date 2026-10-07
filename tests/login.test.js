@@ -327,7 +327,15 @@ test('chave dos logins: o navegador não alcança as rotas internas do motor (lo
   const s = await setup();
   try {
     const c = s.cookieOf(await s.post('/auth/cadastro', { email: 'eu@exemplo.com', password: SENHA }));
-    for (const p of ['/api/_device/link', '/api/_device/vault', '/api/_DEVICE/VAULT', '/api/_device//vault', '/api/_device/vault/']) {
+    for (const p of [
+      '/api/_device/link',
+      '/api/_device/vault',
+      '/api/_DEVICE/VAULT',
+      '/api/_device//vault',
+      '/api/_device/vault/',
+      '/api/_device/power',
+      '/api/_device/tray',
+    ]) {
       const r = await s.post(p, { mode: 'reset', password: 'x' }, c);
       assert.equal(r.status, 404, p);
     }

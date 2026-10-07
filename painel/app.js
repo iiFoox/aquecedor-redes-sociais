@@ -41,9 +41,9 @@ function createPainel({ auth, dist, motorPort, readToken = motorToken.read }) {
   app.get('/nova-senha', (req, res) => res.sendFile(path.join(dist, 'login.html')));
 
   // Entregar o login e mexer na chave dos logins: só o próprio painel, por dentro, depois de conferir a senha.
-  // Do navegador, não (uma sessão roubada do painel não consegue trocar a chave).
+  // Energia e bandeja: só o aplicativo. Do navegador, não (uma sessão roubada do painel não consegue trocar a chave).
   app.use('/api/_device', (req, res, next) => {
-    if (/^\/+(link|vault)(\/|$)/i.test(req.path)) return res.status(404).json({ error: 'Rota não encontrada' });
+    if (/^\/+(link|vault|power|tray)(\/|$)/i.test(req.path)) return res.status(404).json({ error: 'Rota não encontrada' });
     next();
   });
 

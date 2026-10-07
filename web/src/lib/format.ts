@@ -148,6 +148,7 @@ export const SCHEDULE_LABEL: Record<string, string> = {
   'piloto-desligado': 'Piloto automático desligado',
   ferias: 'Modo férias',
   backup: 'Esperando o backup dos logins',
+  energia: 'Bateria fraca: esperando a tomada',
   'fora-da-janela': 'Fora do horário',
   'precisa-atencao': 'Esperando você',
   'proxy-fora': 'Proxy fora do ar',

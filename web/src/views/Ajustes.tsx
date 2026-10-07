@@ -96,24 +96,39 @@ export function Ajustes() {
             </div>
             <span className="mono">{system ? duration(system.uptime) : '—'}</span>
           </div>
-          <div className="set-row">
-            <div>
-              <b>Reinicia sozinho se cair</b>
-              <span>
-                {system?.pm2
-                  ? `Pelo PM2. Reinícios: ${system.restarts}.`
-                  : 'Só quando ligado por "npm run ligar" (agora está pelo npm start).'}
-              </span>
+          {system?.app ? (
+            <div className="set-row">
+              <div>
+                <b>Aplicativo do Windows</b>
+                <span>
+                  Reinicia sozinho se cair. Para ligar ou desligar o início com o Windows, procurar atualização ou sair: clique com o botão
+                  direito no ícone perto do relógio.
+                </span>
+              </div>
+              <Ok on yes="ligado" no="" />
             </div>
-            <Ok on={!!system?.pm2} yes="ligado" no="desligado" />
-          </div>
-          <div className="set-row">
-            <div>
-              <b>Liga junto com o Windows</b>
-              <span>{system?.autostart ? 'Para tirar: npm run autostart:desligar' : 'Para ligar: npm run autostart:ligar'}</span>
-            </div>
-            <Ok on={!!system?.autostart} yes="ligado" no="desligado" />
-          </div>
+          ) : (
+            <>
+              <div className="set-row">
+                <div>
+                  <b>Reinicia sozinho se cair</b>
+                  <span>
+                    {system?.pm2
+                      ? `Pelo PM2. Reinícios: ${system.restarts}.`
+                      : 'Só quando ligado por "npm run ligar" (agora está pelo npm start).'}
+                  </span>
+                </div>
+                <Ok on={!!system?.pm2} yes="ligado" no="desligado" />
+              </div>
+              <div className="set-row">
+                <div>
+                  <b>Liga junto com o Windows</b>
+                  <span>{system?.autostart ? 'Para tirar: npm run autostart:desligar' : 'Para ligar: npm run autostart:ligar'}</span>
+                </div>
+                <Ok on={!!system?.autostart} yes="ligado" no="desligado" />
+              </div>
+            </>
+          )}
         </section>
       </div>
       <div className="stack">
@@ -151,7 +166,8 @@ export function Ajustes() {
             Fazer backup agora
           </button>
           <p className="help" style={{ marginTop: 10 }}>
-            Para restaurar: desligue o motor e rode <code>npm run restaurar</code>.
+            O login de cada conta também fica no Supabase (Logins na nuvem) e volta sozinho. Backup local: desligue o motor e rode{' '}
+            <code>npm run restaurar</code>.
           </p>
         </section>
       </div>

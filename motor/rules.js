@@ -376,7 +376,7 @@ function pickProxy(proxies, accounts) {
 
 /**
  * Decide se o agendador inicia uma sessão desta conta agora. Devolve o motivo:
- * 'iniciar' ou o que impede. ctx: { now, config, runningCount, running, browserOpen, backupHold, proxyDown,
+ * 'iniciar' ou o que impede. ctx: { now, config, runningCount, running, browserOpen, backupHold, powerHold, proxyDown,
  * plan (objeto ou função), today, activities, slots (rotina do dia, opcional), lastStartAny (último início
  * de sessão de qualquer conta, ms) }
  */
@@ -385,6 +385,7 @@ function decide(account, ctx) {
   if (!config.active) return 'piloto-desligado';
   if (config.pausedUntil && now.getTime() < config.pausedUntil) return 'ferias';
   if (ctx.backupHold) return 'backup';
+  if (ctx.powerHold) return 'energia'; // notebook na bateria abaixo de 20%
   const win = windowOf(account, config);
   if (!inWindow(localMinutes(now), win.start, win.end)) return 'fora-da-janela';
   if (ctx.running) return 'rodando';

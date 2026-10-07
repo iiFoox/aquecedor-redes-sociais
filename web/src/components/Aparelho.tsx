@@ -240,3 +240,57 @@ export function LoginsNuvem() {
     </section>
   );
 }
+
+// Primeira abertura neste aparelho: dar um nome para reconhecer nos outros (PC, notebook...)
+export function NomeAparelho() {
+  const { run } = useStore();
+  const [dev, setDev] = useState<{ id: string; name: string } | null>(null);
+  const [name, setName] = useState('');
+  useEffect(() => {
+    api<DeviceInfo>('/api/_device')
+      .then((d) => {
+        if (d.device && !d.device.named) {
+          setDev(d.device);
+          setName(d.device.name);
+        }
+      })
+      .catch(() => {});
+  }, []);
+  if (!dev) return null;
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    run(async () => {
+      await api('/api/_device', 'PUT', { name: name.trim() });
+      setDev(null);
+    }, 'Aparelho com nome novo');
+  };
+  return (
+    <div className="overlay">
+      <form className="modal" role="dialog" aria-modal="true" aria-labelledby="nome-ap" onSubmit={save}>
+        <h2 id="nome-ap">Como chamar este aparelho?</h2>
+        <p className="muted">
+          Cada aparelho roda as próprias contas. O nome aparece nos outros aparelhos para você saber onde cada conta está rodando.
+        </p>
+        <div className="field" style={{ marginTop: 12 }}>
+          <label htmlFor="nome-ap-in">Nome</label>
+          <input
+            id="nome-ap-in"
+            className="input"
+            value={name}
+            maxLength={60}
+            placeholder="PC do quarto, Notebook..."
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="modal-foot">
+          <span />
+          <button className="btn" type="submit" disabled={!name.trim()}>
+            Salvar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

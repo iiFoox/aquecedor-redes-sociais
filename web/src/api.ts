@@ -90,7 +90,7 @@ export interface DeviceInfo {
   ready: boolean;
   mine: boolean;
   email: string | null;
-  device: { id: string; name: string } | null;
+  device: { id: string; name: string; named: boolean } | null;
   vault: VaultStatus | null;
 }
 // Chave dos logins das contas neste aparelho
@@ -199,6 +199,7 @@ export interface SystemInfo {
   version: string;
   uptime: number;
   pm2: boolean;
+  app: boolean; // aberto pelo aplicativo do Windows
   restarts: number;
   autostart: boolean;
   sessions: number;

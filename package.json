@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "WarmUp Studio: aquecimento de contas do TikTok e do Instagram, com painel web e Supabase",
   "private": true,
-  "main": "start.js",
+  "main": "desktop/main.js",
   "engines": {
     "node": ">=20.12"
   },
@@ -13,6 +13,10 @@
     "painel": "node painel/index.js",
     "build": "node scripts/build-web.js --force",
     "dev:web": "vite --config web/vite.config.mts",
+    "app": "node scripts/app.js",
+    "instalador": "node scripts/publicar.js --so-gerar",
+    "publicar": "node scripts/publicar.js",
+    "icones": "node scripts/icones.js",
     "ligar": "node scripts/servico.js ligar",
     "desligar": "node scripts/servico.js desligar",
     "reiniciar": "node scripts/servico.js reiniciar",
@@ -44,6 +48,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.6.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
@@ -52,5 +58,54 @@
     "react-dom": "^19.3.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.3"
+  },
+  "productName": "WarmUp Studio",
+  "author": "iiFoox",
+  "build": {
+    "appId": "com.warmupstudio.app",
+    "productName": "WarmUp Studio",
+    "copyright": "Uso pessoal",
+    "directories": {
+      "output": "release",
+      "buildResources": "desktop/icons"
+    },
+    "asar": false,
+    "files": [
+      "package.json",
+      "desktop/**/*",
+      "motor/**/*",
+      "painel/**/*",
+      "web/dist/**/*",
+      "!**/*.map",
+      "!node_modules/pm2/**",
+      "!node_modules/.cache/**",
+      "!node_modules/@pm2/**"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/icons/app.png",
+      "executableName": "WarmUp Studio"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "WarmUp Studio",
+      "artifactName": "WarmUp-Studio-Setup-${version}.${ext}"
+    },
+    "electronLanguages": [
+      "pt-BR",
+      "en-US"
+    ]
   }
 }
