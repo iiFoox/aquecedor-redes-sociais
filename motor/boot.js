@@ -33,6 +33,8 @@ async function startDevice() {
     cloud.startHeartbeat();
     await cloud.listenCommands(actions.execute);
     publisher.start();
+    // Rede de segurança do tempo real: relê as contas dos outros aparelhos a cada 2 min
+    setInterval(() => store.reloadAccounts().catch(() => {}), 120000).unref();
     scheduler.start();
     runner.startWatchdog();
     backup.start();

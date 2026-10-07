@@ -268,21 +268,34 @@ function subscribe() {
       changes.emit('event', { type: 'session', id: a.id, running: false });
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'proxies' }, () => changes.emit('event', { type: 'proxies' }))
-    .subscribe();
+    .subscribe((status, err) => {
+      // Canal fora do ar: avisa (o tempo real volta sozinho; enquanto isso, a releitura a cada 2 min cobre)
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')
+        console.error(`⚠️  Tempo real (%s): %s %s`, 'dados', status, err ? err.message : '');
+    });
 }
 
-// Recarrega as contas (ex.: as antigas acabaram de ganhar dono). Mantém o que está em memória das deste aparelho.
+// Relê as contas do banco (rede de segurança do tempo real, e quando as antigas ganham dono).
+// As deste aparelho ficam como estão em memória (aqui é a fonte); as dos outros são atualizadas.
 async function reloadAccounts() {
+  if (!sb) return accounts.length;
   const rows = await fetchAll(
     () => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status').order('id'),
     'contas',
   );
+  const seen = new Set(rows.map((r) => r.id));
   for (const row of rows) {
-    if (get(row.id)) continue;
-    const a = accountFromRow(row);
-    normalize(a);
-    accounts.push(a);
+    const cur = get(row.id);
+    const next = accountFromRow(row);
+    if (cur && isMine(cur)) continue;
+    if (cur) Object.assign(cur, next, { events: cur.events, alerts: cur.alerts, history: cur.history });
+    else {
+      normalize(next);
+      accounts.push(next);
+    }
   }
+  // Contas de outros aparelhos que não existem mais no banco
+  accounts = accounts.filter((a) => isMine(a) || seen.has(a.id));
   return accounts.length;
 }
 

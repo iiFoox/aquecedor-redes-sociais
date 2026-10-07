@@ -77,6 +77,8 @@ async function resume() {
     return false;
   }
   saveSession(data.session);
+  // O tempo real precisa do login do usuário (sem ele, as regras do banco não deixam passar nada)
+  client.realtime.setAuth(data.session.access_token);
   user = { id: data.user.id, email: data.user.email };
   return true;
 }
@@ -88,12 +90,14 @@ async function link({ access_token, refresh_token }) {
   if (error || !data.user) throw new Error(`Login inválido: ${error ? error.message : 'sem usuário'}`);
   if (user && user.id !== data.user.id)
     throw Object.assign(new Error('Este aparelho já está ligado a outro usuário'), { code: 'OTHER_USER' });
-  const already = !!user;
+  // Mesma pessoa entrando de novo: o aparelho já roda com a conexão dele (contas e canais presos a ela)
+  if (user) return { already: true };
   client = c;
   watchAuth();
+  client.realtime.setAuth(data.session.access_token);
   user = { id: data.user.id, email: data.user.email };
   saveSession(data.session);
-  return { already };
+  return { already: false };
 }
 
 // Registra (ou reencontra) este aparelho na tabela devices
@@ -186,7 +190,11 @@ async function listenCommands(handler) {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commands', filter: `device_id=eq.${device.id}` }, (p) =>
       take(p.new),
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      // Canal fora do ar: avisa (o tempo real volta sozinho; enquanto isso, a releitura a cada 2 min cobre)
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')
+        console.error(`⚠️  Tempo real (%s): %s %s`, 'comandos', status, err ? err.message : '');
+    });
   const { data } = await client
     .from('commands')
     .select('*')

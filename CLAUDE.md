@@ -12,7 +12,6 @@ npm start              # motor + painel no terminal; painel em http://localhost:
 npm run ligar          # o mesmo em segundo plano pelo PM2 (desligar / status / logs / autostart:ligar)
 npm run restaurar      # restaura data/profiles de um backup (motor desligado)
 npm run simular -- alemdofato5 7   # simula 7 dias sem abrir navegador (só lê o Supabase)
-npm run usuario -- criar eu@email.com   # cria usuário do painel (senha pedida sem mostrar)
 npm run build          # gera o painel (web/dist); npm start e npm run ligar fazem isso sozinhos
 npm run dev:web        # painel com recarga automática em http://localhost:5173 (precisa do motor ligado)
 npm test               # testes (node:test, inclusive os .ts do painel)
@@ -38,11 +37,17 @@ npm run format         # Prettier
   - `backup.js`: backup diário dos perfis (04:00, sem cache, 7 últimos). `proxycheck.js`: teste de proxy sem navegador.
   - `platforms/`: TikTok e Instagram. Cada atividade declara as metas que conta (`produces`) e as que adianta (`advances`).
   - `api/`: rotas. `validate.js`: validação (zod) de tudo que entra.
-- `painel/`: login (`auth.js`: sessão em cookie httpOnly, bloqueio por tentativas, CSRF; `authStore.js`: Supabase Auth +
-  `panel_sessions` + `login_attempts`), serve `web/dist` e repassa `/api` ao motor com a senha interna (`data/motor.token`)
-  e o usuário logado (`x-wu-user`). Sem login, só a tela de login (`web/login.html`) abre. Se o motor cair, o painel continua no ar.
-- Usuários: `npm run usuario -- criar|senha|listar`, ou a tela de cadastro (só neste PC, se liberada em Ajustes).
-  Cada usuário vê só as próprias contas e proxies (`owner_id`); horário, piloto, limite e backup são gerais.
+- Aparelhos (app 2/5): cada PC/notebook é um aparelho do usuário e roda as PRÓPRIAS contas; vários ao mesmo tempo.
+  - `motor/cloud.js`: entra no Supabase como o usuário (chave PÚBLICA, `supabase-config.js`; nunca a secreta), login do
+    aparelho protegido pelo Windows (`dpapi.js`), registro em `devices`, sinal a cada minuto, comandos (`commands`).
+  - `store.js` carrega todas as contas do usuário; roda e grava só as deste aparelho (`isMine`); as dos outros chegam
+    pelo tempo real (somente leitura). `actions.js`: ação em conta de outro aparelho vira comando para ele.
+    `publisher.js` publica o status (`accounts.status`). `boot.js` liga tudo depois do login. `summary.js`: resumo da conta.
+  - `paths.js`: pasta de dados (`WU_DATA_DIR`; padrão `data/`).
+- `painel/`: login pelo Supabase Auth (`authStore.js`: entrar, criar conta, esqueci a senha; sessões e acessos do painel
+  em `data/painel/`), entrega o login ao motor (`/api/_device/link`), serve `web/dist` e repassa `/api` com a senha
+  interna (`data/motor.token`) e o usuário (`x-wu-user`). Sem login, só a tela de login (`web/login.html`) abre.
+- Banco: regras por dono (`auth.uid()`) em tudo; o 1º usuário fica com as contas antigas (`claim_legacy_accounts`).
 - `web/`: o painel (React + TypeScript + Vite). `src/store.tsx` (dados, tempo real, ações), `src/views/` (telas),
   `src/components/`, `src/lib/format.ts` (funções puras, testadas em `tests/web-format.test.ts`). Estilos em `src/styles.css`,
   com tokens de cor no `:root` e tema claro/escuro. Responsivo: funciona no celular, sem app instalável.
@@ -66,5 +71,6 @@ npm run format         # Prettier
 - Backup só com tudo parado (Chrome aberto trava os arquivos). Restauração nunca apaga a pasta atual.
 - Banco: mudança de estrutura só por migração nova em `supabase/migrations`, aplicada pelo MCP do Supabase.
   Testar antes numa transação desfeita e rodar o verificador de segurança (advisors) depois.
-- O Supabase fica fechado para a chave pública. O `.env` usa a chave secreta e nunca vai para o Git.
+- O app usa só a chave PÚBLICA + o login do usuário; as regras por dono no banco protegem os dados. A chave secreta
+  nunca entra no app (no `.env`, só para testes e manutenção) e o `.env` nunca vai para o Git.
 - Cada fase termina com testes e lint passando, commit e push.

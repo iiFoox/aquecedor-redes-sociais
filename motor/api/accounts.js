@@ -22,7 +22,9 @@ async function devices() {
 }
 
 // Carrega a conta do :id ou responde 404 (conta de outro usuário também é 404: nem confirma que existe)
-function account(req, res, next) {
+async function account(req, res, next) {
+  // Conta que este aparelho ainda não conhece (criada agora em outro aparelho): relê do banco uma vez
+  if (!store.get(req.params.id)) await store.reloadAccounts().catch(() => {});
   req.account = store.ownsAccount(req.userId, req.params.id) ? store.get(req.params.id) : null;
   if (!req.account) return res.status(404).json({ error: 'Conta não encontrada' });
   next();

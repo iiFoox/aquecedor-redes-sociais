@@ -62,7 +62,8 @@ async function local(kind, acc, payload = {}) {
       runner.stopSession(acc.id);
       await runner.closeBrowser(acc.id);
       return store.remove(acc.id);
-    case 'move-out': { // Outro aparelho pediu a conta: encerra o que estiver aberto aqui e passa
+    case 'move-out': {
+      // Outro aparelho pediu a conta: encerra o que estiver aberto aqui e passa
       const s = runner.getSession(acc.id);
       runner.stopSession(acc.id);
       if (s && s.done) await s.done.catch(() => {}); // espera a sessão fechar e gravar o histórico
