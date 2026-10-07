@@ -71,7 +71,8 @@ este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma con
 - `desktop/`: o aplicativo do Windows (app 4/5). `main.js` sobe motor e painel (Node do próprio Electron,
   `ELECTRON_RUN_AS_NODE`), janela, bandeja com cor (`logic.trayState`), notificações, iniciar com o Windows,
   aparelho acordado durante sessões, bateria (<20% segura sessão nova: `motor/power.js`) e suspensão (para as sessões).
-  Dados em `%APPDATA%WarmUp Studiodata`. Fala com o motor por `/api/_device/tray` e `/api/_device/power` (o navegador não alcança).
+  Instala em `%LOCALAPPDATA%Programswarmup-studio`; dados em `%APPDATA%WarmUp Studiodata`. `installer.nsh`: desinstalar tira o
+  início com o Windows (numa atualização não). Fala com o motor por `/api/_device/tray` e `/api/_device/power` (o navegador não alcança).
   `updater.js`: atualização pelo bucket público `downloads`. O plano gratuito do Supabase aceita até 50 MB por arquivo:
   o instalador vai em partes de 45 MB + `latest.json` (SHA-256 de cada parte e do todo) e é instalado em silêncio (`/S --force-run`).
   `scripts/instalar.ps1`: primeira instalação num aparelho novo (`irm .../downloads/instalar.ps1 | iex`). Ícones: `npm run icones`.
@@ -90,6 +91,8 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
   (o simulador e tests/human.test.js conferem o teto de 120%). Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).
 - Captcha, bloqueio ou falta de login: a sessão para na hora e a conta fica com `attention` até o dono resolver
   (captcha: botão "Abrir navegador"; bloqueio: "Liberar"; login: "Login"). Nada volta sozinho.
+- Navegador nunca headless (sem janela o Edge se apresenta como "HeadlessChrome"): "Esconder as janelas" abre fora da
+  tela (`rules.windowMode`).
 - Navegador: Microsoft Edge instalado no Windows (`channel: 'msedge'`), sem user-agent inventado: ele se apresenta como
   ele mesmo. Tela de cada conta sorteada entre as de PC com Windows. Não trocar de navegador sem o dono: muda o "aparelho" das contas.
 - Nunca trocar o proxy de uma conta sozinho: proxy fora do ar faz a conta esperar ("proxy-fora").

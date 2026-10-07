@@ -67,6 +67,8 @@ async function launch(account, { visible = false } = {}) {
     '--disable-background-timer-throttling',
   ];
   if (conf.muteAudio !== false) args.push('--mute-audio');
+  const mode = rules.windowMode(conf, visible);
+  args.push(...mode.args);
 
   // Microsoft Edge instalado no Windows (não o Chromium do Playwright, que quase ninguém usa para ver TikTok).
   // Sem user-agent inventado: o Edge se apresenta como ele mesmo, coerente em tudo que o site cruza.
@@ -76,7 +78,7 @@ async function launch(account, { visible = false } = {}) {
     channel: 'msedge',
     // Sandbox ligado: sem ele o Playwright passa --no-sandbox e o Edge mostra a faixa "sinalizador sem suporte"
     chromiumSandbox: true,
-    headless: visible ? false : !!conf.headless,
+    headless: mode.headless,
     screen: { width: scr.w, height: scr.h },
     viewport: { width: scr.w, height: scr.h - BROWSER_UI_PX },
     locale: 'pt-BR',

@@ -158,7 +158,7 @@ export function ContaPainel() {
         </ul>
       )}
       <p className="help" style={{ marginTop: 10 }}>
-        Esqueceu a senha? No PC, rode <code>npm run usuario -- senha {me.email}</code>.
+        Esqueceu a senha? Saia e use "Esqueci a senha" na tela de login: chega um link no seu e-mail.
       </p>
     </section>
   );

@@ -59,7 +59,10 @@ export function Ajustes() {
           <div className="set-row">
             <div>
               <b>Esconder as janelas</b>
-              <span>Com as janelas à vista, dá para acompanhar no PC. A tela ao vivo funciona dos dois jeitos.</span>
+              <span>
+                Escondidas, as janelas abrem fora da tela (o Edge continua normal, sem modo invisível). A tela ao vivo funciona dos dois
+                jeitos.
+              </span>
             </div>
             <label className="switch">
               <input

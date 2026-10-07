@@ -85,7 +85,11 @@ function Side() {
               : 'Backup: nenhum ainda'}
           </div>
         )}
-        {system && <div className="dim">{system.pm2 ? 'Reinicia sozinho (PM2)' : 'Rodando pelo npm start'}</div>}
+        {system && (
+          <div className="dim">
+            {system.app ? 'Aplicativo do Windows' : system.pm2 ? 'Reinicia sozinho (PM2)' : 'Rodando pelo npm start'}
+          </div>
+        )}
       </div>
       <div className="side-user">
         <span className="su-email" title={me?.email}>

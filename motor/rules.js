@@ -8,6 +8,13 @@ const DAY_MS = 86400000;
 const GOAL_CAP = 1.2; // nenhuma meta passa de 120% do plano do dia
 const LEASE_MS = 5 * 60000; // trava da conta: renovada a cada minuto enquanto ela está aberta num aparelho
 
+// Como abrir o navegador da conta. Nunca headless: sem janela o Edge se apresenta como "HeadlessChrome" (marca
+// clássica de robô). "Esconder as janelas" abre a janela normal, só que fora da tela (a tela ao vivo continua pelo CDP).
+function windowMode(conf, visible = false) {
+  const hide = !visible && !!conf.headless;
+  return { headless: false, args: hide ? ['--window-position=-32000,-32000'] : [] };
+}
+
 // Outro aparelho está com a conta aberta agora? (trava ainda válida e não é deste aparelho)
 function leaseHeld(account, me, now = Date.now()) {
   const l = account && account.lease;
@@ -424,6 +431,7 @@ module.exports = {
   GOAL_CAP,
   LEASE_MS,
   leaseHeld,
+  windowMode,
   localDate,
   localMinutes,
   toMinutes,

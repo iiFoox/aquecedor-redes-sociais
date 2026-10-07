@@ -197,3 +197,9 @@ test('trava: outro aparelho com a conta aberta segura; trava vencida ou minha nÃ
   assert.equal(rules.leaseHeld({ lease: { device: 'A', until: now + 60000 } }, 'A', now), false);
   assert.equal(rules.LEASE_MS, 5 * 60000);
 });
+
+test('navegador: nunca headless (o Edge sem janela se denuncia como HeadlessChrome); escondido = fora da tela', () => {
+  assert.deepEqual(rules.windowMode({ headless: false }), { headless: false, args: [] });
+  assert.deepEqual(rules.windowMode({ headless: true }), { headless: false, args: ['--window-position=-32000,-32000'] });
+  assert.deepEqual(rules.windowMode({ headless: true }, true), { headless: false, args: [] }, 'janela de login/captcha fica Ã  vista');
+});
