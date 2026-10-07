@@ -47,6 +47,15 @@ function createBot(page, ctl, opts = {}) {
   const vp = () => page.viewportSize() || { width: 1280, height: 800 };
   const r = (a, b) => rand(a, b, rng);
   let fatigue = 1.0;
+  // Conferência de captcha/bloqueio/login (o runner troca bot.guard pela de verdade).
+  // Roda durante as esperas a cada GUARD_EVERY ms e depois de cada página carregada.
+  const GUARD_EVERY = 4000;
+  let lastGuard = clock.now();
+  let api = null;
+  async function check() {
+    lastGuard = clock.now();
+    if (api) await api.guard();
+  }
 
   // Cansaço: sobe devagar com o uso (rolagens), com teto de 1,6x. Uma distração "descansa".
   const FATIGUE_MAX = 1.6;
@@ -62,6 +71,7 @@ function createBot(page, ctl, opts = {}) {
     let nextFidget = clock.now() + human.bounded(rng, 4000, 0.6, 1500, 15000);
     while (clock.now() < end) {
       if (ctl.shouldStop()) throw new StopError();
+      if (clock.now() - lastGuard >= GUARD_EVERY) await check();
       if (ms > 6000 && clock.now() >= nextFidget && clock.now() + 1500 < end) {
         await fidget();
         nextFidget = clock.now() + human.bounded(rng, 5000, 0.7, 1500, 20000);
@@ -283,9 +293,10 @@ function createBot(page, ctl, opts = {}) {
     ctl.status(label || 'Navegando');
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await pause('load', label ? `${label}: carregando` : 'Carregando página');
+    await check();
   }
 
-  return {
+  api = {
     page,
     persona,
     mood,
@@ -316,6 +327,7 @@ function createBot(page, ctl, opts = {}) {
     rest,
     guard: async () => {},
   };
+  return api;
 }
 
 module.exports = { createBot, StopError, AbortError, isFatal, rand, pick, weighted, sleep };

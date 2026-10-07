@@ -413,3 +413,69 @@ test('cursor do Playwright: anda em curva, clica num ponto variado dentro do ele
   // Elemento sem posição: erro claro em vez de clique no lugar errado
   await assert.rejects(cursor.click({ boundingBox: async () => null }), /fora da tela/);
 });
+
+test('captcha: a conferência roda durante as esperas e depois de carregar página, e para na hora', async () => {
+  const { AbortError } = require('../motor/bot');
+  const { bot, clock } = fakeBot(11);
+  let calls = 0;
+  bot.guard = async () => {
+    calls++;
+  };
+  await bot.watch(20000, 'vídeo');
+  assert.ok(calls >= 4, `conferiu só ${calls} vezes em 20 s`);
+  calls = 0;
+  await bot.goto('https://www.tiktok.com/@alguem', 'Abrindo perfil');
+  assert.ok(calls >= 1, 'não conferiu depois de abrir a página');
+  // Captcha aparece no meio de uma espera longa: a espera para em poucos segundos
+  const t0 = clock.now();
+  bot.guard = async () => {
+    if (clock.now() - t0 > 3000) throw new AbortError('TikTok exibiu um captcha', 'CAPTCHA');
+  };
+  await assert.rejects(bot.watch(60000, 'vídeo longo'), /captcha/);
+  assert.ok(clock.now() - t0 < 10000, 'demorou demais para parar');
+});
+
+test('visita ao perfil do TikTok: confere captcha no perfil e volta pelo "Voltar"', async () => {
+  const { simulateSession } = require('../motor/sim/simulate');
+  const tiktok = require('../motor/platforms/tiktok');
+  const r = await simulateSession({
+    account: { platform: 'tiktok', username: 't', interests: [], persona: human.makePersona(4) },
+    platform: tiktok,
+    plan: { minutes: 15, watch: 10, like: 0, follow: 0, profile: 2, search: 0 },
+    today: {},
+    clock: createFakeClock(Date.parse('2026-10-08T15:00:00-03:00')),
+    rng: human.makeRng(4),
+  });
+  assert.ok(
+    r.events.some((e) => e.type === 'back' && /foryou/.test(e.url)),
+    'não voltou pelo Voltar',
+  );
+  // Com captcha aparecendo no perfil, a sessão para ali (não volta ao Para Você como se nada fosse)
+  const { createBot, AbortError } = require('../motor/bot');
+  const { createCtl } = require('../motor/ctl');
+  const clock = createFakeClock(Date.parse('2026-10-08T15:00:00-03:00'));
+  const rng = human.makeRng(4);
+  const page = createFakePage({ rng });
+  await page.goto('https://www.tiktok.com/foryou');
+  const state = {
+    stop: false,
+    stats: {},
+    startedAt: clock.now(),
+    endsAt: clock.now() + 3600000,
+    lastProgress: clock.now(),
+    lastBeat: clock.now(),
+  };
+  const ctl = createCtl({
+    state,
+    plan: { profile: 2 },
+    done: () => ({}),
+    now: clock.now,
+    hooks: { status() {}, action() {}, log() {}, alert() {} },
+  });
+  const bot = createBot(page, ctl, { rng, clock, cursor: createFakeCursor(page), persona: human.makePersona(4) });
+  bot.guard = async () => {
+    if (page.url().includes('/@')) throw new AbortError('TikTok exibiu um captcha', 'CAPTCHA');
+  };
+  await assert.rejects(tiktok._activities.profile({ page, bot, ctl, account: { interests: [] } }), /captcha/);
+  assert.ok(page.url().includes('/@'), 'saiu do perfil com o captcha na tela');
+});

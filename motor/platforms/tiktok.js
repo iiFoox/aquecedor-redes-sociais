@@ -17,7 +17,9 @@ const SEL = {
   commentPanel: '[class*="DivCommentMain"]',
   commentClose: 'button[aria-label="exit"]',
   login: '[data-e2e="top-login-button"], #header-login-button',
-  captcha: '#captcha-verify-container, #captcha_container, .captcha-verify-container, [class*="captcha_verify"], [class*="CaptchaVerify"]',
+  // Rede larga: qualquer coisa visível com "captcha" no id, na classe ou no endereço de um iframe
+  captcha:
+    '#captcha-verify-container, #captcha_container, .captcha-verify-container, [class*="captcha_verify"], [class*="CaptchaVerify"], [id*="captcha" i], [class*="captcha" i], iframe[src*="captcha" i]',
   popup: 'button:has-text("Agora não"), button:has-text("Not now"), button:has-text("Pular"), button:has-text("Skip")',
 };
 
@@ -67,16 +69,23 @@ function likeChance(ctl, base) {
   return Math.min(0.7, Math.max(base, (l / w) * 2.2)); // ~metade dos vídeos são elegíveis (>8s)
 }
 
+// Algum dos primeiros elementos está visível? (o primeiro pode ser um contêiner escondido)
+async function anyVisible(loc, max = 8) {
+  const n = Math.min(await loc.count().catch(() => 0), max);
+  for (let i = 0; i < n; i++)
+    if (
+      await loc
+        .nth(i)
+        .isVisible()
+        .catch(() => false)
+    )
+      return true;
+  return false;
+}
+
 async function detectProblem(page) {
   if (page.url().includes('/login')) return { kind: 'logout', msg: 'TikTok pediu login novamente' };
-  if (
-    await page
-      .locator(SEL.captcha)
-      .first()
-      .isVisible()
-      .catch(() => false)
-  )
-    return { kind: 'captcha', msg: 'TikTok exibiu um captcha' };
+  if (await anyVisible(page.locator(SEL.captcha))) return { kind: 'captcha', msg: 'TikTok exibiu um captcha' };
   const limit = page.getByText(
     /Muitas tentativas|Too many attempts|visitando nosso serviço com muita frequência|visiting our service too frequently/i,
   );
@@ -288,7 +297,11 @@ const ACTIVITIES = {
         await bot.pause('afterAction', 'Pausa após seguir');
       }
     }
-    await bot.goto(HOME, 'Voltando ao Para Você');
+    // Volta como gente: botão "Voltar" do navegador. Se não cair no Para Você, abre pelo endereço.
+    ctl.status('Voltando ao Para Você');
+    await page.goBack({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null);
+    await bot.pause('load', 'Voltando ao Para Você');
+    if (!page.url().includes('/foryou')) await bot.goto(HOME, 'Voltando ao Para Você');
     return true;
   },
 
@@ -386,4 +399,5 @@ module.exports = {
   detectProblem,
   run,
   _likeVideo: likeVideo, // para os testes
+  _activities: ACTIVITIES,
 };

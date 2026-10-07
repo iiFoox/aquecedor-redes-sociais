@@ -17,6 +17,7 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
   const caption = () => (interests.length && rng() < nicheRate ? `vídeo sobre ${pick(interests)}` : pick(CAPTIONS));
 
   let typed = '';
+  const history = [];
   let liked = false; // o vídeo da tela está curtido? (vale até passar de vídeo)
   const LIKE = /like-icon/;
   const el = (sel, i) => ({
@@ -46,7 +47,16 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
   const page = {
     events,
     url: () => url,
+    async goBack() {
+      const prev = history.pop();
+      if (!prev) return null;
+      url = prev;
+      liked = false;
+      events.push({ type: 'back', url });
+      return {};
+    },
     async goto(u) {
+      if (url !== 'about:blank') history.push(url);
       url = u;
       liked = false;
       events.push({ type: 'goto', url: u });
@@ -89,8 +99,12 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     _clicked(e) {
       events.push({ type: 'click', sel: e.sel });
       if (LIKE.test(e.sel)) liked = !liked; // o coração alterna
-      if (/avatar|uniqueid|author/.test(e.sel)) url = 'https://www.tiktok.com/@criador_exemplo';
-      else if (/video\//.test(e.sel)) url = 'https://www.tiktok.com/@criador_exemplo/video/1';
+      const go = (u) => {
+        history.push(url);
+        url = u;
+      };
+      if (/avatar|uniqueid|author/.test(e.sel)) go('https://www.tiktok.com/@criador_exemplo');
+      else if (/video\//.test(e.sel)) go('https://www.tiktok.com/@criador_exemplo/video/1');
     },
   };
   return page;
