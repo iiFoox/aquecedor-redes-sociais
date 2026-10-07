@@ -23,6 +23,7 @@ const P: Record<string, string> = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2.2"/><path d="M8.2 11V8a3.8 3.8 0 0 1 7.6 0v3"/>',
   bell: '<path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
   back: '<path d="M14.5 5.5 8 12l6.5 6.5"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.1-2.4 3.6"/><circle cx="12" cy="17.2" r=".9" fill="currentColor"/>',
   pause: '<path d="M9 5.5v13M15 5.5v13"/>',
   cloud: '<path d="M7 18.5a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.6 1.6 3.7 3.7 0 0 1-.5 7.4z"/>',
   tiktok: '<path d="M14 3.2v11.3a3.6 3.6 0 1 1-3.6-3.6"/><path d="M14 3.2c.6 2.6 2.4 4.3 5 4.6"/>',

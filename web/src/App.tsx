@@ -14,6 +14,7 @@ import { Cockpit } from './views/Cockpit.tsx';
 import { Conta } from './views/Conta.tsx';
 import { Proxies } from './views/Proxies.tsx';
 import { Rotina } from './views/Rotina.tsx';
+import { ComoUsar } from './views/ComoUsar.tsx';
 
 const NAV: [View, string, string][] = [
   ['cockpit', 'Cockpit', 'gauge'],
@@ -21,6 +22,7 @@ const NAV: [View, string, string][] = [
   ['proxies', 'Proxies', 'globe'],
   ['analises', 'Análises', 'chart'],
   ['ajustes', 'Ajustes', 'sliders'],
+  ['ajuda', 'Como usar', 'help'],
 ];
 
 const SUB: Record<View, string> = {
@@ -30,7 +32,52 @@ const SUB: Record<View, string> = {
   proxies: 'Endereços de rede das contas, testados a cada 30 min',
   analises: 'Últimos 30 dias, todas as contas',
   ajustes: 'Sua conta, aparência, navegador, motor e backup',
+  ajuda: 'O que cada tela faz e como o aquecimento funciona',
 };
+
+// Primeira vez neste navegador: um convite discreto para o "Como usar" (some ao abrir ou fechar)
+const GUIDE_KEY = 'wu-guia-visto';
+const guideSeen = () => {
+  try {
+    return localStorage.getItem(GUIDE_KEY) === '1';
+  } catch {
+    return true;
+  }
+};
+const markGuideSeen = () => {
+  try {
+    localStorage.setItem(GUIDE_KEY, '1');
+  } catch {
+    /* sem armazenamento: o convite volta na próxima vez */
+  }
+};
+
+function GuideHint() {
+  const { go, view } = useStore();
+  const [show, setShow] = useState(() => !guideSeen());
+  useEffect(() => {
+    if (view === 'ajuda' && show) {
+      markGuideSeen();
+      setShow(false);
+    }
+  }, [view, show]);
+  if (!show) return null;
+  const close = () => (markGuideSeen(), setShow(false));
+  return (
+    <div className="banner">
+      <Icon name="help" />
+      <div className="grow">
+        <b>Primeira vez aqui?</b> <span className="muted">O guia "Como usar" explica cada tela e o passo a passo para começar.</span>
+      </div>
+      <button className="btn sm" onClick={() => go('ajuda')}>
+        Abrir o guia
+      </button>
+      <button className="icon-btn" onClick={close} aria-label="Fechar o convite">
+        <Icon name="x" />
+      </button>
+    </div>
+  );
+}
 
 function Side() {
   const { accounts, view, accountId, go, system, backup, motorOff, me, logout } = useStore();
@@ -219,11 +266,14 @@ export function App() {
           </div>
         </header>
         <Banners />
+        <GuideHint />
         {!meta ? (
           <div className="panel empty">
             <span className="spinner" />
             <p className="muted">Carregando...</p>
           </div>
+        ) : view === 'ajuda' ? (
+          <ComoUsar />
         ) : view === 'cockpit' && !accounts.length ? (
           <div className="panel empty">
             <div className="empty-art">
@@ -231,6 +281,10 @@ export function App() {
             </div>
             <h2>Nenhuma conta ainda</h2>
             <p className="muted">Cadastre a primeira conta. O aquecimento começa hoje e ela fica pronta no dia {meta.readyDay}.</p>
+            <button className="link" onClick={() => go('ajuda')}>
+              <Icon name="help" />
+              Como usar
+            </button>
             <button className="btn primary" onClick={newAccount}>
               <Icon name="plus" />
               Nova conta

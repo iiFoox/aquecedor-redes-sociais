@@ -2738,3 +2738,82 @@ tr:last-child td {
 .dev-list .dim {
   margin-left: auto;
 }
+
+/* ---------- Como usar (tutorial) ---------- */
+.guide {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.guide-index {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.guide-index .eyebrow {
+  margin-bottom: 6px;
+}
+.guide-index a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13.5px;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+.guide-index a:hover {
+  background: var(--panel-2);
+  color: var(--fg);
+}
+.guide-sec h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  margin-bottom: 10px;
+}
+.guide-sec h2 svg {
+  width: 18px;
+  height: 18px;
+  color: var(--b2);
+}
+.guide-sec p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 8px 0;
+  max-width: 72ch;
+}
+.guide-list,
+.guide-steps {
+  margin: 8px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  line-height: 1.55;
+  max-width: 76ch;
+  color: var(--muted);
+}
+.guide-list b,
+.guide-steps b {
+  color: var(--fg);
+}
+.guide-steps li::marker {
+  color: var(--b2);
+  font-weight: 700;
+}
+@media (max-width: 900px) {
+  .guide {
+    grid-template-columns: 1fr;
+  }
+  .guide-index {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .guide-index .eyebrow {
+    width: 100%;
+  }
+}

@@ -59,6 +59,7 @@ export function Palette({ onClose, onNewAccount }: { onClose: () => void; onNewA
     c.push({ g: 'Ações', label: 'Modo férias', hint: 'pausar tudo', ic: 'pause', run: () => go('rotina') });
     c.push({ g: 'Ações', label: 'Fazer backup dos logins agora', ic: 'cloud', run: () => act.backupNow() });
     c.push({ g: 'Ações', label: 'Trocar tema', ic: 'moon', run: toggleTheme });
+    c.push({ g: 'Ações', label: 'Como usar', hint: 'guia de cada tela', ic: 'help', run: () => go('ajuda') });
     return c;
   }, [accounts, go, act, config, setConfig, run, onNewAccount, toggleTheme]);
 
