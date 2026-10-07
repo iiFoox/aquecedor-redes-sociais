@@ -181,3 +181,15 @@ test('sessão com vídeos já batidos vai atrás das curtidas e do perfil sem pa
     assert.ok(today.like >= 6 || r.reason === 'limit', `semente ${seed}: ${today.like} curtidas (${r.reason})`);
   }
 });
+
+test('curtidas: dia normal sempre fecha as curtidas do plano, sem passar dele', async () => {
+  for (const platform of ['tiktok', 'instagram']) {
+    for (let seed = 1; seed <= 30; seed++) {
+      const r = await simulate({ account: { platform, username: 't', interests: ['receitas'] }, days: 4, seed });
+      for (const [date, d] of Object.entries(r.daily)) {
+        if (!d.plan) continue;
+        assert.equal(d.like || 0, d.plan.like, `${platform} semente ${seed} ${date}: ${d.like || 0}/${d.plan.like} curtidas`);
+      }
+    }
+  }
+});

@@ -164,11 +164,12 @@ function distractionGapMin(persona, rng = Math.random) {
  * duration: segundos do vídeo (null se não deu para ler; usa uma estimativa).
  * Conteúdo do nicho: pula menos e vê mais até o fim. Paciência da conta muda as chances.
  */
-function watchPlan(duration, { niche = false, persona = null, mood = null, rng = Math.random } = {}) {
+function watchPlan(duration, { niche = false, keen = false, persona = null, mood = null, rng = Math.random } = {}) {
   const dur = Number.isFinite(duration) && duration > 1 ? duration : bounded(rng, 22, 0.6, 6, 90);
   const patience = (persona ? persona.patience : 1) * (mood ? mood.patience || 1 : 1);
   const base = niche ? { skip: 0.1, half: 0.25, full: 0.45, loop: 0.2 } : { skip: 0.5, half: 0.3, full: 0.17, loop: 0.03 };
-  const w = { skip: base.skip / patience, half: base.half, full: base.full * patience, loop: base.loop * patience };
+  // keen: com vontade de curtir (curtidas apertadas no dia), pula bem menos
+  const w = { skip: base.skip / patience / (keen ? 3 : 1), half: base.half, full: base.full * patience, loop: base.loop * patience };
   // Vídeo longo (>90 s): quase ninguém revê, e ver inteiro fica mais raro
   if (dur > 90) {
     w.loop = 0;
@@ -196,12 +197,13 @@ function watchPlan(duration, { niche = false, persona = null, mood = null, rng =
 /**
  * Chance final de curtir. `chance` vem da plataforma (adaptativa ao que falta no plano):
  * zero quando a meta de curtidas já foi batida, e aí continua zero, com ou sem nicho.
- * Nicho sobe a chance para pelo menos `nicheMin`; a inclinação da conta (likeBias) ajusta; teto de 75%.
+ * Nicho sobe a chance para pelo menos `nicheMin`; a inclinação da conta (likeBias) ajusta.
+ * Teto de 75% (max): a plataforma sobe o teto quando as curtidas estão apertadas no dia.
  */
-function likeProbability(chance, { niche = false, nicheMin = 0.6, persona = null } = {}) {
+function likeProbability(chance, { niche = false, nicheMin = 0.6, persona = null, max = 0.75 } = {}) {
   if (!(chance > 0)) return 0;
   const base = niche ? Math.max(nicheMin, chance) : chance;
-  return Math.min(0.75, base * (persona ? persona.likeBias : 1));
+  return Math.min(max, base * (persona ? persona.likeBias : 1));
 }
 
 // ---------- Rolagem ----------

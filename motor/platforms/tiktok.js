@@ -56,18 +56,26 @@ const BASE_WEIGHT = { fyp: 1.5, search: 1, profile: 1 };
 
 // Tempo assistido: depende da duração do vídeo, do nicho e da paciência da conta (human.watchPlan)
 const WATCH_NOTE = { skip: ' (pulando)', half: ' (até a metade)', full: ' (inteiro)', loop: ' (revendo, sinal de interesse)' };
-const watchFor = (bot, niche, duration = null) =>
-  human.watchPlan(duration, { niche, persona: bot.persona, mood: bot.mood, rng: bot.random });
+const watchFor = (bot, niche, duration = null, keen = false) =>
+  human.watchPlan(duration, { niche, keen, persona: bot.persona, mood: bot.mood, rng: bot.random });
 
-// Chance de curtir adaptativa: se as curtidas estão atrasadas em relação aos vídeos
-// que ainda faltam, a chance sobe (com teto de 70% pra não virar padrão de robô).
-function likeChance(ctl, base) {
+// Ritmo das curtidas: curtidas que faltam por vídeo que ainda dá para ver hoje.
+// Vídeos do plano já batidos: conta os que cabem até o teto de 120% (antes ignorava o teto e as
+// curtidas ficavam para trás quando os vídeos acabavam primeiro).
+function likePace(ctl) {
   const l = ctl.left('like');
   if (l <= 0) return 0;
-  const w = ctl.left('watch');
-  if (w <= 0) return Math.max(base, 0.5);
-  return Math.min(0.7, Math.max(base, (l / w) * 2.2)); // ~metade dos vídeos são elegíveis (>8s)
+  const w = ctl.left('watch') > 0 ? ctl.left('watch') : ctl.room('watch');
+  return w > 0 ? l / w : 1;
 }
+// Chance de curtir: ~metade dos vídeos é elegível (vistos por mais de 8 s), então ~2,2x o ritmo.
+// Normal: até 70%. Curtidas apertadas: até 95%, pulando menos vídeos (sem passar do plano de curtidas).
+const ELIGIBLE = 2.2;
+const likeChance = (ctl, base) => {
+  const pace = likePace(ctl);
+  return pace ? Math.min(0.95, Math.max(base, pace * ELIGIBLE)) : 0;
+};
+const likesTight = (ctl) => likePace(ctl) * ELIGIBLE > 0.7;
 
 // Algum dos primeiros elementos está visível? (o primeiro pode ser um contêiner escondido)
 async function anyVisible(loc, max = 8) {
@@ -194,11 +202,13 @@ const ACTIVITIES = {
       const niche = bot.isNiche(desc, account.interests || []);
       // Tempo assistido a partir da duração real do vídeo (se deu para ler)
       const info = await bot.videoInfo();
-      const { ms: waitTime, outcome } = watchFor(bot, niche, info ? info.duration : null);
+      const tight = likesTight(ctl);
+      const { ms: waitTime, outcome } = watchFor(bot, niche, info ? info.duration : null, tight);
       // Decide antes se vai curtir e curte num momento sorteado do vídeo.
       // Meta de curtidas batida = chance zero (antes o nicho furava e passava do teto de 120%).
-      const likeP = human.likeProbability(likeChance(ctl, 0.25), { niche, persona: bot.persona });
-      const willLike = waitTime > 8000 && bot.random() < likeP;
+      const chance = likeChance(ctl, 0.25);
+      const likeP = human.likeProbability(chance, { niche, persona: bot.persona, max: Math.max(0.75, chance) });
+      const willLike = waitTime > (tight ? 5000 : 8000) && bot.random() < likeP;
       await bot.watchWithLike(
         waitTime,
         `Assistindo vídeo ${i}/${n} por ${Math.round(waitTime / 1000)}s${WATCH_NOTE[outcome]}${niche ? ' · nicho' : ''}`,
@@ -255,11 +265,13 @@ const ACTIVITIES = {
     for (let i = 1; i <= n && keepGoing(ctl, 'search'); i++) {
       // Veio de uma busca do nicho: conta como conteúdo do nicho
       const info = await bot.videoInfo();
-      const { ms, outcome } = watchFor(bot, true, info ? info.duration : null);
+      const tight = likesTight(ctl);
+      const { ms, outcome } = watchFor(bot, true, info ? info.duration : null, tight);
+      const chance = likeChance(ctl, 0.45);
       const willLike =
-        ms > 8000 &&
+        ms > (tight ? 5000 : 8000) &&
         ctl.left('like') > 0 &&
-        bot.random() < human.likeProbability(likeChance(ctl, 0.45), { niche: true, nicheMin: 0.45, persona: bot.persona });
+        bot.random() < human.likeProbability(chance, { niche: true, nicheMin: 0.45, persona: bot.persona, max: Math.max(0.75, chance) });
       await bot.watchWithLike(
         ms,
         `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${WATCH_NOTE[outcome]}`,
