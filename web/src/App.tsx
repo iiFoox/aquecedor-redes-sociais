@@ -135,6 +135,7 @@ function Side() {
         {system && (
           <div className="dim">
             {system.app ? 'Aplicativo do Windows' : system.pm2 ? 'Reinicia sozinho (PM2)' : 'Rodando pelo npm start'}
+            {system.version ? ` · versão ${system.version}` : ''}
           </div>
         )}
       </div>
