@@ -24,6 +24,7 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
   const IG_LIKE = /aria-label="(Curtir|Like)"/;
   const IG_LIKED = /aria-label="(Descurtir|Unlike)"/;
   const ig = () => url.includes('instagram.com');
+  let reelNo = 0;
   const el = (sel, i) => ({
     sel,
     // O vídeo ocupa o meio da tela, o painel de comentários a direita; o resto são botões pequenos
@@ -104,6 +105,8 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
       wheel: async (_x, dy) => {
         events.push({ type: 'wheel', dy });
         if (ig()) liked = false; // no Instagram a rodinha leva ao próximo post/reel
+        // Reels: cada reel tem o seu endereço
+        if (/instagram\.com\/reels\//.test(url)) url = `https://www.instagram.com/reels/${++reelNo}/`;
       },
       click: async () => events.push({ type: 'click' }),
       down: async (o = {}) => {

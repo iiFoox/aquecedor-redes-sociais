@@ -24,7 +24,10 @@ body{margin:0;font-family:sans-serif} article{position:absolute;left:400px;width
 .dlg-heart{position:absolute;left:900px;top:600px}
 .grid a{display:inline-block;width:200px;height:200px;margin:4px;background:#ccc}
 video{position:absolute;left:440px;top:20px;width:400px;height:700px;background:#222}
-.reel-bar{position:absolute;left:870px;top:420px}
+.col{position:fixed;left:700px;top:20px;width:470px;height:720px;overflow-y:auto;scroll-snap-type:y mandatory}
+.col.travada{overflow:hidden} .reel{position:relative;height:720px;scroll-snap-align:start}
+.col video{left:0;top:10px} .reel-bar{position:absolute;left:420px;top:400px}
+.prox{position:fixed;left:1220px;top:400px;width:32px;height:32px;background:#ccc}
 </style></head><body><div id="app"></div>
 <script>
 const app = document.getElementById('app');
@@ -73,12 +76,19 @@ if (path === '/') {
   x.addEventListener('click', () => { window.closedBy = 'x'; location.href = '/'; });
   document.body.appendChild(x);
 } else if (path.startsWith('/reels')) {
-  app.innerHTML = '<div class="reel"><video muted></video><div class="reel-bar">' + heart +
-    '</div><div role="button" style="position:absolute;left:450px;top:680px;color:#fff">skate radical na pista</div></div>';
-  // Dois cliques no vídeo curtem (nunca descurtem), a não ser que o teste desligue
-  document.querySelector('video').addEventListener('dblclick', () => {
-    if (!window.noDoubleTap) document.querySelector('.reel-bar svg').setAttribute('aria-label', 'Descurtir');
+  // Coluna de reels como no site: só rola com o mouse em cima dela; cada reel tem o seu endereço; seta ao lado
+  app.innerHTML = '<div class="col">' + [1, 2, 3, 4, 5].map((i) => '<div class="reel"><video muted></video><div class="reel-bar">' + heart +
+    '</div><div role="button" style="position:absolute;left:10px;top:660px;color:#fff">skate radical na pista ' + i + '</div></div>').join('') +
+    '</div><div class="prox" role="button" aria-label="Navegar para o próximo reel"></div>';
+  const col = document.querySelector('.col');
+  if (window.noWheel) col.classList.add('travada');
+  window.shown = new Set([1]);
+  col.addEventListener('scroll', () => {
+    const n = Math.round(col.scrollTop / 720) + 1;
+    window.shown.add(n);
+    history.replaceState(null, '', '/reels/' + n + '/');
   });
+  document.querySelector('.prox').addEventListener('click', () => { if (!window.noArrow) col.scrollTop += 720; });
 } else if (path.startsWith('/explore')) {
   window.backTo = location.pathname + location.search;
   app.innerHTML = window.emptyGrid ? '' : '<div class="grid" style="padding:20px 300px">' +
@@ -133,6 +143,9 @@ async function setup(url, { persona = {}, plan = { like: 5, follow: 5, story: 5,
     sample() {},
     shouldStop: () => false,
     timeLeft: () => 60 * 60000,
+    capped: () => false,
+    useful: () => true,
+    goalsDone: () => false,
     left: (k) => (plan[k] || 0) - (done[k] || 0),
     log: (m) => logs.push(m),
     fail: (l, e) => logs.push(`falha ${l}: ${e.message}`),
@@ -169,20 +182,50 @@ test('Instagram real: curtida que não pega não conta', async (t) => {
   assert.match(logs.pop(), /não pegou/);
 });
 
-test('Instagram real: reel curte com dois cliques; se os dois cliques não pegam, vai no coração', async (t) => {
+test('Instagram real: reel curte no coração (dois cliques no reel não curtem no Instagram pelo computador)', async (t) => {
   if (!available) return t.skip('Chromium do Playwright não instalado');
-  let s = await setup('https://www.instagram.com/reels/', { persona: { doubleTap: 1 } });
-  assert.equal(await instagram._likeHere({ bot: s.bot, ctl: s.ctl }, 'Reel', { video: true }), true);
-  assert.equal(await label(s.page, '.reel-bar svg'), 'Descurtir', 'os dois cliques não curtiram');
-  assert.deepEqual(s.actions, ['like:Reel (dois cliques)']);
+  const { page, bot, ctl, actions } = await setup('https://www.instagram.com/reels/');
+  assert.equal(await instagram._likeHere({ bot, ctl }, 'Reel'), true);
+  assert.equal(await label(page, '.reel-bar svg'), 'Descurtir');
+  assert.deepEqual(actions, ['like:Reel']);
+  await page.close();
+});
+
+test('Instagram real: troca de reel com a rodinha em cima do vídeo; sem rodinha, a seta; sem as duas, avisa que ficou', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const path = (p) => new URL(p.url()).pathname;
+  let s = await setup('https://www.instagram.com/reels/');
+  // O mouse começa longe da coluna (onde a rodinha não rola nada)
+  await s.page.mouse.move(100, 100);
+  assert.equal(await instagram._reelStep(s, 1), true);
+  assert.equal(path(s.page), '/reels/2/');
+  assert.equal(await instagram._reelStep(s, 1), true);
+  assert.equal(path(s.page), '/reels/3/');
   await s.page.close();
 
-  s = await setup('https://www.instagram.com/reels/', { persona: { doubleTap: 1 }, before: () => (window.noDoubleTap = true) });
-  assert.equal(await instagram._likeHere({ bot: s.bot, ctl: s.ctl }, 'Reel', { video: true }), true);
-  assert.equal(await label(s.page, '.reel-bar svg'), 'Descurtir');
-  assert.deepEqual(s.actions, ['like:Reel']);
-  assert.ok(s.logs.some((l) => /dois cliques não curtiram/.test(l)));
+  s = await setup('https://www.instagram.com/reels/', { before: () => (window.noWheel = true) });
+  assert.equal(await instagram._reelStep(s, 1), true);
+  assert.equal(path(s.page), '/reels/2/');
   await s.page.close();
+
+  s = await setup('https://www.instagram.com/reels/', {
+    before: () => {
+      window.noWheel = true;
+      window.noArrow = true;
+    },
+  });
+  assert.equal(await instagram._reelStep(s, 1), false);
+  await s.page.close();
+});
+
+test('Instagram real: a atividade de Reels assiste reels diferentes (nunca o mesmo contado de novo)', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot, ctl, actions, logs } = await setup('https://www.instagram.com/', { plan: { reel: 3 } });
+  assert.equal(await instagram._activities.reels({ page, bot, ctl, account: { interests: [] } }), true);
+  assert.equal(actions.filter((a) => a.startsWith('reel:')).length, 3);
+  assert.ok((await page.evaluate(() => window.shown.size)) >= 3, 'contou o mesmo reel mais de uma vez');
+  assert.ok(!logs.some((l) => /Não consegui passar/.test(l)));
+  await page.close();
 });
 
 test('Instagram real: legenda lida é a do post e a do reel da tela (decide o nicho)', async (t) => {
@@ -193,7 +236,9 @@ test('Instagram real: legenda lida é a do post e a do reel da tela (decide o ni
   assert.doesNotMatch(feed, /cenoura 1/, 'leu o post de baixo, que não está inteiro na tela');
   await s.page.close();
   s = await setup('https://www.instagram.com/reels/');
-  assert.match(await instagram._screenText(s.page), /skate radical/);
+  const reel = await instagram._screenText(s.page);
+  assert.match(reel, /skate radical na pista 1/);
+  assert.doesNotMatch(reel, /pista 2/, 'leu o reel de baixo');
   await s.page.close();
 });
 

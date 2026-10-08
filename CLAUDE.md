@@ -104,6 +104,8 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
   da conta) e só olhar dentro do plano do dia (meta de curtida e follow zerada).
 - Curtida e follow só contam se o site mostrou que pegaram (TikTok: `aria-pressed`; Instagram: "Curtir" vira "Descurtir",
   "Seguir" vira "Seguindo"/"Solicitado"). Janela do Instagram (post, comentários, story) fecha no X, Esc só sem o X na tela.
+  Instagram pelo computador: dois cliques no reel NÃO curtem (curtida sempre no coração) e a rodinha só troca de reel com
+  o mouse em cima do vídeo; o reel só conta de novo se o endereço mudou (`reelStep`), senão a atividade para.
 - Falha repetida (a mesma 3x numa sessão) e sessão que vê vídeos sem curtir viram alerta no painel (`ctl.fail`, `rules.noLikeWarning`).
 - Não aumentar a atividade das contas além do plano de fases. Humanizar muda COMO e QUANDO, nunca QUANTO
   (o simulador e tests/human.test.js conferem o teto de 120%). Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).

@@ -27,6 +27,9 @@ const SEL = {
   post: 'a[href*="/p/"], a[href*="/reel/"]',
   // Bandeja de stories (quem a conta segue) ou o anel na foto de quem postou no feed
   story: 'main li [role="button"]:has(canvas), article [role="button"]:has(> canvas)',
+  // Setas ao lado dos reels
+  nextReel: '[aria-label="Navegar para o próximo reel"], [aria-label="Navigate to next reel"]',
+  prevReel: '[aria-label="Navegar para o reel anterior"], [aria-label="Navigate to previous reel"]',
   follow: buttonText(['Seguir', 'Follow']),
   following: buttonText(['Seguindo', 'Solicitado', 'Following', 'Requested']),
   popup:
@@ -150,39 +153,39 @@ async function heartAt(bot, box, dialog) {
   return null;
 }
 
-// Curte a publicação da tela e só conta se o coração virou "Descurtir". Já curtida: não clica (descurtiria).
-// video: pela personalidade, dois cliques no vídeo (se não pegarem, vai no coração). dialog: só dentro da janela aberta.
-async function likeHere({ bot, ctl }, detail, { video = false, dialog = false } = {}) {
-  const sel = dialog ? inDialog(LIKE) : LIKE;
-  const [heart] = await bot.visible(sel, { minSize: 20 });
+// Curte a publicação da tela no coração e só conta se ele virou "Descurtir". Já curtida: não clica (descurtiria).
+// Sempre no coração: no Instagram pelo computador, dois cliques no reel não curtem (conferido no site em 2026-10-07).
+// dialog: só dentro da janela aberta.
+async function likeHere({ bot, ctl }, detail, { dialog = false } = {}) {
+  const [heart] = await bot.visible(dialog ? inDialog(LIKE) : LIKE, { minSize: 20 });
   if (!heart) {
     if ((await bot.visible(dialog ? inDialog(LIKED) : LIKED, { minSize: 20 })).length)
       ctl.log('Esta publicação já estava curtida, seguindo sem clicar');
     return false;
   }
   const box = await heart.boundingBox().catch(() => null);
-  let how = 'icon';
-  if (video) how = await bot.likeVideo(sel, { minSize: 20 });
-  else await bot.click(heart, false);
-  if (!how) return false;
+  await bot.click(heart, false);
   await bot.wait(500, 1200);
-  let state = await heartAt(bot, box, dialog);
-  if (state === false && how === 'tap') {
-    // Os dois cliques não curtiram: vai no coração, como gente faz
-    ctl.log('Os dois cliques não curtiram, indo no coração', 'warn');
-    const [again] = await bot.visible(sel, { minSize: 20 });
-    if (!again) return false;
-    await bot.click(again, false);
-    how = 'icon';
-    await bot.wait(500, 1200);
-    state = await heartAt(bot, box, dialog);
-  }
-  if (state === false) {
+  if ((await heartAt(bot, box, dialog)) === false) {
     ctl.log('A curtida não pegou', 'warn');
     return false;
   }
-  ctl.action('like', how === 'tap' ? `${detail} (dois cliques)` : detail);
+  ctl.action('like', detail);
   return true;
+}
+
+// Passa de reel com a rodinha EM CIMA do vídeo (fora da coluna dos reels a página não rola; conferido no site).
+// Confere pelo endereço (cada reel tem o seu); não mudou: tenta a seta do lado. false = ficou no mesmo reel.
+async function reelStep({ page, bot }, dir) {
+  const before = page.url();
+  const [video] = await bot.visible('video', { minSize: 150, max: 6 });
+  const b = video && (await video.boundingBox().catch(() => null));
+  if (b) await bot.moveTo(Math.round(b.x + b.width * (0.3 + bot.random() * 0.4)), Math.round(b.y + b.height * (0.25 + bot.random() * 0.4)));
+  await bot.scroll(dir * bot.rand(700, 900));
+  await bot.pause('next');
+  if (page.url() !== before) return true;
+  if (await bot.clickVisible(dir > 0 ? SEL.nextReel : SEL.prevReel)) await bot.pause('next');
+  return page.url() !== before;
 }
 
 // Segue o autor da publicação aberta e só conta se o botão virou "Seguindo" (ou "Solicitado", conta privada)
@@ -302,7 +305,7 @@ const ACTIVITIES = {
       await bot.watchWithLike(
         ms,
         `Assistindo reel ${i}/${n} por ${sec}s${note}${isNiche ? ' · nicho' : ''}`,
-        willLike && (() => likeHere({ bot, ctl }, 'Reel', { video: true })),
+        willLike && (() => likeHere({ bot, ctl }, 'Reel')),
       );
       ctl.action('reel', `${sec}s`);
 
@@ -316,16 +319,18 @@ const ACTIVITIES = {
       }
 
       ctl.status('Passando para o próximo reel');
-      await bot.moveTo(bot.rand(560, 720), bot.rand(300, 500));
-      await bot.scroll(bot.rand(700, 900));
-      await bot.pause('next');
-      // Às vezes volta um pouco para rever o reel anterior e segue (não conta como reel novo)
+      // Ficou no mesmo reel: para aqui (assistir de novo não é reel novo)
+      if (!(await reelStep({ page, bot }, 1))) {
+        ctl.log('Não consegui passar para o próximo reel', 'warn');
+        break;
+      }
+      // Às vezes volta para rever o reel anterior e segue (não conta como reel novo)
       if (i < n && bot.random() < 0.04) {
         ctl.status('Voltou ao reel anterior');
-        await bot.scroll(-bot.rand(700, 900));
-        await bot.watch(bot.rand(1500, 5000), 'Revendo o reel anterior');
-        await bot.scroll(bot.rand(700, 900));
-        await bot.pause('next');
+        if (await reelStep({ page, bot }, -1)) {
+          await bot.watch(bot.rand(1500, 5000), 'Revendo o reel anterior');
+          if (!(await reelStep({ page, bot }, 1))) break;
+        }
       }
     }
     return true;
@@ -472,4 +477,5 @@ module.exports = {
   _followHere: followHere,
   _screenText: screenText,
   _closeDialog: closeDialog,
+  _reelStep: reelStep,
 };
