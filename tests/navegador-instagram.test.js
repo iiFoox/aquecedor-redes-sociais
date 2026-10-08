@@ -1,7 +1,7 @@
 // Robô do Instagram num Chromium de verdade, numa página LOCAL que imita o Instagram (toda requisição é respondida
 // aqui; nada vai para a internet). A estrutura copia a do site de verdade, lida em 2026-10-07 com a conta logada:
 // coração "Curtir" que vira "Descurtir", comentários e publicações numa janela [role=dialog] com o X "Fechar",
-// anel (canvas) na foto de quem postou que abre /stories/<autor>/, botão "Seguir" que vira "Seguindo".
+// anel (canvas) na foto de quem postou que abre /stories/<autor>/, botão "Seguir" (<button> com divs) que some da janela depois do follow.
 /* global window */ // os page.evaluate rodam dentro do navegador
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -96,9 +96,9 @@ if (path === '/') {
   document.querySelectorAll('.grid a').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault();
     history.pushState(null, '', a.getAttribute('href'));
-    const d = dialog('<div role="button" class="seguir">Seguir</div><div class="dlg-heart">' + heart + '</div>');
+    const d = dialog('<button class="seguir"><div><div>Seguir</div></div></button><div class="dlg-heart">' + heart + '</div>');
     const s = d.querySelector('.seguir');
-    s.addEventListener('click', () => { if (!window.blockFollow) s.textContent = 'Seguindo'; });
+    s.addEventListener('click', () => { if (!window.blockFollow) s.remove(); });
   }));
 }
 window.events = [];
@@ -267,12 +267,12 @@ test('Instagram real: stories pela foto de quem postou; assiste, avança e fecha
   await page.close();
 });
 
-test('Instagram real: follow só conta se o botão virou "Seguindo"', async (t) => {
+test('Instagram real: follow só conta se o botão Seguir sumiu (ou virou Seguindo)', async (t) => {
   if (!available) return t.skip('Chromium do Playwright não instalado');
   let s = await setup('https://www.instagram.com/explore/');
   await s.bot.clickVisible(instagram.SEL.post, { minSize: 80 });
   assert.equal(await instagram._followHere({ bot: s.bot, ctl: s.ctl }, 'Autor'), true);
-  assert.equal(await s.page.textContent('.seguir'), 'Seguindo');
+  assert.equal(await s.page.locator('.seguir').count(), 0);
   assert.deepEqual(s.actions, ['follow:Autor']);
   // Já seguindo: nada a clicar
   assert.equal(await instagram._followHere({ bot: s.bot, ctl: s.ctl }, 'Autor'), false);

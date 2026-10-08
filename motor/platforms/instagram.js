@@ -16,8 +16,10 @@ const inDialog = (sel) =>
     .split(', ')
     .map((x) => `${DIALOG} ${x}`)
     .join(', ');
+// Botão com o texto: no site o "Seguir" da janela é um <button> com o texto dentro de divs, e só :has-text pega
+// (:text-is não pegou, conferido em 2026-10-07). Depois do follow o botão some da janela (não vira "Seguindo").
 const buttonText = (words) =>
-  words.flatMap((w) => [`${DIALOG} [role="button"]:text-is("${w}")`, `${DIALOG} button:text-is("${w}")`]).join(', ');
+  words.flatMap((w) => [`${DIALOG} button:has-text("${w}")`, `${DIALOG} [role="button"]:text-is("${w}")`]).join(', ');
 const SEL = {
   like: LIKE,
   liked: LIKED,
