@@ -37,7 +37,7 @@ npm run format         # Prettier
     ele é do Puppeteer e quebra todo clique no Playwright.
   - Rotina do dia: `rules.planSlots` (horários e tamanho de cada sessão, perto do pico da conta). Sessão curta para em `ctl.target`.
   - `sim/`: simulador com relógio e página falsos (`npm run simular -- <conta|nova-tiktok> <dias>`). Roda o código real das plataformas.
-  - `backup.js`: backup diário dos perfis (04:00, sem cache, 7 últimos). `proxycheck.js`: teste de proxy sem navegador.
+  - `backup.js`: backup diário dos perfis (04:00, sem cache, 7 últimos). `proxycheck.js`: teste de proxy sem navegador (IP, país e fuso).
   - `platforms/`: TikTok e Instagram. Cada atividade declara as metas que conta (`produces`) e as que adianta (`advances`).
   - `api/`: rotas. `validate.js`: validação (zod) de tudo que entra.
 - Aparelhos (app 2/5): cada PC/notebook é um aparelho do usuário e roda as PRÓPRIAS contas; vários ao mesmo tempo.
@@ -97,8 +97,13 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
   desinstala a do dono mesmo com `/D=` em outra pasta. Testar com uma cópia de outra identidade: `-c.appId=com.warmupstudio.teste`,
   `productName`, `win.executableName`, `nsis.shortcutName` e `extraMetadata` (`name`, `productName`, `wuAppId`, `version`) próprios,
   e portas/servidor de atualização no `app-settings.json` dela (`panelPort`, `motorPort`, `updateBase`).
-- Testes nunca abrem o TikTok ou o Instagram. `tests/navegador.test.js` usa um Chromium de verdade com uma página local que
-  imita o TikTok (toda requisição é respondida no teste): é ele que pega clique que não chega no site.
+- Testes nunca abrem o TikTok ou o Instagram. `tests/navegador.test.js` e `tests/navegador-instagram.test.js` usam um
+  Chromium de verdade com uma página local que imita o site (toda requisição é respondida no teste): é ele que pega clique
+  que não chega no site. A página falsa do Instagram copia a estrutura lida no site de verdade (comentário no topo de
+  `motor/platforms/instagram.js`); conferir de novo no site exige o dono liberar, uma CÓPIA do perfil (nunca a pasta
+  da conta) e só olhar dentro do plano do dia (meta de curtida e follow zerada).
+- Curtida e follow só contam se o site mostrou que pegaram (TikTok: `aria-pressed`; Instagram: "Curtir" vira "Descurtir",
+  "Seguir" vira "Seguindo"/"Solicitado"). Janela do Instagram (post, comentários, story) fecha no X, Esc só sem o X na tela.
 - Falha repetida (a mesma 3x numa sessão) e sessão que vê vídeos sem curtir viram alerta no painel (`ctl.fail`, `rules.noLikeWarning`).
 - Não aumentar a atividade das contas além do plano de fases. Humanizar muda COMO e QUANDO, nunca QUANTO
   (o simulador e tests/human.test.js conferem o teto de 120%). Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).
@@ -109,6 +114,10 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
 - Navegador: Microsoft Edge instalado no Windows (`channel: 'msedge'`), sem user-agent inventado: ele se apresenta como
   ele mesmo. Tela de cada conta sorteada entre as de PC com Windows. Não trocar de navegador sem o dono: muda o "aparelho" das contas.
 - Nunca trocar o proxy de uma conta sozinho: proxy fora do ar faz a conta esperar ("proxy-fora").
+- Proxy no navegador: SOCKS5 com usuário e senha é recusado no cadastro (o Playwright não abre o navegador assim; HTTP com
+  senha funciona). Conta com proxy: o fuso do navegador é o do IP de saída (`proxycheck.proxyUpdate` grava país e fuso
+  quando o IP muda; `runner.proxyPlace` testa antes de abrir se o fuso ainda não é conhecido) e o WebRTC só sai pelo proxy
+  (`webrtc.js`: preferência no perfil; a opção `--force-webrtc-ip-handling-policy` NÃO vale no Edge, conferido).
 - Backup só com tudo parado (Chrome aberto trava os arquivos). Restauração nunca apaga a pasta atual.
 - Banco: mudança de estrutura só por migração nova em `supabase/migrations`, aplicada pelo MCP do Supabase.
   Testar antes numa transação desfeita e rodar o verificador de segurança (advisors) depois.

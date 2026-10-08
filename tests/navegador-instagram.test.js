@@ -1,0 +1,266 @@
+// Robô do Instagram num Chromium de verdade, numa página LOCAL que imita o Instagram (toda requisição é respondida
+// aqui; nada vai para a internet). A estrutura copia a do site de verdade, lida em 2026-10-07 com a conta logada:
+// coração "Curtir" que vira "Descurtir", comentários e publicações numa janela [role=dialog] com o X "Fechar",
+// anel (canvas) na foto de quem postou que abre /stories/<autor>/, botão "Seguir" que vira "Seguindo".
+/* global window */ // os page.evaluate rodam dentro do navegador
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { chromium } = require('playwright');
+const { createBot } = require('../motor/bot');
+const human = require('../motor/human');
+const instagram = require('../motor/platforms/instagram');
+
+const heart = (label) =>
+  `<div role="button" class="heart"><svg aria-label="${label}" width="24" height="24" viewBox="0 0 24 24"><rect width="24" height="24" fill="#999"/></svg></div>`;
+
+// Uma página só; o conteúdo depende do endereço (feed, story, reels, busca por hashtag)
+const PAGE = `<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;font-family:sans-serif} article{position:absolute;left:400px;width:470px}
+.avatar{position:absolute;left:0;top:0;width:42px;height:42px} .avatar canvas{width:42px;height:42px;background:#f0a}
+.media{position:absolute;top:60px;width:470px;height:420px;background:#ddd}
+.bar{position:absolute;top:490px;display:flex;gap:16px} .cap{position:absolute;top:530px}
+[role=dialog]{position:fixed;left:0;top:20px;width:1340px;height:720px;background:rgba(0,0,0,.6)}
+.x{position:fixed;left:1320px;top:30px} .seguir{position:absolute;left:900px;top:40px;padding:6px 12px;background:#eee}
+.dlg-heart{position:absolute;left:900px;top:600px}
+.grid a{display:inline-block;width:200px;height:200px;margin:4px;background:#ccc}
+video{position:absolute;left:440px;top:20px;width:400px;height:700px;background:#222}
+.reel-bar{position:absolute;left:870px;top:420px}
+</style></head><body><div id="app"></div>
+<script>
+const app = document.getElementById('app');
+const path = location.pathname;
+window.keys = [];
+addEventListener('keydown', (e) => window.keys.push(e.key));
+const heart = ${JSON.stringify(heart('Curtir'))};
+const icon = (l) => '<svg aria-label="' + l + '" width="24" height="24" viewBox="0 0 24 24"><rect width="24" height="24" fill="#bbb"/></svg>';
+// Coração: "Curtir" vira "Descurtir" (a não ser que o teste trave a curtida)
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('.heart');
+  if (h && !window.blockLike) {
+    const svg = h.querySelector('svg');
+    svg.setAttribute('aria-label', svg.getAttribute('aria-label') === 'Curtir' ? 'Descurtir' : 'Curtir');
+  }
+});
+function dialog(inner) {
+  const d = document.createElement('div');
+  d.setAttribute('role', 'dialog');
+  d.innerHTML = '<div class="x" role="button">' + icon('Fechar') + '</div>' + inner;
+  d.querySelector('.x').addEventListener('click', () => { d.remove(); history.pushState(null, '', window.backTo); window.closedBy = 'x'; });
+  document.body.appendChild(d);
+  return d;
+}
+if (path === '/') {
+  window.backTo = '/';
+  app.innerHTML = [0, 1].map((i) =>
+    '<article style="top:' + (20 + i * 900) + 'px"><div class="avatar" role="button"><canvas width="42" height="42"></canvas></div>' +
+    '<span dir="auto" style="position:absolute;left:60px;top:10px">autor' + i + '</span><div class="media"></div>' +
+    '<div class="bar">' + heart + '<div role="button" class="comment">' + icon('Comentar') + '</div></div>' +
+    '<span dir="auto" class="cap">receita de bolo de cenoura ' + i + '</span></article>').join('');
+  document.querySelectorAll('.avatar').forEach((a) => a.addEventListener('click', () => (location.href = '/stories/autor/')));
+  document.querySelectorAll('.comment').forEach((c) => c.addEventListener('click', () => {
+    history.pushState(null, '', '/p/1/');
+    dialog('<p style="color:#fff;margin:200px">comentários</p>');
+  }));
+} else if (path.startsWith('/stories/')) {
+  window.backTo = '/';
+  app.innerHTML = '<div style="position:absolute;left:500px;top:40px;width:380px;height:680px;background:#333"></div>';
+  window.seen = 0;
+  addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') window.seen++; });
+  const x = document.createElement('div');
+  x.className = 'x';
+  x.setAttribute('role', 'button');
+  x.innerHTML = icon('Fechar');
+  x.addEventListener('click', () => { window.closedBy = 'x'; location.href = '/'; });
+  document.body.appendChild(x);
+} else if (path.startsWith('/reels')) {
+  app.innerHTML = '<div class="reel"><video muted></video><div class="reel-bar">' + heart +
+    '</div><div role="button" style="position:absolute;left:450px;top:680px;color:#fff">skate radical na pista</div></div>';
+  // Dois cliques no vídeo curtem (nunca descurtem), a não ser que o teste desligue
+  document.querySelector('video').addEventListener('dblclick', () => {
+    if (!window.noDoubleTap) document.querySelector('.reel-bar svg').setAttribute('aria-label', 'Descurtir');
+  });
+} else if (path.startsWith('/explore')) {
+  window.backTo = location.pathname + location.search;
+  app.innerHTML = window.emptyGrid ? '' : '<div class="grid" style="padding:20px 300px">' +
+    [1, 2, 3, 4, 5, 6].map((i) => '<a href="/p/' + i + '/"></a>').join('') + '</div>';
+  document.querySelectorAll('.grid a').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    history.pushState(null, '', a.getAttribute('href'));
+    const d = dialog('<div role="button" class="seguir">Seguir</div><div class="dlg-heart">' + heart + '</div>');
+    const s = d.querySelector('.seguir');
+    s.addEventListener('click', () => { if (!window.blockFollow) s.textContent = 'Seguindo'; });
+  }));
+}
+window.events = [];
+addEventListener('mousemove', () => window.events.push('move'));
+</script></body></html>`;
+
+// Relógio que anda sozinho nas esperas, cedendo um pouquinho de tempo real ao navegador
+function quickClock() {
+  let t = Date.now();
+  return {
+    now: () => t,
+    sleep: async (ms) => {
+      t += Math.max(0, ms);
+      await new Promise((r) => setTimeout(r, Math.min(ms, 10)));
+    },
+  };
+}
+
+let browser;
+let available = true;
+test.before(async () => {
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch {
+    available = false; // sem Chromium do Playwright instalado: pula
+  }
+});
+test.after(async () => {
+  if (browser) await browser.close();
+});
+
+async function setup(url, { persona = {}, plan = { like: 5, follow: 5, story: 5, reel: 5, explore: 2 }, before } = {}) {
+  const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  if (before) await page.addInitScript(before);
+  await page.route('**/*', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: PAGE }));
+  await page.goto(url);
+  const logs = [];
+  const actions = [];
+  const done = {};
+  const ctl = {
+    status() {},
+    sample() {},
+    shouldStop: () => false,
+    timeLeft: () => 60 * 60000,
+    left: (k) => (plan[k] || 0) - (done[k] || 0),
+    log: (m) => logs.push(m),
+    fail: (l, e) => logs.push(`falha ${l}: ${e.message}`),
+    action: (t, d) => {
+      done[t] = (done[t] || 0) + 1;
+      actions.push(`${t}:${d}`);
+    },
+  };
+  const bot = createBot(page, ctl, { clock: quickClock(), rng: human.makeRng(7), persona: { ...human.makePersona(7), ...persona } });
+  return { page, bot, ctl, logs, actions };
+}
+const label = (page, sel) => page.getAttribute(sel, 'aria-label');
+
+test('Instagram real: curtida no coração chega e só conta se virou "Descurtir"; post já curtido não é clicado', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot, ctl, actions, logs } = await setup('https://www.instagram.com/');
+  assert.equal(await instagram._likeHere({ bot, ctl }, 'Post do feed'), true);
+  assert.equal(await label(page, 'article .heart svg'), 'Descurtir', 'o clique não chegou no coração');
+  assert.deepEqual(actions, ['like:Post do feed']);
+  // De novo no mesmo post: não clica (descurtiria) e não conta
+  assert.equal(await instagram._likeHere({ bot, ctl }, 'Post do feed'), false);
+  assert.equal(await label(page, 'article .heart svg'), 'Descurtir');
+  assert.equal(actions.length, 1);
+  assert.match(logs.pop(), /já estava curtida/);
+  assert.ok((await page.evaluate(() => window.events.length)) > 5, 'o mouse não andou até o coração');
+  await page.close();
+});
+
+test('Instagram real: curtida que não pega não conta', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { bot, ctl, actions, logs } = await setup('https://www.instagram.com/', { before: () => (window.blockLike = true) });
+  assert.equal(await instagram._likeHere({ bot, ctl }, 'Post do feed'), false);
+  assert.deepEqual(actions, []);
+  assert.match(logs.pop(), /não pegou/);
+});
+
+test('Instagram real: reel curte com dois cliques; se os dois cliques não pegam, vai no coração', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  let s = await setup('https://www.instagram.com/reels/', { persona: { doubleTap: 1 } });
+  assert.equal(await instagram._likeHere({ bot: s.bot, ctl: s.ctl }, 'Reel', { video: true }), true);
+  assert.equal(await label(s.page, '.reel-bar svg'), 'Descurtir', 'os dois cliques não curtiram');
+  assert.deepEqual(s.actions, ['like:Reel (dois cliques)']);
+  await s.page.close();
+
+  s = await setup('https://www.instagram.com/reels/', { persona: { doubleTap: 1 }, before: () => (window.noDoubleTap = true) });
+  assert.equal(await instagram._likeHere({ bot: s.bot, ctl: s.ctl }, 'Reel', { video: true }), true);
+  assert.equal(await label(s.page, '.reel-bar svg'), 'Descurtir');
+  assert.deepEqual(s.actions, ['like:Reel']);
+  assert.ok(s.logs.some((l) => /dois cliques não curtiram/.test(l)));
+  await s.page.close();
+});
+
+test('Instagram real: legenda lida é a do post e a do reel da tela (decide o nicho)', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  let s = await setup('https://www.instagram.com/');
+  const feed = await instagram._screenText(s.page);
+  assert.match(feed, /receita de bolo de cenoura 0/);
+  assert.doesNotMatch(feed, /cenoura 1/, 'leu o post de baixo, que não está inteiro na tela');
+  await s.page.close();
+  s = await setup('https://www.instagram.com/reels/');
+  assert.match(await instagram._screenText(s.page), /skate radical/);
+  await s.page.close();
+});
+
+test('Instagram real: comentários abrem na janela do post e fecham no X, sem Esc', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot } = await setup('https://www.instagram.com/');
+  assert.equal(await bot.clickVisible(instagram.SEL.comment, { minSize: 15 }), true);
+  assert.equal(new URL(page.url()).pathname, '/p/1/');
+  await instagram._closeDialog({ page, bot });
+  assert.equal(await page.locator('[role="dialog"]').count(), 0, 'a janela ficou aberta');
+  assert.equal(new URL(page.url()).pathname, '/');
+  assert.deepEqual(await page.evaluate(() => window.keys), [], 'apertou tecla para fechar');
+  await page.close();
+});
+
+test('Instagram real: stories pela foto de quem postou; assiste, avança e fecha no X', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot, ctl, actions } = await setup('https://www.instagram.com/', { plan: { story: 3 } });
+  const visited = [];
+  page.on('framenavigated', (f) => f === page.mainFrame() && visited.push(new URL(f.url()).pathname));
+  assert.equal(await instagram._activities.stories({ page, bot, ctl }), true);
+  assert.ok(visited.includes('/stories/autor/'), 'a foto não abriu o story');
+  assert.deepEqual(actions, ['story:Story 1/3', 'story:Story 2/3', 'story:Story 3/3']);
+  // Só o X do visor leva de volta ao feed (a página falsa do story não reage ao Esc)
+  assert.equal(new URL(page.url()).pathname, '/', 'o visor ficou aberto');
+  await page.close();
+});
+
+test('Instagram real: follow só conta se o botão virou "Seguindo"', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  let s = await setup('https://www.instagram.com/explore/');
+  await s.bot.clickVisible(instagram.SEL.post, { minSize: 80 });
+  assert.equal(await instagram._followHere({ bot: s.bot, ctl: s.ctl }, 'Autor'), true);
+  assert.equal(await s.page.textContent('.seguir'), 'Seguindo');
+  assert.deepEqual(s.actions, ['follow:Autor']);
+  // Já seguindo: nada a clicar
+  assert.equal(await instagram._followHere({ bot: s.bot, ctl: s.ctl }, 'Autor'), false);
+  assert.equal(s.actions.length, 1);
+  await s.page.close();
+
+  s = await setup('https://www.instagram.com/explore/', { before: () => (window.blockFollow = true) });
+  await s.bot.clickVisible(instagram.SEL.post, { minSize: 80 });
+  assert.equal(await instagram._followHere({ bot: s.bot, ctl: s.ctl }, 'Autor'), false);
+  assert.deepEqual(s.actions, []);
+  assert.match(s.logs.pop(), /follow não pegou/);
+  await s.page.close();
+});
+
+test('Instagram real: Explorar abre publicações pela hashtag, curte dentro da janela e fecha no X', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot, ctl, actions } = await setup('https://www.instagram.com/', { plan: { explore: 1, like: 5, follow: 5 } });
+  const account = { interests: ['skate'] };
+  assert.equal(await instagram._activities.explore({ page, bot, ctl, account }), true);
+  const url = new URL(page.url());
+  assert.equal(url.pathname, '/explore/search/keyword/');
+  assert.equal(url.searchParams.get('q'), '#skate');
+  assert.equal(actions[0], 'explore:#skate', 'o Explorar não contou ao abrir a 1ª publicação');
+  assert.equal(actions.filter((a) => a.startsWith('explore')).length, 1);
+  assert.equal(await page.locator('[role="dialog"]').count(), 0, 'a janela ficou aberta');
+  assert.deepEqual(await page.evaluate(() => window.keys), [], 'apertou tecla para fechar');
+  await page.close();
+});
+
+test('Instagram real: Explorar sem publicações não conta', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot, ctl, actions } = await setup('https://www.instagram.com/', { before: () => (window.emptyGrid = true) });
+  assert.equal(await instagram._activities.explore({ page, bot, ctl, account: { interests: [] } }), false);
+  assert.deepEqual(actions, []);
+  await page.close();
+});

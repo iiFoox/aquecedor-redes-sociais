@@ -156,8 +156,16 @@ export function ComoUsar() {
             conta parece um aparelho diferente.
           </p>
           <ul className="guide-list">
-            <Item t="Adicionar proxy:">cole o endereço (com usuário e senha, se tiver).</Item>
-            <Item t="Teste a cada 30 min:">o app confere se cada proxy responde, sem abrir navegador.</Item>
+            <Item t="Adicionar proxy:">
+              cole o endereço (com usuário e senha, se tiver). Com senha, use o endereço HTTP (http://usuario:senha@host:porta): o navegador
+              não aceita SOCKS5 com senha.
+            </Item>
+            <Item t="Teste a cada 30 min:">
+              o app confere se cada proxy responde, sem abrir navegador, e mostra o IP, o país e o fuso dele.
+            </Item>
+            <Item t="Disfarce completo:">
+              o navegador da conta usa o fuso do proxy e não deixa o IP real da sua internet escapar (WebRTC).
+            </Item>
             <Item t="Proxy fora do ar:">as contas dele esperam (não trocam de proxy sozinhas) e voltam quando ele responder.</Item>
           </ul>
         </>

@@ -12,6 +12,8 @@ const host = (url: string) => {
     return url;
   }
 };
+// País e fuso do IP de saída (o navegador das contas com este proxy usa esse fuso)
+const place = (p: Proxy) => (p.timezone ? ` · ${p.country ? `${p.country}, ` : ''}fuso ${p.timezone}` : '');
 
 export function Proxies() {
   const { proxies, setProxies, run, go, toast } = useStore();
@@ -39,7 +41,7 @@ export function Proxies() {
     await refresh();
     if (r)
       toast(
-        r.status === 'online' ? `${host(r.url)} online: ${r.ms} ms, IP ${r.ip}` : `${host(r.url)} fora do ar: ${r.error}`,
+        r.status === 'online' ? `${host(r.url)} online: ${r.ms} ms, IP ${r.ip}${place(r)}` : `${host(r.url)} fora do ar: ${r.error}`,
         r.status === 'online' ? 'ok' : 'bad',
       );
   };
@@ -103,6 +105,7 @@ export function Proxies() {
                 {p.status === 'online' ? (
                   <span className="pill running">
                     Online · {p.ms} ms{p.ip ? ` · IP ${p.ip}` : ''}
+                    {place(p)}
                   </span>
                 ) : p.status === 'offline' ? (
                   <span className="pill paused">Fora do ar{p.error ? `: ${p.error}` : ''}</span>

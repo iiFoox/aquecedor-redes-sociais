@@ -20,6 +20,10 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
   const history = [];
   let liked = false; // o vídeo da tela está curtido? (vale até passar de vídeo)
   const LIKE = /like-icon/;
+  // Instagram: o coração "Curtir" vira "Descurtir" (só um dos dois existe na tela)
+  const IG_LIKE = /aria-label="(Curtir|Like)"/;
+  const IG_LIKED = /aria-label="(Descurtir|Unlike)"/;
+  const ig = () => url.includes('instagram.com');
   const el = (sel, i) => ({
     sel,
     // O vídeo ocupa o meio da tela, o painel de comentários a direita; o resto são botões pequenos
@@ -39,7 +43,20 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     isVisible: async () => !PROBLEM.test(sel),
     textContent: async () => caption(),
   });
-  const count = (sel) => (PROBLEM.test(sel) ? 0 : POPUP.test(sel) ? (rng() < 0.05 ? 1 : 0) : 3);
+  const count = (sel) =>
+    PROBLEM.test(sel)
+      ? 0
+      : POPUP.test(sel)
+        ? rng() < 0.05
+          ? 1
+          : 0
+        : IG_LIKED.test(sel)
+          ? liked
+            ? 3
+            : 0
+          : IG_LIKE.test(sel) && liked
+            ? 0
+            : 3;
   const locator = (sel) => ({
     count: async () => count(sel),
     first: () => el(sel, 0),
@@ -84,7 +101,10 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
       },
     },
     mouse: {
-      wheel: async (_x, dy) => events.push({ type: 'wheel', dy }),
+      wheel: async (_x, dy) => {
+        events.push({ type: 'wheel', dy });
+        if (ig()) liked = false; // no Instagram a rodinha leva ao próximo post/reel
+      },
       click: async () => events.push({ type: 'click' }),
       down: async (o = {}) => {
         events.push({ type: 'down', count: o.clickCount || 1 });
@@ -101,12 +121,17 @@ function createFakePage({ rng = Math.random, interests = [], nicheRate = 0.25 } 
     _clicked(e) {
       events.push({ type: 'click', sel: e.sel });
       if (LIKE.test(e.sel)) liked = !liked; // o coração alterna
+      if (IG_LIKE.test(e.sel)) liked = true;
       const go = (u) => {
         history.push(url);
         url = u;
       };
       if (/avatar|uniqueid|author/.test(e.sel)) go('https://www.tiktok.com/@criador_exemplo');
       else if (/video\//.test(e.sel)) go('https://www.tiktok.com/@criador_exemplo/video/1');
+      // Instagram: a foto com anel abre o story; comentários e publicações abrem a janela do post; o X fecha
+      else if (/canvas/.test(e.sel)) go('https://www.instagram.com/stories/criador_exemplo/');
+      else if (/\/p\/|\/reel\/|aria-label="Coment/.test(e.sel)) go('https://www.instagram.com/p/1/');
+      else if (/aria-label="(Fechar|Close)"/.test(e.sel) && /\/p\/|\/stories\//.test(url) && history.length) url = history.pop();
     },
   };
   return page;

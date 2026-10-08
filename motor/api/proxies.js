@@ -2,6 +2,7 @@ const express = require('express');
 const store = require('../store');
 const runner = require('../runner');
 const { body, schemas } = require('../validate');
+const { proxyUpdate } = require('../proxycheck');
 
 const router = express.Router();
 
@@ -39,13 +40,7 @@ router.post('/proxies/:id/ping', async (req, res) => {
   const p = store.proxiesOf(req.userId).find((x) => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: 'Proxy não encontrado' });
   const r = await runner.pingProxy(p.url);
-  store.updateProxy(p.id, {
-    status: r.ok ? 'online' : 'offline',
-    ms: r.ms,
-    ip: r.ip || p.ip || null,
-    error: r.error || null,
-    lastCheck: Date.now(),
-  });
+  store.updateProxy(p.id, await proxyUpdate(p, r));
   res.json(store.allProxies().find((x) => x.id === p.id));
 });
 

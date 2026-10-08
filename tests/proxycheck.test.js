@@ -3,7 +3,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
 const net = require('net');
-const { checkProxy } = require('../motor/proxycheck');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { checkProxy, placeOf, proxyUpdate } = require('../motor/proxycheck');
+const { guardWebrtc } = require('../motor/webrtc');
+const { schemas } = require('../motor/validate');
 
 // Sobe o servidor numa porta livre e guarda as conexões para fechar tudo no fim do teste
 const open = new Set();
@@ -132,5 +137,94 @@ test('proxy desligado ou mudo: fora do ar, sem travar', async () => {
     assert.ok(Date.now() - t < 2000);
   } finally {
     mute.close();
+  }
+});
+
+test('SOCKS5 com senha é recusado no cadastro (o navegador não abre); SOCKS5 sem senha e HTTP com senha passam', () => {
+  const msg = /não aceita proxy SOCKS5 com usuário e senha/;
+  const bad = schemas.newProxy.safeParse({ url: 'socks5://u:s@1.2.3.4:1080' });
+  assert.equal(bad.success, false);
+  assert.match(bad.error.issues[0].message, msg);
+  assert.equal(schemas.accountPatch.safeParse({ proxy: 'socks5://u:s@1.2.3.4:1080' }).success, false);
+  assert.equal(schemas.newProxy.safeParse({ url: 'socks5://1.2.3.4:1080' }).success, true);
+  assert.equal(schemas.newProxy.safeParse({ url: 'http://u:s@1.2.3.4:8080' }).success, true);
+});
+
+test('país e fuso do IP: um serviço de reserva, fuso inválido não vale', async () => {
+  const asked = [];
+  const answers = {
+    'https://ipwho.is/1.2.3.4': { success: true, country_code: 'br', timezone: { id: 'America/Sao_Paulo' } },
+    'https://ipwho.is/5.6.7.8': null, // primeiro serviço fora: vai no de reserva
+    'http://ip-api.com/json/5.6.7.8?fields=status,countryCode,timezone': {
+      status: 'success',
+      countryCode: 'PT',
+      timezone: 'Europe/Lisbon',
+    },
+    'https://ipwho.is/9.9.9.9': { success: true, country_code: 'XX', timezone: { id: 'Lugar/Nenhum' } },
+    'http://ip-api.com/json/9.9.9.9?fields=status,countryCode,timezone': { status: 'fail' },
+  };
+  const get = async (u) => {
+    asked.push(u);
+    return answers[u];
+  };
+  assert.deepEqual(await placeOf('1.2.3.4', { get }), { country: 'BR', timezone: 'America/Sao_Paulo' });
+  assert.deepEqual(await placeOf('5.6.7.8', { get }), { country: 'PT', timezone: 'Europe/Lisbon' });
+  assert.equal(await placeOf('9.9.9.9', { get }), null);
+  const boom = async () => {
+    throw new Error('sem internet');
+  };
+  assert.equal(await placeOf('1.2.3.4', { get: boom }), null);
+});
+
+test('teste do proxy: busca o fuso só com IP novo ou fuso desconhecido; fora do ar mantém o último IP', async () => {
+  let asks = 0;
+  const place = async () => {
+    asks++;
+    return { country: 'BR', timezone: 'America/Manaus' };
+  };
+  const p = { url: 'http://h:1', ip: '1.1.1.1', timezone: 'America/Sao_Paulo', country: 'BR' };
+  // Mesmo IP e fuso conhecido: não pergunta
+  let up = await proxyUpdate(p, { ok: true, ms: 80, ip: '1.1.1.1' }, { place });
+  assert.equal(asks, 0);
+  assert.equal(up.status, 'online');
+  assert.equal(up.timezone, undefined); // não mexe no que já está gravado
+  // IP mudou: pergunta e grava o fuso novo
+  up = await proxyUpdate(p, { ok: true, ms: 80, ip: '2.2.2.2' }, { place });
+  assert.equal(asks, 1);
+  assert.deepEqual([up.ip, up.timezone, up.country], ['2.2.2.2', 'America/Manaus', 'BR']);
+  // Nunca testado (sem fuso): pergunta
+  await proxyUpdate({ url: 'http://h:1' }, { ok: true, ms: 80, ip: '1.1.1.1' }, { place });
+  assert.equal(asks, 2);
+  // Fora do ar: não pergunta e mantém o último IP
+  up = await proxyUpdate(p, { ok: false, ms: 0, error: 'Sem resposta' }, { place });
+  assert.equal(asks, 2);
+  assert.deepEqual([up.status, up.ip, up.error], ['offline', '1.1.1.1', 'Sem resposta']);
+});
+
+test('WebRTC: conta com proxy grava a proteção no perfil; sem proxy tira; o resto das preferências fica', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wu-webrtc-'));
+  const file = path.join(dir, 'Default', 'Preferences');
+  const read = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+  try {
+    // Sem proxy e sem perfil: nada a fazer (não cria arquivo)
+    assert.equal(guardWebrtc(dir, false), false);
+    assert.equal(fs.existsSync(file), false);
+    // Perfil novo com proxy: cria só com a proteção
+    assert.equal(guardWebrtc(dir, true), true);
+    assert.equal(read().webrtc.ip_handling_policy, 'disable_non_proxied_udp');
+    assert.equal(guardWebrtc(dir, true), false); // já estava
+    // Perfil com outras preferências: mantém tudo
+    fs.writeFileSync(file, JSON.stringify({ intl: { accept_languages: 'pt-BR' }, webrtc: { outra: 1 } }));
+    guardWebrtc(dir, true);
+    assert.deepEqual(read(), { intl: { accept_languages: 'pt-BR' }, webrtc: { outra: 1, ip_handling_policy: 'disable_non_proxied_udp' } });
+    // Tirou o proxy: tira a proteção (sem proxy o WebRTC volta ao normal)
+    assert.equal(guardWebrtc(dir, false), true);
+    assert.deepEqual(read(), { intl: { accept_languages: 'pt-BR' }, webrtc: { outra: 1 } });
+    // Arquivo estragado: não mexe
+    fs.writeFileSync(file, '{lixo');
+    assert.equal(guardWebrtc(dir, true), false);
+    assert.equal(fs.readFileSync(file, 'utf8'), '{lixo');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

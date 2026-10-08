@@ -137,4 +137,50 @@ async function checkProxy(url, { target = TARGET, timeout = TIMEOUT_MS } = {}) {
   }
 }
 
-module.exports = { checkProxy };
+// País e fuso de um IP (o de saída do proxy). Pergunta direto, sem o proxy: é só uma consulta pelo número.
+// Dois serviços gratuitos, um de reserva. null = não deu para saber agora.
+const PLACES = [
+  async (ip, get) => {
+    const j = await get(`https://ipwho.is/${ip}`);
+    return j && j.success ? { country: j.country_code, timezone: j.timezone && j.timezone.id } : null;
+  },
+  async (ip, get) => {
+    const j = await get(`http://ip-api.com/json/${ip}?fields=status,countryCode,timezone`);
+    return j && j.status === 'success' ? { country: j.countryCode, timezone: j.timezone } : null;
+  },
+];
+const validZone = (tz) => {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+async function getJson(url) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  return r.ok ? r.json() : null;
+}
+async function placeOf(ip, { get = getJson } = {}) {
+  for (const ask of PLACES) {
+    const p = await ask(ip, get).catch(() => null);
+    if (p && typeof p.timezone === 'string' && validZone(p.timezone))
+      return { country: String(p.country || '').toUpperCase(), timezone: p.timezone };
+  }
+  return null;
+}
+
+/**
+ * O que gravar no proxy depois de um teste: situação, tempo, IP de saída e, quando o IP é novo
+ * (ou o fuso ainda não é conhecido), o país e o fuso dele: o navegador da conta usa esse fuso.
+ */
+async function proxyUpdate(p, r, { place = placeOf } = {}) {
+  const up = { status: r.ok ? 'online' : 'offline', ms: r.ms, ip: r.ip || p.ip || null, error: r.error || null, lastCheck: Date.now() };
+  if (r.ok && r.ip && (r.ip !== p.ip || !p.timezone)) {
+    const where = await place(r.ip);
+    if (where) Object.assign(up, where);
+  }
+  return up;
+}
+
+module.exports = { checkProxy, placeOf, proxyUpdate };

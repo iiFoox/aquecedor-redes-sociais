@@ -6,6 +6,10 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const PROXY_URL = /^(https?|socks5):\/\/\S+:\d{2,5}\/?$/i;
 const USERNAME = /^[A-Za-z0-9._]{1,30}$/;
 const PROXY_MSG = 'Proxy inválido. Use o formato http://usuario:senha@host:porta';
+// O navegador (Edge pelo Playwright) não abre SOCKS5 com usuário e senha: o teste passaria e toda sessão falharia
+const SOCKS_AUTH = /^socks5:\/\/[^/@\s]+@/i;
+const SOCKS_MSG =
+  'O navegador não aceita proxy SOCKS5 com usuário e senha. Use o endereço HTTP do mesmo proxy (http://usuario:senha@host:porta)';
 
 const interests = z
   .union([z.string(), z.array(z.string())])
@@ -23,7 +27,8 @@ const accountProxy = z
   .string()
   .optional()
   .transform((s) => (s || '').trim())
-  .refine((s) => !s || s === 'auto' || PROXY_URL.test(s), PROXY_MSG);
+  .refine((s) => !s || s === 'auto' || PROXY_URL.test(s), PROXY_MSG)
+  .refine((s) => !SOCKS_AUTH.test(s), SOCKS_MSG);
 
 const newAccount = z.object({
   platform: z.enum(['instagram', 'tiktok'], { errorMap: () => ({ message: 'Plataforma inválida' }) }).default('instagram'),
@@ -72,7 +77,8 @@ const newProxy = z.object({
   url: z
     .string({ required_error: 'Informe o endereço do proxy', invalid_type_error: 'Informe o endereço do proxy' })
     .transform((s) => s.trim())
-    .refine((s) => PROXY_URL.test(s), PROXY_MSG),
+    .refine((s) => PROXY_URL.test(s), PROXY_MSG)
+    .refine((s) => !SOCKS_AUTH.test(s), SOCKS_MSG),
 });
 
 const configPatch = z.object({

@@ -7,6 +7,7 @@ const rules = require('./rules');
 const backup = require('./backup');
 const power = require('./power');
 const platforms = require('./platforms');
+const { proxyUpdate } = require('./proxycheck');
 
 const PROXY_EVERY_MS = 30 * 60000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -77,13 +78,7 @@ async function checkProxies() {
       r = await runner.pingProxy(p.url);
     }
     const before = p.status;
-    store.updateProxy(p.id, {
-      status: r.ok ? 'online' : 'offline',
-      ms: r.ms,
-      ip: r.ip || p.ip || null,
-      error: r.error || null,
-      lastCheck: Date.now(),
-    });
+    store.updateProxy(p.id, await proxyUpdate(p, r));
     if (before === 'offline' && r.ok) {
       console.log(`[proxies] ${rules.proxyHost(p.url)} voltou`);
       for (const a of store.mine().filter((x) => x.proxy === p.url))

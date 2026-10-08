@@ -180,6 +180,9 @@ export interface Proxy {
   status: 'online' | 'offline' | 'unknown';
   ms: number;
   ip?: string | null;
+  // País e fuso do IP de saída: o navegador das contas com este proxy usa esse fuso
+  country?: string;
+  timezone?: string;
   error?: string | null;
   lastCheck: number | null;
   accounts: { id: string; username: string; platform: Platform }[];

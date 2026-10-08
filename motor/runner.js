@@ -11,7 +11,8 @@ const { phaseFor } = require('./platforms/phases');
 const { createBot, AbortError } = require('./bot');
 const { createCtl } = require('./ctl');
 const human = require('./human');
-const { checkProxy } = require('./proxycheck');
+const { checkProxy, proxyUpdate } = require('./proxycheck');
+const { guardWebrtc } = require('./webrtc');
 const logins = require('./logins');
 const screens = require('./screens');
 
@@ -55,6 +56,20 @@ function proxyOpt(p) {
   }
 }
 
+const DEFAULT_TZ = 'America/Sao_Paulo';
+
+// Proxy da conta com país e fuso. Fuso ainda desconhecido (proxy nunca testado): testa agora, antes de abrir,
+// para a conta não abrir um dia com o fuso de São Paulo e no outro com o do proxy.
+async function proxyPlace(account) {
+  if (!account.proxy) return null;
+  const px = store.allProxies().find((p) => p.url === account.proxy);
+  if (!px || px.timezone) return px || null;
+  const r = await checkProxy(px.url);
+  store.updateProxy(px.id, await proxyUpdate(px, r));
+  if (!r.ok) throw new Error(`O proxy desta conta não respondeu (${r.error}). Teste de novo em Proxies.`);
+  return store.allProxies().find((p) => p.id === px.id) || px;
+}
+
 const BROWSER_UI_PX = 133; // barra de tarefas do Windows (48) + abas e endereço do Edge (~85)
 
 // visible: força a janela à vista (navegador manual), ignorando o modo invisível
@@ -73,6 +88,8 @@ async function launch(account, { visible = false } = {}) {
   // Microsoft Edge instalado no Windows (não o Chromium do Playwright, que quase ninguém usa para ver TikTok).
   // Sem user-agent inventado: o Edge se apresenta como ele mesmo, coerente em tudo que o site cruza.
   // Tela da conta = monitor; a área da página desconta a barra de tarefas e a barra do navegador.
+  // Com proxy, o relógio do navegador segue o fuso do IP do proxy (o site cruza os dois).
+  const px = await proxyPlace(account);
   const scr = account.viewport || { w: 1366, h: 768 };
   const opts = {
     channel: 'msedge',
@@ -82,16 +99,24 @@ async function launch(account, { visible = false } = {}) {
     screen: { width: scr.w, height: scr.h },
     viewport: { width: scr.w, height: scr.h - BROWSER_UI_PX },
     locale: 'pt-BR',
-    timezoneId: 'America/Sao_Paulo',
+    timezoneId: (px && px.timezone) || DEFAULT_TZ,
     args,
   };
   if (account.proxy) opts.proxy = proxyOpt(account.proxy);
   const fresh = !fs.existsSync(profileDir(account.id));
+  // Com proxy, o WebRTC só sai pelo proxy (sem isso o Edge mostra o IP real da sua internet)
+  try {
+    guardWebrtc(profileDir(account.id), !!account.proxy);
+  } catch (e) {
+    console.warn(`[navegador] Não consegui gravar a proteção do WebRTC de @${account.username}: ${e.message}`);
+  }
   let ctx;
   try {
     ctx = await chromium.launchPersistentContext(profileDir(account.id), opts);
   } catch (e) {
     // Sem cair para outro navegador: trocar de navegador muda o "aparelho" da conta
+    if (/socks5 proxy authentication/i.test(e.message))
+      throw new Error('O navegador não aceita proxy SOCKS5 com usuário e senha. Troque pelo endereço HTTP do mesmo proxy');
     if (/msedge|Edge|executable|distribution/i.test(e.message))
       throw new Error(`Não consegui abrir o Microsoft Edge (${e.message.split('\n')[0]}). O robô usa o Edge instalado no Windows`);
     throw e;
