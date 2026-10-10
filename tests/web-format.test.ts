@@ -157,7 +157,8 @@ test('meta personalizada no painel: avisos de prazo, acima do recomendado, follo
   t.phases[0].follow = 2; // follow na fase 1 (recomendado nenhum)
   t.phases[1].like = 16; // 1,6x
   t.phases[2].like = 70; // 3,5x
-  t.phases[3].watch = 50; // menor que na fase 3 (60)
+  t.phases[2].watch = 100; // (com vídeos para caber as curtidas)
+  t.phases[3].watch = 50; // menor que na fase 3 (100)
   t.phases[4].like = 120; // mais que os 100 vídeos
   const list = avisos('tiktok', t, plans, labels);
   assert.ok(list.some((a) => a.fase === null && a.nivel === 'risco' && /8 dias/.test(a.msg)));
@@ -165,8 +166,101 @@ test('meta personalizada no painel: avisos de prazo, acima do recomendado, follo
   assert.equal(nivelDe(list, 2, 'like'), 'atencao');
   assert.equal(nivelDe(list, 3, 'like'), 'risco');
   assert.equal(nivelDe(list, 4, 'watch'), 'atencao');
-  assert.ok(list.some((a) => a.fase === 5 && /o dia não fecha/.test(a.msg)));
+  assert.ok(list.some((a) => a.fase === 5 && a.nivel === 'erro' && /o dia nunca fecharia/.test(a.msg)));
+  assert.equal(nivelDe(list, 5, 'like'), 'erro');
   assert.equal(nivelDe(list, 1, 'like'), null);
   // Prazo curto (10 a 14): só atenção
   assert.equal(avisos('tiktok', { readyDay: 12, phases: plans }, plans, labels)[0].nivel, 'atencao');
+});
+
+test('meta personalizada no painel: erros que bloqueiam (limite e impossível) iguais aos que o motor recusa', async () => {
+  const { avisos, impossiveis, resumo } = await import('../web/src/lib/meta.ts');
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const custom = req('../motor/custom.js');
+  const platforms = req('../motor/platforms/index.js');
+  // Sorteia fases e compara: o painel acusa erro exatamente quando o motor recusa
+  let seed = 7;
+  const rnd = (n: number) => ((seed = (seed * 16807) % 2147483647), seed % n);
+  for (const platform of ['tiktok', 'instagram'] as const) {
+    const p = platforms[platform];
+    for (let i = 0; i < 400; i++) {
+      const ph = Object.fromEntries(Object.keys(p.plans[0]).map((k) => [k, k === 'minutes' ? 10 : rnd(12)]));
+      const motorSays = custom.impossible(platform, ph, p.actions).length > 0;
+      assert.equal(impossiveis(platform, ph, p.actions).length > 0, motorSays, `${platform} ${JSON.stringify(ph)}`);
+      let threw = false;
+      try {
+        custom.normalizeTemplate({ name: 'x', platform, phases: [ph] }, p.plans, p.actions);
+      } catch {
+        threw = true;
+      }
+      assert.equal(threw, motorSays, `${platform} ${JSON.stringify(ph)}: motor e painel discordam`);
+    }
+  }
+  const tt = platforms.tiktok;
+  const list = avisos(
+    'tiktok',
+    { readyDay: 3, phases: tt.plans.map((x: Record<string, number>, i: number) => (i === 1 ? { ...x, like: 301 } : x)) },
+    tt.plans,
+    tt.actions,
+    custom.LIMITS,
+  );
+  assert.ok(list.some((a) => a.key === 'readyDay' && a.nivel === 'erro' && /entre 5 e 90/.test(a.msg)));
+  assert.ok(list.some((a) => a.fase === 2 && a.key === 'like' && a.nivel === 'erro' && /máximo 300/.test(a.msg)));
+  assert.match(resumo(list), new RegExp(`^${list.filter((a) => a.nivel === 'erro').length} erros, 1 atenção$`));
+  assert.equal(resumo([]), '');
+});
+
+test('meta personalizada no painel: prévia dia a dia, totais e pontos de partida válidos no motor', async () => {
+  const { serie, total, presets, phaseIdx, avisos } = await import('../web/src/lib/meta.ts');
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const { PHASES } = req('../motor/platforms/phases.js');
+  const custom = req('../motor/custom.js');
+  const platforms = req('../motor/platforms/index.js');
+  const phases = [1, 2, 3, 4, 5].map((n) => ({ like: n * 10 }));
+  // Prazo 8: fases 1 | 2 | 3-5 | 6-7 | 8+
+  assert.deepEqual(serie(PHASES, phases, 8, 'like', 9), [10, 20, 30, 30, 30, 40, 40, 50, 50]);
+  assert.equal(total(PHASES, phases, 8, 'like'), 10 + 20 + 30 * 3 + 40 * 2);
+  assert.equal(phaseIdx(PHASES, 18, 22), 3);
+  assert.equal(phaseIdx(PHASES, 18, 15), 4);
+  assert.equal(phaseIdx(PHASES, 18, 60), 1);
+  for (const platform of ['tiktok', 'instagram'] as const) {
+    const p = platforms[platform];
+    const list = presets(p.plans);
+    assert.deepEqual(
+      list.map((x) => [x.key, x.readyDay]),
+      [
+        ['cautelosa', 30],
+        ['recomendada', 22],
+        ['rapida', 15],
+      ],
+    );
+    for (const pr of list) {
+      assert.doesNotThrow(() =>
+        custom.normalizeTemplate({ name: pr.name, platform, readyDay: pr.readyDay, phases: pr.phases }, p.plans, p.actions),
+      );
+      assert.equal(
+        avisos(platform, pr, p.plans, p.actions, custom.LIMITS).filter((a) => a.nivel !== 'atencao').length,
+        0,
+        `${platform} ${pr.key}`,
+      );
+      pr.phases.forEach((ph, i) => {
+        for (const k of Object.keys(ph)) if (p.plans[i][k] === 0) assert.equal(ph[k], 0, `${pr.key}: ${k} zerado virou ${ph[k]}`);
+      });
+    }
+    assert.deepEqual(list[1].phases, p.plans);
+  }
+});
+
+test('meta personalizada no painel: o que acontece com a fase da conta ao trocar de meta', async () => {
+  const { mudancaDeFase } = await import('../web/src/lib/meta.ts');
+  const { createRequire } = await import('node:module');
+  const { PHASES } = createRequire(import.meta.url)('../motor/platforms/phases.js');
+  assert.match(
+    mudancaDeFase(PHASES, 18, 22, 15),
+    /dia 18 \(fase 4\); com esta meta ela vai para a fase 5 · Aquecida\. Os números sobem aos poucos/,
+  );
+  assert.match(mudancaDeFase(PHASES, 18, 22, 60), /volta para a fase 2 · Interação leve\. Os números descem já hoje/);
+  assert.match(mudancaDeFase(PHASES, 5, 22, 22), /continua na fase 2/);
 });

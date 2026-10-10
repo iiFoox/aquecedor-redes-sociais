@@ -16,7 +16,7 @@ const host = (url: string) => {
 const place = (p: Proxy) => (p.timezone ? ` · ${p.country ? `${p.country}, ` : ''}fuso ${p.timezone}` : '');
 
 export function Proxies() {
-  const { proxies, setProxies, run, go, toast } = useStore();
+  const { proxies, setProxies, run, go, toast, ask } = useStore();
   const [url, setUrl] = useState('');
   const [err, setErr] = useState('');
   const [testing, setTesting] = useState<string | null>(null);
@@ -45,8 +45,8 @@ export function Proxies() {
         r.status === 'online' ? 'ok' : 'bad',
       );
   };
-  const remove = (p: Proxy) =>
-    confirm(`Remover ${host(p.url)} da lista?`) &&
+  const remove = async (p: Proxy) =>
+    (await ask({ title: `Remover ${host(p.url)} da lista?`, ok: 'Remover', danger: true })) &&
     run(async () => {
       await api(`/api/proxies/${p.id}`, 'DELETE');
       await refresh();

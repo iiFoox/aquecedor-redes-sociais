@@ -66,14 +66,21 @@ function ensurePlan(daily, dateKey, day, gen) {
 function pauseFollows(plan, done, until, now = Date.now()) {
   if (!until || now >= until || !plan) return false;
   const made = (done && done.follow) || 0;
-  if ((plan.follow || 0) <= made) return false;
-  plan.follow = made;
+  if ((plan.follow || 0) <= made && plan.caps && plan.caps.follow === made) return false;
+  plan.follow = Math.min(plan.follow || 0, made);
+  // Teto também: com 120% sobre "made" ainda caberia mais um follow
+  plan.caps = { ...(plan.caps || {}), follow: made };
   return true;
 }
 
 // Teto de uma meta: 120% do plano, arredondado para cima. Meta zerada = teto zero.
 const capOf = (planned) => Math.ceil((planned || 0) * GOAL_CAP);
-const isCapped = (plan, done, k) => (done[k] || 0) >= capOf(plan[k]);
+// Meta personalizada: plan.caps tem o teto escrito no modelo (motor/custom.js); vale o menor dos dois.
+const limitOf = (plan, k) => {
+  const c = plan && plan.caps && plan.caps[k];
+  return typeof c === 'number' ? Math.min(capOf(plan[k]), c) : capOf(plan && plan[k]);
+};
+const isCapped = (plan, done, k) => (done[k] || 0) >= limitOf(plan, k);
 
 // % de cumprimento das metas (ignora "minutes" e metas zeradas)
 function completion(plan, done) {
@@ -526,6 +533,7 @@ function decide(account, ctx) {
 module.exports = {
   TZ,
   GOAL_CAP,
+  limitOf,
   LEASE_MS,
   leaseHeld,
   windowMode,

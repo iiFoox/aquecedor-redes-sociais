@@ -53,6 +53,7 @@ export interface Account {
   phase: Phase;
   // Meta da conta: recomendada (goal null) ou um modelo personalizado; fases e dia de pronta seguem a meta
   goal: { id: string; name: string } | null;
+  goalRamp: string | null; // em transição para a meta nova desde esta data
   readyDay: number;
   phases: Phase[];
   plan: Record<string, number>;
@@ -167,6 +168,7 @@ export interface GoalTemplate {
   readyDay: number;
   vary: boolean;
   phases: Record<string, number>[];
+  updatedAt?: string;
 }
 
 export interface Meta {

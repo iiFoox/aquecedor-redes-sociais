@@ -22,7 +22,7 @@ async function applyPatch(acc, body) {
     patch.goalTemplate = t ? t.id : null;
     if (before !== patch.goalTemplate) {
       store.updateAccount(acc.id, { goalTemplate: patch.goalTemplate });
-      store.resetToday(acc);
+      store.resetToday(acc, { ramp: true });
       store.addLog(
         acc.id,
         t ? `Meta personalizada: "${t.name}" (pronta no dia ${t.readyDay}). Por sua conta e risco` : 'Meta recomendada de volta',

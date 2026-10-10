@@ -17,7 +17,7 @@ function Track({ start, end }: { start: string; end: string }) {
 }
 
 export function Rotina() {
-  const { config, setConfig, accounts, run, go, reload, system } = useStore();
+  const { config, setConfig, accounts, run, go, reload, system, ask } = useStore();
   const [form, setForm] = useState<Pick<Config, 'start' | 'end' | 'max'> | null>(null);
   const [until, setUntil] = useState(addDays(isoDate(new Date()), 3));
   useEffect(() => {
@@ -152,8 +152,8 @@ export function Rotina() {
                 />
                 <button
                   className="btn"
-                  onClick={() =>
-                    confirm('Pausar todas as contas até a data de volta?') &&
+                  onClick={async () =>
+                    (await ask({ title: 'Modo férias', body: 'Pausar todas as contas até a data de volta?', ok: 'Pausar as contas' })) &&
                     run(
                       async () => {
                         setConfig(await api<Config>('/api/vacation', 'POST', { until }));

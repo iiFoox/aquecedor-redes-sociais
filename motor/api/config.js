@@ -13,20 +13,23 @@ const platforms = require('../platforms');
 const custom = require('../custom');
 
 router.get('/metas', (_, res) => res.json({ templates: store.getConfig().goalTemplates || [], limits: custom.LIMITS }));
-router.post('/metas', (req, res) => {
+router.post('/metas', async (req, res) => {
   try {
     const p = platforms[req.body && req.body.platform];
     if (!p) return res.status(400).json({ error: 'Plataforma inválida' });
     const t = custom.normalizeTemplate(req.body, p.plans, p.actions);
-    res.json(store.saveTemplate(t));
+    res.json(await store.saveTemplate(t));
   } catch (e) {
     res.status(e.status || 400).json({ error: e.message });
   }
 });
-router.delete('/metas/:id', (req, res) => {
-  if (!store.templateById(req.params.id)) return res.status(404).json({ error: 'Modelo não encontrado' });
-  store.removeTemplate(req.params.id);
-  res.json({ ok: true });
+router.delete('/metas/:id', async (req, res) => {
+  try {
+    await store.removeTemplate(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(e.status || 400).json({ error: e.message });
+  }
 });
 router.post('/config', body(schemas.configPatch), (req, res) => res.json(store.setConfig(req.body)));
 

@@ -9,6 +9,22 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.6',
+    data: '2026-10-10',
+    titulo: 'Metas personalizadas mais seguras e mais fáceis de usar',
+    itens: [
+      'Trocar de meta no meio do caminho não pula mais de fase de uma vez: os números sobem aos poucos (no máximo +25% por dia sobre o último dia com sessão). Descer é na hora. A conta mostra "em transição" enquanto isso.',
+      'O número que você escreve é o MÁXIMO do dia: "variar um pouco por dia" só desce (até ~10%), números até 2 não variam e o teto do dia é o próprio número (sem os 120% da recomendada).',
+      'Dois computadores mexendo nos modelos ao mesmo tempo não apagam mais o modelo um do outro.',
+      'Combinações impossíveis são recusadas (TikTok: mais curtidas que vídeos, mais follows que vídeos + perfis; Instagram: follow sem Explorar), e nome de modelo não repete.',
+      'Editar um modelo deixa no registro de cada conta o que mudou ("curtidas fase 3 de 20 para 30"); o cartão mostra quando foi editado.',
+      'Editor novo: pontos de partida (Cautelosa 30 dias, Recomendada 22, Rápida 15), prévia em gráfico dia a dia com a recomendada atrás e os totais, aviso de cada número ao clicar nele, limite marcado na hora, resumo dos avisos perto do salvar e a caixinha do risco só quando há aviso.',
+      'Escolha as contas direto no modelo ("Aplicar em contas"), vendo em que aparelho cada uma roda e para que fase ela vai.',
+      'Sair do editor com mudança não salva pergunta antes; as perguntas do app agora aparecem numa janela do próprio app.',
+      'No celular, o editor mostra uma fase por cartão. "O que há de novo?" ocupa a largura toda da página.',
+    ],
+  },
+  {
     versao: '2.1.5',
     data: '2026-10-10',
     titulo: '"O que há de novo?" mais fácil de ler',

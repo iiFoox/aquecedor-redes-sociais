@@ -72,24 +72,49 @@ test('modelo: campo que falta fica com o recomendado; chave estranha sai; limite
   assert.equal(i.phases[0].reel, 9);
 });
 
-test('plano do dia do modelo: exato sem variação; com variação fica perto (~10%), meta zerada continua zerada', () => {
-  const base = { minutes: 20, watch: 100, like: 30, follow: 0, profile: 1, search: 0 };
+test('plano do dia do modelo: o número escrito é o MÁXIMO (variação só desce, até 2 não varia) e é o teto do dia', () => {
+  const base = { minutes: 20, watch: 100, like: 30, follow: 0, profile: 1, search: 2 };
   const t = { readyDay: 22, vary: false, phases: [base, base, base, base, base] };
-  assert.deepEqual(custom.planFrom(t, 2), base);
+  const exact = custom.planFrom(t, 2);
+  const { caps, ...nums } = exact;
+  assert.deepEqual(nums, base);
+  assert.deepEqual(caps, { watch: 100, like: 30, follow: 0, profile: 1, search: 2 }, 'teto = o número escrito (sem minutos)');
   const v = { ...t, vary: true };
   const rng = human.makeRng(9);
   const seen = new Set();
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 400; i++) {
     const p = custom.planFrom(v, 0, rng);
-    assert.ok(p.watch >= 90 && p.watch <= 110, `vídeos ${p.watch}`);
-    assert.ok(p.like >= 27 && p.like <= 33, `curtidas ${p.like}`);
+    assert.ok(p.watch >= 90 && p.watch <= 100, `vídeos ${p.watch}`);
+    assert.ok(p.like >= 27 && p.like <= 30, `curtidas ${p.like}`);
     assert.equal(p.follow, 0, 'follow zerado virou follow');
-    assert.equal(p.search, 0);
-    assert.ok(p.profile >= 1 && p.profile <= 2);
-    assert.ok(p.minutes >= 18 && p.minutes <= 22);
+    assert.equal(p.profile, 1, '1 perfil variou');
+    assert.equal(p.search, 2, '2 buscas variaram');
+    assert.ok(p.minutes >= 18 && p.minutes <= 20, `minutos ${p.minutes}`);
+    assert.equal(p.caps.like, 30);
     seen.add(p.like);
   }
-  assert.ok(seen.size > 3, 'não variou');
+  assert.ok(seen.size >= 3, 'não variou');
+  // Números pequenos: 3 a 5 só descem 1
+  const small = { readyDay: 22, vary: true, phases: Array(5).fill({ minutes: 10, watch: 5, like: 3, follow: 4, profile: 0, search: 0 }) };
+  for (let i = 0; i < 200; i++) {
+    const p = custom.planFrom(small, 0, rng);
+    assert.ok([4, 5].includes(p.watch) && [2, 3].includes(p.like) && [3, 4].includes(p.follow), JSON.stringify(p));
+  }
+});
+
+test('teto do dia: recomendada 120%; meta personalizada no máximo o número escrito; follow pausado continua pausado', () => {
+  assert.equal(rules.limitOf({ like: 10 }, 'like'), 12);
+  assert.equal(rules.limitOf({ like: 9, caps: { like: 10 } }, 'like'), 10, 'variou para 9: teto é o 10 escrito, não 11');
+  assert.equal(rules.limitOf({ like: 10, caps: { like: 10 } }, 'like'), 10);
+  assert.equal(rules.limitOf({ follow: 0, caps: { follow: 0 } }, 'follow'), 0);
+  const plan = { like: 10, follow: 5, caps: { like: 10, follow: 5 } };
+  rules.pauseFollows(plan, { follow: 1 }, Date.now() + 3600000);
+  assert.equal(rules.limitOf(plan, 'follow'), 1);
+  assert.equal(rules.isCapped(plan, { like: 10 }, 'like'), true);
+  assert.equal(rules.isCapped(plan, { like: 9 }, 'like'), false);
+  // O objeto de tetos não vira meta
+  assert.equal(rules.completion({ like: 2, caps: { like: 2 } }, { like: 2 }), 1);
+  assert.equal(rules.missingText({ like: 2, caps: { like: 2 } }, { like: 1 }), '1 like');
 });
 
 test('plano do dia: com modelo usa a fase do prazo do modelo; sem modelo, a recomendada de sempre', () => {
@@ -113,7 +138,8 @@ const checkDays = (r, platform, exact) => {
     if (!d.plan) continue;
     for (const k of Object.keys(d.plan)) {
       if (k === 'minutes') continue;
-      const lim = exact ? d.plan[k] : rules.capOf(d.plan[k]);
+      if (k === 'caps') continue;
+      const lim = exact ? d.plan[k] : rules.limitOf(d.plan, k);
       assert.ok((d[k] || 0) <= lim, `${platform} ${date}: ${k} ${d[k]} passou de ${lim} (plano ${d.plan[k]})`);
     }
     assert.notEqual(
@@ -142,8 +168,19 @@ test('simulador: modelos personalizados (pequeno, grande, prazo curto) fecham o 
       const base = template.phases[phaseIndex(1, template.readyDay)];
       for (const k of Object.keys(base)) {
         if (k === 'minutes') continue;
-        const d = template.vary ? Math.max(1, Math.round(base[k] * 0.1)) : 0;
-        assert.ok(Math.abs(first.plan[k] - base[k]) <= d, `${platform}: ${k} do dia 1 = ${first.plan[k]}, modelo ${base[k]}`);
+        const d = template.vary && base[k] > 2 ? Math.max(1, Math.round(base[k] * 0.1)) : 0;
+        assert.ok(
+          first.plan[k] <= base[k] && first.plan[k] >= base[k] - d,
+          `${platform}: ${k} do dia 1 = ${first.plan[k]}, modelo ${base[k]}`,
+        );
+      }
+      // Nenhum dia passa do número escrito no modelo para a fase do dia
+      for (const [date, d] of Object.entries(r.daily)) {
+        if (!d.plan) continue;
+        const day = Object.keys(r.daily).sort().indexOf(date) + 1;
+        const written = template.phases[phaseIndex(day, template.readyDay)];
+        for (const k of Object.keys(written))
+          if (k !== 'minutes') assert.ok((d[k] || 0) <= written[k], `${platform} ${date}: ${k} ${d[k]} passou do escrito ${written[k]}`);
       }
     }
   }

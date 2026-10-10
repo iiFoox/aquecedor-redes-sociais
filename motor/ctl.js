@@ -28,7 +28,7 @@ function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
     // Meta já no teto de 120% do plano do dia
     capped: (k) => rules.isCapped(plan, done(), k),
     // Quanto ainda cabe até o teto de 120% (ex.: vídeos que ainda dá para ver hoje)
-    room: (k) => rules.capOf(plan[k]) - (done()[k] || 0),
+    room: (k) => rules.limitOf(plan, k) - (done()[k] || 0),
     allowed: (act, acc) => rules.activityAllowed(act, plan, done(), acc),
     useful: (act) => rules.activityUseful(act, plan, done()),
     // Peso da atividade pelo que falta no dia (rules.activityPriority)

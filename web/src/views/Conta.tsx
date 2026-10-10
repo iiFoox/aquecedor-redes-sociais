@@ -29,6 +29,7 @@ import {
   when,
 } from '../lib/format.ts';
 import { useStore } from '../store.tsx';
+import { mudancaDeFase, READY_DAY } from '../lib/meta.ts';
 import { DeviceBar } from '../components/Aparelho.tsx';
 import { useNow } from './Cockpit.tsx';
 
@@ -193,23 +194,31 @@ function Calendar({ a }: { a: Account; meta?: Meta }) {
 
 // Meta da conta: a recomendada ou um modelo personalizado da mesma plataforma (aba "Metas personalizadas")
 function GoalPicker({ a }: { a: Account }) {
-  const { act, go } = useStore();
+  const { act, go, ask, meta } = useStore();
   const [list, setList] = useState<GoalTemplate[]>([]);
   useEffect(() => {
     api<{ templates: GoalTemplate[] }>('/api/metas')
       .then((r) => setList(r.templates.filter((t) => t.platform === a.platform)))
       .catch(() => setList([]));
   }, [a.platform]);
-  const pick = (id: string) => {
+  const pick = async (id: string) => {
     const t = list.find((x) => x.id === id);
-    if (
-      t &&
-      !confirm(
-        `Usar a meta personalizada "${t.name}" (pronta no dia ${t.readyDay}) nesta conta? É por sua conta e risco. O plano de hoje é refeito com ela.`,
-      )
-    )
-      return;
-    act.patch(a, { goalTemplate: id || null }, t ? `Meta "${t.name}" nesta conta` : 'Meta recomendada de volta');
+    const readyDay = t ? t.readyDay : READY_DAY;
+    const ok = await ask({
+      title: t ? `Usar a meta "${t.name}" em @${a.username}?` : `Voltar @${a.username} para a meta recomendada?`,
+      body: (
+        <>
+          <p>{meta ? mudancaDeFase(meta.phases, a.day, a.readyDay, readyDay) : null}</p>
+          <p>
+            O plano de hoje é refeito com a meta {t ? 'nova' : 'recomendada'}.{' '}
+            {a.live ? 'A sessão que está rodando agora termina com o plano antigo; a mudança vale a partir da próxima. ' : ''}
+            {t ? 'Meta personalizada é por sua conta e risco.' : ''}
+          </p>
+        </>
+      ),
+      ok: t ? 'Usar esta meta' : 'Voltar para a recomendada',
+    });
+    if (ok) act.patch(a, { goalTemplate: id || null }, t ? `Meta "${t.name}" nesta conta` : 'Meta recomendada de volta');
   };
   return (
     <div className="field" style={{ marginBottom: 10 }}>
@@ -224,6 +233,7 @@ function GoalPicker({ a }: { a: Account }) {
       </select>
       <span className="help">
         {a.goal ? 'Meta personalizada: por sua conta e risco. ' : ''}
+        {a.goalRamp ? `Em transição para a meta nova desde ${ddmm(a.goalRamp)}: os números sobem no máximo +25% por dia. ` : ''}
         <button type="button" className="link" onClick={() => go('metas')}>
           {list.length ? 'Ver e editar os modelos' : 'Criar uma meta personalizada'}
         </button>
@@ -234,7 +244,7 @@ function GoalPicker({ a }: { a: Account }) {
 
 // Horário próprio, proxy e interesses da conta
 function Settings({ a, full }: { a: Account; full: AccountFull }) {
-  const { config, proxies, act } = useStore();
+  const { config, proxies, act, ask } = useStore();
   const [own, setOwn] = useState(!!a.window);
   const [start, setStart] = useState(a.window?.start || config?.start || '08:00');
   const [end, setEnd] = useState(a.window?.end || config?.end || '22:00');
@@ -245,12 +255,20 @@ function Settings({ a, full }: { a: Account; full: AccountFull }) {
     setProxy(full.proxyUrl);
     setInterests(a.interests.join(', '));
   }, [a.id, full.proxyUrl]);
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const body: Record<string, unknown> = { window: own ? { start, end } : null, interests };
     if (proxy !== full.proxyUrl) {
-      if (full.proxyUrl && !confirm('Trocar o proxy muda o IP desta conta e pode pedir verificação. Continuar?')) return;
       body.proxy = proxy;
+      if (
+        full.proxyUrl &&
+        !(await ask({
+          title: 'Trocar o proxy?',
+          body: 'Trocar o proxy muda o IP desta conta e pode pedir verificação.',
+          ok: 'Trocar o proxy',
+        }))
+      )
+        return;
     }
     act.patch(a, body, 'Ajustes salvos');
   };
@@ -362,7 +380,7 @@ function Checklist({ a, meta }: { a: Account; meta: Meta }) {
 }
 
 export function Conta() {
-  const { accounts, accountId, meta, tick, act, go } = useStore();
+  const { accounts, accountId, meta, tick, act, go, ask } = useStore();
   const [full, setFull] = useState<AccountFull | null>(null);
   const [missingAcc, setMissingAcc] = useState(false);
   const a = accounts.find((x) => x.id === accountId);
@@ -428,9 +446,12 @@ export function Conta() {
             aria-label="Remover conta"
             title="Remover conta"
             onClick={() =>
-              confirm(
-                `Remover @${a.username}? O login salvo no Supabase e os prints saem junto; a pasta do perfil continua neste PC (data/profiles).`,
-              ) && act.remove(a)
+              ask({
+                title: `Remover @${a.username}?`,
+                body: 'O login salvo no Supabase e os prints saem junto; a pasta do perfil continua neste PC (data/profiles).',
+                ok: 'Remover',
+                danger: true,
+              }).then((ok) => ok && act.remove(a))
             }
           >
             <Icon name="trash" />
@@ -512,7 +533,15 @@ export function Conta() {
         <div className="stack">
           <section className="panel">
             <div className="panel-head">
-              <h2>Jornada{a.goal ? <span className="pill"> meta: {a.goal.name}</span> : null}</h2>
+              <h2>
+                Jornada{a.goal ? <span className="pill"> meta: {a.goal.name}</span> : null}
+                {a.goalRamp ? (
+                  <span className="pill ready" title="Os números sobem no máximo +25% por dia até a meta nova">
+                    {' '}
+                    em transição
+                  </span>
+                ) : null}
+              </h2>
               <span className="muted">{readyLeft <= 0 ? 'pronta' : `pronta em ${readyLeft} ${readyLeft === 1 ? 'dia' : 'dias'}`}</span>
             </div>
             <div className="vj">

@@ -3,6 +3,7 @@
 const rules = require('../rules');
 const human = require('../human');
 const platforms = require('../platforms');
+const custom = require('../custom');
 const { createBot } = require('../bot');
 const { createCtl } = require('../ctl');
 const { createFakePage, createFakeCursor, createFakeClock } = require('./fakePage');
@@ -104,7 +105,16 @@ async function simulate({ account, days = 3, from = startOfDay(Date.now() + DAY)
       running: false,
       browserOpen: false,
       plan: () =>
-        rules.ensurePlan(acc.daily, date, rules.dayOf(acc, now), (d) => platform.planForDay(d, rng, account.template || null)).plan,
+        rules.ensurePlan(acc.daily, date, rules.dayOf(acc, now), (d) => {
+          // Troca de meta no meio (account.switchAt = { day, template }): igual ao motor, com a transição suave
+          const sw = account.switchAt;
+          if (sw && d >= sw.day && !acc.switched) {
+            acc.switched = true;
+            acc.goalRamp = date;
+          }
+          const t = sw && d >= sw.day ? sw.template : account.template || null;
+          return custom.withRamp(acc, platform.planForDay(d, rng, t), date);
+        }).plan,
       today,
       activities: platform.activities,
       // Rotina do dia, igual ao motor: planejada na primeira olhada dentro da janela

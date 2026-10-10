@@ -4,6 +4,7 @@ import { api, type Config } from './api.ts';
 import { Icon, PlatformBadge } from './components/Icon.tsx';
 import { Onboarding } from './components/Onboarding.tsx';
 import { NomeAparelho } from './components/Aparelho.tsx';
+import { Confirm } from './components/Confirm.tsx';
 import { Palette } from './components/Palette.tsx';
 import { duration, hhmm } from './lib/format.ts';
 import { effectiveTheme, useTheme } from './lib/theme.ts';
@@ -353,6 +354,7 @@ export function App() {
       {overlay === 'palette' && <Palette onClose={close} onNewAccount={newAccount} />}
       {overlay === 'onboarding' && <Onboarding onClose={close} />}
       <NomeAparelho />
+      <Confirm />
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.kind === 'bad' ? 'bad' : ''}`}>

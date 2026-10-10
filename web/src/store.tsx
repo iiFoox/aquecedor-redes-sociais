@@ -45,6 +45,11 @@ interface Store {
   tick: number; // muda a cada mudança da conta aberta (para recarregar o detalhe)
   lastEvent: StreamEvent | null;
   go: (view: View, accountId?: string) => void;
+  // Pergunta na janela do próprio app (no lugar do confirm do navegador): true = confirmou
+  ask: (q: Ask) => Promise<boolean>;
+  asking: (Ask & { answer: (ok: boolean) => void }) | null;
+  // Tela com mudança não salva: mensagem para perguntar antes de sair dela (null = nada a perder)
+  setLeaveGuard: (msg: string | null) => void;
   toast: (msg: string, kind?: 'ok' | 'bad') => void;
   toasts: Toast[];
   run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
@@ -64,6 +69,14 @@ interface Store {
     backupNow: () => Promise<unknown>;
     claim: (a: Account) => Promise<unknown>;
   };
+}
+
+export interface Ask {
+  title: string;
+  body?: ReactNode;
+  ok: string;
+  cancel?: string;
+  danger?: boolean;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -96,6 +109,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [tick, setTick] = useState(0);
   const [lastEvent, setLastEvent] = useState<StreamEvent | null>(null);
+  const [asking, setAsking] = useState<Store['asking']>(null);
+  const leaveRef = useRef<string | null>(null);
   const prev = useRef<Map<string, Account>>(new Map());
   const metaRef = useRef<Meta | null>(null);
   const accountsRef = useRef<Account[]>([]);
@@ -108,15 +123,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4600);
   }, []);
 
-  const go = useCallback((view: View, accountId?: string) => {
-    const next = { view, accountId: view === 'conta' ? accountId || null : null };
-    setNav(next);
-    try {
-      history.replaceState(null, '', `#${view}${next.accountId ? `/${next.accountId}` : ''}`);
-    } catch {
-      /* sem histórico */
-    }
-    window.scrollTo({ top: 0 });
+  const ask = useCallback(
+    (q: Ask) =>
+      new Promise<boolean>((resolve) =>
+        setAsking({
+          ...q,
+          answer: (ok) => {
+            setAsking(null);
+            resolve(ok);
+          },
+        }),
+      ),
+    [],
+  );
+  const setLeaveGuard = useCallback((msg: string | null) => {
+    leaveRef.current = msg;
+  }, []);
+  // Sair de uma tela com mudança não salva: pergunta antes
+  const askLeave = useCallback(
+    () =>
+      leaveRef.current
+        ? ask({
+            title: 'Sair sem salvar?',
+            body: leaveRef.current,
+            ok: 'Sair sem salvar',
+            cancel: 'Continuar editando',
+            danger: true,
+          }).then((ok) => {
+            if (ok) leaveRef.current = null;
+            return ok;
+          })
+        : Promise.resolve(true),
+    [ask],
+  );
+  const hashOf = (n: { view: View; accountId: string | null }) => `#${n.view}${n.accountId ? `/${n.accountId}` : ''}`;
+  const go = useCallback(
+    (view: View, accountId?: string) => {
+      const next = { view, accountId: view === 'conta' ? accountId || null : null };
+      askLeave().then((ok) => {
+        if (!ok) return;
+        setNav(next);
+        try {
+          history.replaceState(null, '', hashOf(next));
+        } catch {
+          /* sem histórico */
+        }
+        window.scrollTo({ top: 0 });
+      });
+    },
+    [askLeave],
+  );
+  // Fechar ou recarregar a janela com mudança não salva: o navegador pergunta
+  useEffect(() => {
+    const on = (e: BeforeUnloadEvent) => {
+      if (leaveRef.current) e.preventDefault();
+    };
+    addEventListener('beforeunload', on);
+    return () => removeEventListener('beforeunload', on);
   }, []);
 
   // Comemora meta batida e mudança de fase (comparando com a leitura anterior)
@@ -174,12 +237,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [loadAccounts]);
 
-  // Endereço mudado à mão (ou voltar do navegador): segue o #
+  // Endereço mudado à mão (ou voltar do navegador): segue o #; com mudança não salva, pergunta antes
   useEffect(() => {
-    const on = () => setNav(readHash());
+    const on = () => {
+      const next = readHash();
+      if (!leaveRef.current) return setNav(next);
+      try {
+        history.replaceState(null, '', hashOf(navRef.current));
+      } catch {
+        /* sem histórico */
+      }
+      askLeave().then((ok) => {
+        if (!ok) return;
+        setNav(next);
+        try {
+          history.replaceState(null, '', hashOf(next));
+        } catch {
+          /* sem histórico */
+        }
+      });
+    };
     addEventListener('hashchange', on);
     return () => removeEventListener('hashchange', on);
-  }, []);
+  }, [askLeave]);
 
   // Quem está logado (e-mail no menu, Ajustes → Conta do painel)
   useEffect(() => {
@@ -365,6 +445,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     tick,
     lastEvent,
     go,
+    ask,
+    asking,
+    setLeaveGuard,
     toast,
     toasts,
     run,

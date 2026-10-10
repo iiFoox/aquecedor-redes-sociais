@@ -159,13 +159,24 @@ export function ComoUsar() {
             um modelo com o seu prazo (dias até a conta ficar pronta) e os seus números de cada fase, no lugar da meta recomendada.
           </Item>
           <Item t="Criar:">
-            na aba <Go view="metas">Metas personalizadas</Go>, "Modelo do TikTok" ou "Modelo do Instagram". Vem preenchido com o
-            recomendado; mude o que quiser. As 5 fases se ajustam ao prazo, na mesma ordem.
+            na aba <Go view="metas">Metas personalizadas</Go>, "Modelo do TikTok" ou "Modelo do Instagram". Comece da Cautelosa (30 dias),
+            da Recomendada (22) ou da Rápida (15) e mude o que quiser. As 5 fases se ajustam ao prazo, na mesma ordem. A prévia mostra cada
+            dia comparado com a recomendada.
           </Item>
-          <Item t="Usar numa conta:">Conta → Ajustes desta conta → Meta. O plano de hoje é refeito com a meta nova.</Item>
+          <Item t="O número é o máximo:">
+            nenhum dia passa do que você escreveu. Com "variar um pouco por dia", o dia fica até ~10% abaixo (números até 2 não variam).
+          </Item>
+          <Item t="Usar em contas:">
+            no próprio modelo ("Aplicar em contas") ou na conta (Ajustes desta conta → Meta). O plano de hoje é refeito; a sessão que já
+            está rodando termina com o plano antigo.
+          </Item>
+          <Item t="Trocar de meta:">
+            se a meta nova pede mais, os números sobem aos poucos (no máximo +25% por dia) e a conta mostra "em transição". Se pede menos,
+            desce na hora.
+          </Item>
           <Item t="Avisos:">
-            amarelo é acima do recomendado, vermelho é risco (muito acima, follow cedo, prazo muito curto). Não bloqueiam: é por sua conta e
-            risco.
+            amarelo é acima do recomendado, vermelho é risco (muito acima, follow cedo, prazo muito curto): não bloqueiam, é por sua conta e
+            risco. Vermelho tracejado é erro (fora do limite ou impossível de fazer): esse precisa corrigir para salvar.
           </Item>
           <Item t="Apagar um modelo:">as contas que usavam voltam sozinhas para a meta recomendada.</Item>
         </ul>

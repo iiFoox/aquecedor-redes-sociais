@@ -439,34 +439,88 @@ function todayOf(id) {
 
 const templateById = (id) => (config.goalTemplates || []).find((t) => t.id === id) || null;
 
-// Salva (cria ou troca) um modelo. As contas deste aparelho que usam ele: plano de hoje sorteado de novo.
+// Modelos de meta ficam numa lista só em user_config (todos os aparelhos). Para um aparelho que ainda não releu não
+// apagar o modelo que outro acabou de gravar, cada mudança relê a lista do banco, aplica só a mudança dela e grava
+// na hora (uma por vez). A releitura de 2 em 2 min espera enquanto há mudança daqui por gravar.
+let tplChain = Promise.resolve();
+let tplBusy = 0;
+const labelsOf = (platform) => {
+  const p = require('./platforms')[platform]; // aqui dentro: platforms carrega o bot, que não precisa do store
+  return (p && p.actions) || {};
+};
+const fail400 = (msg) => Object.assign(new Error(msg), { status: 400 });
+function editTemplates(change) {
+  const job = async () => {
+    tplBusy++;
+    try {
+      await reloadUserConfig({ force: true });
+      const r = change(config.goalTemplates || []);
+      setConfig({ goalTemplates: r.list });
+      if (sb) await flush();
+      return r.value;
+    } finally {
+      tplBusy--;
+    }
+  };
+  const p = tplChain.then(job, job);
+  tplChain = p.catch(() => {});
+  return p;
+}
+
+// Contas deste aparelho que usam o modelo: plano de hoje de novo, com transição suave (custom.rampPlan), e o que
+// mudou vai para o registro da conta
+function templateChanged(before, t) {
+  const diff = require('./custom').diffTemplate(before, t, labelsOf(t.platform));
+  for (const a of mine().filter((x) => x.goalTemplate === t.id)) {
+    resetToday(a, { ramp: true });
+    if (before && diff.length)
+      addLog(a.id, `Meta "${t.name}" editada: ${diff.slice(0, 6).join('; ')}${diff.length > 6 ? `; e mais ${diff.length - 6}` : ''}`);
+  }
+}
+
+// Salva (cria ou troca) um modelo. Nome repetido na mesma plataforma é recusado.
 function saveTemplate(t) {
-  const list = (config.goalTemplates || []).filter((x) => x.id !== t.id);
-  setConfig({ goalTemplates: [...list, t] });
-  for (const a of mine().filter((x) => x.goalTemplate === t.id)) resetToday(a);
-  return t;
+  return editTemplates((list) => {
+    const norm = (x) => x.trim().toLocaleLowerCase('pt-BR');
+    if (list.some((x) => x.id !== t.id && x.platform === t.platform && norm(x.name) === norm(t.name)))
+      throw fail400(`Já existe um modelo do ${t.platform === 'tiktok' ? 'TikTok' : 'Instagram'} chamado "${t.name}"`);
+    const before = list.find((x) => x.id === t.id) || null;
+    return { list: [...list.filter((x) => x.id !== t.id), t], value: before };
+  }).then((before) => {
+    templateChanged(before, t);
+    return t;
+  });
 }
 // Apaga um modelo: as contas que usavam voltam para a meta recomendada (sem modelo achado = recomendada)
 function removeTemplate(id) {
-  setConfig({ goalTemplates: (config.goalTemplates || []).filter((x) => x.id !== id) });
-  for (const a of mine().filter((x) => x.goalTemplate === id)) {
-    resetToday(a);
-    addLog(a.id, 'O modelo de meta foi apagado: meta recomendada de volta');
-  }
+  return editTemplates((list) => {
+    if (!list.some((x) => x.id === id)) throw Object.assign(new Error('Modelo não encontrado'), { status: 404 });
+    return { list: list.filter((x) => x.id !== id) };
+  }).then(() => {
+    for (const a of mine().filter((x) => x.goalTemplate === id)) {
+      resetToday(a, { ramp: true });
+      addLog(a.id, 'O modelo de meta foi apagado: meta recomendada de volta');
+    }
+  });
 }
-// Modelos mudados em outro aparelho (rede de segurança a cada 2 min): relê e sorteia de novo o plano de hoje das
-// contas daqui cujo modelo mudou
-async function reloadUserConfig() {
+// Modelos mudados em outro aparelho (a cada 2 min e antes de cada mudança daqui): relê e refaz o plano de hoje das
+// contas daqui cujo modelo mudou. Com mudança daqui ainda por gravar, espera (senão ela se perderia).
+async function reloadUserConfig({ force = false } = {}) {
   if (!sb) return;
+  if (!force && (tplBusy || dirty.config)) return;
   const { data, error } = await sb.from('user_config').select('data').maybeSingle();
-  if (error || !data || !data.data) return;
-  const next = data.data.goalTemplates || [];
-  const was = new Map((config.goalTemplates || []).map((t) => [t.id, JSON.stringify(t)]));
-  const now = new Map(next.map((t) => [t.id, JSON.stringify(t)]));
-  const changed = new Set([...was.keys(), ...now.keys()].filter((id) => was.get(id) !== now.get(id)));
-  if (!changed.size) return;
+  if (error) {
+    if (force) throw Object.assign(new Error('Sem conexão com o servidor: tente de novo'), { status: 503 });
+    return;
+  }
+  const next = (data && data.data && data.data.goalTemplates) || [];
+  const was = new Map((config.goalTemplates || []).map((t) => [t.id, t]));
+  const changed = next.filter((t) => JSON.stringify(t) !== JSON.stringify(was.get(t.id)));
+  const gone = [...was.keys()].filter((id) => !next.some((t) => t.id === id));
+  if (!changed.length && !gone.length) return;
   config = { ...config, goalTemplates: next };
-  for (const a of mine().filter((x) => x.goalTemplate && changed.has(x.goalTemplate))) resetToday(a);
+  for (const t of changed) templateChanged(was.get(t.id) || null, t);
+  for (const a of mine().filter((x) => x.goalTemplate && gone.includes(x.goalTemplate))) resetToday(a, { ramp: true });
 }
 
 // Modelo de meta personalizada da conta (da mesma plataforma) ou null: usa a meta recomendada
@@ -477,9 +531,15 @@ function templateOf(a) {
 const readyDayOf = (a) => (templateOf(a) || {}).readyDay || 22;
 
 // A meta da conta mudou (outro modelo, modelo editado): o plano e a rotina de HOJE são sorteados de novo com a meta
-// nova. O que já foi feito hoje continua contando.
-function resetToday(a) {
-  const d = a && a.daily[rules.localDate()];
+// nova. O que já foi feito hoje continua contando. ramp: liga a transição suave (custom.rampPlan) até a meta nova.
+// A sessão que já está rodando continua com o plano do começo dela; a mudança vale a partir da próxima.
+function resetToday(a, { ramp = false } = {}) {
+  if (!a) return;
+  if (ramp) {
+    a.goalRamp = rules.localDate();
+    touch(a.id);
+  }
+  const d = a.daily[rules.localDate()];
   if (!d) return;
   delete d.plan;
   delete d.slots;
@@ -489,9 +549,12 @@ function resetToday(a) {
 
 // Plano do dia: sorteado uma vez por data e gravado
 // Follows pausados (o site não estava gravando): o follow sai do plano até a pausa acabar.
+// Depois de trocar a meta (goalRamp), o plano passa pela transição suave (custom.withRamp).
 function planOf(a, gen) {
   const t = templateOf(a);
-  const { plan, created } = rules.ensurePlan(a.daily, rules.localDate(), rules.dayOf(a), (day) => gen(day, Math.random, t));
+  const today = rules.localDate();
+  const make = (day) => require('./custom').withRamp(a, gen(day, Math.random, t), today);
+  const { plan, created } = rules.ensurePlan(a.daily, today, rules.dayOf(a), make);
   const paused = rules.pauseFollows(plan, a.daily[rules.localDate()], a.followPauseUntil);
   if (created || paused) touch(a.id);
   return plan;
@@ -860,7 +923,15 @@ function setConfig(next) {
   return config;
 }
 
+// Só para os testes: um banco falso no lugar do Supabase, sem carregar nada (tests/metas-aparelhos.test.js)
+function _useClient(client, { user = 'u1', device = null } = {}) {
+  sb = client;
+  userId = user;
+  deviceId = device;
+}
+
 module.exports = {
+  _useClient,
   init,
   flush,
   pendingCount,

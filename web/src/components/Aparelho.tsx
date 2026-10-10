@@ -122,7 +122,7 @@ export function Aparelhos() {
 
 // Ajustes → Logins na nuvem: a chave que cifra os logins das contas no Supabase
 export function LoginsNuvem() {
-  const { run } = useStore();
+  const { run, ask } = useStore();
   const [vault, setVault] = useState<VaultStatus | null>(null);
   const [mode, setMode] = useState<'atual' | 'antiga' | 'nova' | null>(null);
   const [password, setPassword] = useState('');
@@ -141,9 +141,12 @@ export function LoginsNuvem() {
     setError('');
     if (
       mode === 'nova' &&
-      !confirm(
-        'Começar uma chave nova? Os logins salvos com a antiga são apagados do Supabase e as contas sem pasta neste aparelho vão pedir login de novo.',
-      )
+      !(await ask({
+        title: 'Começar uma chave nova?',
+        body: 'Os logins salvos com a antiga são apagados do Supabase e as contas sem pasta neste aparelho vão pedir login de novo.',
+        ok: 'Começar uma chave nova',
+        danger: true,
+      }))
     )
       return;
     await run(

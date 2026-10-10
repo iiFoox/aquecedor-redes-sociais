@@ -77,6 +77,7 @@ function summarize(a, full = false, devices = []) {
     phase: phaseFor(day, readyDay),
     // Meta: recomendada (goal null) ou modelo personalizado; as fases e o dia de pronta seguem a meta
     goal: tpl ? { id: tpl.id, name: tpl.name } : null,
+    goalRamp: a.goalRamp || null, // em transição para a meta nova desde esta data (sobe no máximo ~25% por dia)
     readyDay,
     phases: phasesFor(readyDay),
     plan,

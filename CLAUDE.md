@@ -71,8 +71,20 @@ este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma con
 - Metas personalizadas (`motor/custom.js`): modelos na configuração do usuário (`config.goalTemplates`, vale para todos os
   aparelhos; relidos a cada 2 min), conta escolhe com `goalTemplate` (sem = recomendada). Prazo de 5 a 90 dias:
   `phases.phasesFor(readyDay)` estica as 5 fases na mesma proporção. `planForDay(day, rng, template)`; trocar ou editar
-  a meta refaz o plano de HOJE (`store.resetToday`). Limites por dia em `custom.LIMITS`; avisos do editor em
-  `web/src/lib/meta.ts` (não bloqueiam). Testes: `tests/meta.test.js` (simulador com modelos).
+  a meta refaz o plano de HOJE (`store.resetToday`; a sessão que já roda segue com o plano dela).
+  - O número do modelo é o MÁXIMO do dia: `planFrom` só varia para baixo (até 2 não varia) e grava `plan.caps` (o teto
+    escrito); `rules.limitOf` usa o menor entre 120% e `caps`. Toda iteração sobre o plano ignora `caps` (não é meta).
+  - Transição (`custom.withRamp`, `goalRamp` na conta): depois de trocar/editar a meta, cada meta sobe no máximo +25% (mín.
+    +1) sobre o último dia com sessão; descer é na hora; acaba no 1º dia sem nada segurado. Simulador: `account.switchAt`.
+  - Gravar/apagar modelo (`store.editTemplates`) relê `user_config` antes e grava na hora, um por vez: aparelho
+    desatualizado não apaga o modelo do outro. Nome repetido na mesma plataforma é recusado. Editar deixa no registro da
+    conta o que mudou (`custom.diffTemplate`).
+  - Recusado no motor e marcado como erro no editor (os dois iguais, conferido em teste): fora de `custom.LIMITS` e
+    combinação impossível (`custom.impossible` = `impossiveis` em `web/src/lib/meta.ts`). Atenção e risco não bloqueiam.
+  - Testes: `tests/meta.test.js`, `tests/metas-transicao.test.js` (simulador trocando de meta), `tests/metas-aparelhos.test.js`
+    (banco falso, `store._useClient`).
+- Perguntas do painel: `store.ask` (janela do app, `components/Confirm.tsx`), nunca `confirm()`. Tela com mudança não
+  salva: `setLeaveGuard(msg)` faz o menu, o voltar e fechar a janela perguntarem antes.
 - `web/`: o painel (React + TypeScript + Vite). `src/store.tsx` (dados, tempo real, ações), `src/views/` (telas),
   `src/components/`, `src/lib/format.ts` (funções puras, testadas em `tests/web-format.test.ts`). Estilos em `src/styles.css`,
   com tokens de cor no `:root` e tema claro/escuro. Responsivo: funciona no celular, sem app instalável.
