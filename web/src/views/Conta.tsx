@@ -1,6 +1,6 @@
 // Página da conta: tela ao vivo, metas, sessões, jornada, saúde, ajustes, checklist, calendário, prints e eventos.
 import { useEffect, useState } from 'react';
-import { api, type Account, type AccountFull, type Meta } from '../api.ts';
+import { api, type Account, type AccountFull, type GoalTemplate, type Meta } from '../api.ts';
 import { AccountActions, AttentionBox, BarChart, Ring, StatePill } from '../components/bits.tsx';
 import { Icon, PlatformBadge } from '../components/Icon.tsx';
 import { Naturalidade } from '../components/Naturalidade.tsx';
@@ -127,10 +127,10 @@ function Goals({ a, meta }: { a: Account; meta: Meta }) {
   );
 }
 
-function Calendar({ a, meta }: { a: Account; meta: Meta }) {
+function Calendar({ a }: { a: Account; meta?: Meta }) {
   const today = a.days[a.days.length - 1].date;
   const start = addDays(today, 1 - a.day);
-  const ready = addDays(start, meta.readyDay - 1);
+  const ready = addDays(start, a.readyDay - 1);
   const end = ready > today ? ready : today;
   const first = addDays(diffDays(start, today) > 41 ? addDays(today, -41) : start, 0);
   const from = addDays(first, -weekday(first));
@@ -185,9 +185,50 @@ function Calendar({ a, meta }: { a: Account; meta: Meta }) {
         <span>mais</span>
         <span>·</span>
         <span className="rd" />
-        <span>dia {meta.readyDay}, pronta</span>
+        <span>dia {a.readyDay}, pronta</span>
       </div>
     </>
+  );
+}
+
+// Meta da conta: a recomendada ou um modelo personalizado da mesma plataforma (aba "Metas personalizadas")
+function GoalPicker({ a }: { a: Account }) {
+  const { act, go } = useStore();
+  const [list, setList] = useState<GoalTemplate[]>([]);
+  useEffect(() => {
+    api<{ templates: GoalTemplate[] }>('/api/metas')
+      .then((r) => setList(r.templates.filter((t) => t.platform === a.platform)))
+      .catch(() => setList([]));
+  }, [a.platform]);
+  const pick = (id: string) => {
+    const t = list.find((x) => x.id === id);
+    if (
+      t &&
+      !confirm(
+        `Usar a meta personalizada "${t.name}" (pronta no dia ${t.readyDay}) nesta conta? É por sua conta e risco. O plano de hoje é refeito com ela.`,
+      )
+    )
+      return;
+    act.patch(a, { goalTemplate: id || null }, t ? `Meta "${t.name}" nesta conta` : 'Meta recomendada de volta');
+  };
+  return (
+    <div className="field" style={{ marginBottom: 10 }}>
+      <label htmlFor="acc-meta">Meta</label>
+      <select id="acc-meta" className="input select" value={a.goal ? a.goal.id : ''} onChange={(e) => pick(e.target.value)}>
+        <option value="">Recomendada (pronta no dia 22)</option>
+        {list.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name} · personalizada, pronta no dia {t.readyDay}
+          </option>
+        ))}
+      </select>
+      <span className="help">
+        {a.goal ? 'Meta personalizada: por sua conta e risco. ' : ''}
+        <button type="button" className="link" onClick={() => go('metas')}>
+          {list.length ? 'Ver e editar os modelos' : 'Criar uma meta personalizada'}
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -276,9 +317,9 @@ function Settings({ a, full }: { a: Account; full: AccountFull }) {
 
 function Checklist({ a, meta }: { a: Account; meta: Meta }) {
   const { act } = useStore();
-  const unlocked = a.day >= meta.readyDay;
+  const unlocked = a.day >= a.readyDay;
   const done = meta.checklist.filter((c) => a.checklist[c.key]).length;
-  const readyDate = addDays(a.days[a.days.length - 1].date, meta.readyDay - a.day);
+  const readyDate = addDays(a.days[a.days.length - 1].date, a.readyDay - a.day);
   const toggle = async (key: string, v: boolean) => {
     await act.patch(a, { checklist: { [key]: v } });
     if (v && done + 1 === meta.checklist.length) {
@@ -290,7 +331,7 @@ function Checklist({ a, meta }: { a: Account; meta: Meta }) {
       <>
         <div className="lock-msg">
           <Icon name="lock" />
-          Libera no dia {meta.readyDay} ({ddmm(readyDate)}), quando a conta fica pronta.
+          Libera no dia {a.readyDay} ({ddmm(readyDate)}), quando a conta fica pronta.
         </div>
         <div className="check locked">
           {meta.checklist.map((c) => (
@@ -348,7 +389,7 @@ export function Conta() {
   const labels = meta.platforms[a.platform].actions;
   const h = a.health;
   const days30 = a.days.slice(-30);
-  const readyLeft = meta.readyDay - a.day;
+  const readyLeft = a.readyDay - a.day;
   const hRow = (label: string, v: number, note: string) => (
     <div className="h-row">
       <div className="g-top">
@@ -471,11 +512,11 @@ export function Conta() {
         <div className="stack">
           <section className="panel">
             <div className="panel-head">
-              <h2>Jornada</h2>
+              <h2>Jornada{a.goal ? <span className="pill"> meta: {a.goal.name}</span> : null}</h2>
               <span className="muted">{readyLeft <= 0 ? 'pronta' : `pronta em ${readyLeft} ${readyLeft === 1 ? 'dia' : 'dias'}`}</span>
             </div>
             <div className="vj">
-              {meta.phases.map((p) => {
+              {a.phases.map((p) => {
                 const st = a.day > p.to ? 'done' : a.day >= p.from ? 'cur' : '';
                 return (
                   <div key={p.n} className={`vj-item ${st}`}>
@@ -522,6 +563,7 @@ export function Conta() {
             <div className="panel-head">
               <h2>Ajustes desta conta</h2>
             </div>
+            <GoalPicker a={a} />
             <Settings a={a} full={full} />
           </section>
           <section className="panel">

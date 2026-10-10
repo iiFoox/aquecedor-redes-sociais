@@ -150,6 +150,28 @@ export function ComoUsar() {
       ),
     },
     {
+      id: 'metas',
+      title: 'Metas personalizadas',
+      icon: 'flame',
+      body: (
+        <ul className="guide-list">
+          <Item t="O que é:">
+            um modelo com o seu prazo (dias até a conta ficar pronta) e os seus números de cada fase, no lugar da meta recomendada.
+          </Item>
+          <Item t="Criar:">
+            na aba <Go view="metas">Metas personalizadas</Go>, "Modelo do TikTok" ou "Modelo do Instagram". Vem preenchido com o
+            recomendado; mude o que quiser. As 5 fases se ajustam ao prazo, na mesma ordem.
+          </Item>
+          <Item t="Usar numa conta:">Conta → Ajustes desta conta → Meta. O plano de hoje é refeito com a meta nova.</Item>
+          <Item t="Avisos:">
+            amarelo é acima do recomendado, vermelho é risco (muito acima, follow cedo, prazo muito curto). Não bloqueiam: é por sua conta e
+            risco.
+          </Item>
+          <Item t="Apagar um modelo:">as contas que usavam voltam sozinhas para a meta recomendada.</Item>
+        </ul>
+      ),
+    },
+    {
       id: 'proxies',
       title: 'Proxies',
       icon: 'globe',

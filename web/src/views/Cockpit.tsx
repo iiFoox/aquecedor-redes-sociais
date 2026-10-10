@@ -187,7 +187,7 @@ export function AccountCard({ a, meta, now }: { a: Account; meta: Meta; now: num
   const { go, flash, config } = useStore();
   const hit = a.dayStatus === 'done';
   const s = streak(a.days);
-  const sub = a.day >= meta.readyDay ? `Dia ${a.day} · aquecida` : `Dia ${a.day} de ${meta.readyDay}`;
+  const sub = a.day >= a.readyDay ? `Dia ${a.day} · aquecida` : `Dia ${a.day} de ${a.readyDay}`;
   const miss = missing(a.plan, a.today);
   const why = !a.live && !a.loginOpen && !a.attention && config?.active ? SCHEDULE_LABEL[a.schedule] : null;
   return (

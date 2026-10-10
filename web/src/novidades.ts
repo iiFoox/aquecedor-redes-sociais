@@ -9,6 +9,18 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.4',
+    data: '2026-10-10',
+    titulo: 'Metas personalizadas',
+    itens: [
+      'Nova aba "Metas personalizadas": crie modelos com o seu prazo (de 5 a 90 dias até a conta ficar pronta) e os seus números de cada fase (curtidas, follows, vídeos, reels, stories, buscas, perfis).',
+      'As 5 fases seguem a mesma ordem da meta recomendada e se ajustam ao prazo escolhido. A meta recomendada continua igual.',
+      'Em cada conta (Ajustes desta conta → Meta) você escolhe a recomendada ou um dos seus modelos. A Jornada, o calendário e o checklist seguem o prazo da meta.',
+      'O editor mostra o recomendado ao lado de cada número e avisa o que foge dele (amarelo: atenção, vermelho: risco). É por sua conta e risco.',
+      'Continuam valendo: teto de 120% por dia, parada na hora em captcha ou bloqueio e pausa dos follows quando o TikTok não grava.',
+    ],
+  },
+  {
     versao: '2.1.3',
     data: '2026-10-10',
     titulo: 'Atualizações em teste antes de chegar aos outros computadores',

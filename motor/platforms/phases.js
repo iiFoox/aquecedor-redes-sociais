@@ -46,7 +46,21 @@ const CHECKLIST = [
   { key: 'posts', label: '3 primeiros posts' },
   { key: 'destaques', label: '2 destaques fixos (ou vídeos fixados no TikTok)' },
 ];
-const phaseFor = (day) => PHASES.find((p) => day >= p.from && day <= p.to) || PHASES[PHASES.length - 1];
-const phaseIndex = (day) => PHASES.indexOf(phaseFor(day));
+// Fases para outro dia de "pronta" (meta personalizada): as 5 fases na mesma ordem, esticadas ou encurtadas na mesma
+// proporção das recomendadas (fim das fases 1 a 4 nos dias 3, 7, 14 e 21 de 21). Cada fase tem pelo menos 1 dia.
+const ENDS = [3, 7, 14, 21];
+function phasesFor(readyDay = READY_DAY) {
+  if (!readyDay || readyDay === READY_DAY) return PHASES;
+  const span = Math.max(4, readyDay - 1);
+  const ends = [];
+  ENDS.forEach((e, i) => ends.push(Math.min(span - (3 - i), Math.max((ends[i - 1] || 0) + 1, Math.round((e / 21) * span)))));
+  ends[3] = span;
+  return PHASES.map((p, i) => ({ ...p, from: i ? ends[i - 1] + 1 : 1, to: i < 4 ? ends[i] : 9999 }));
+}
+const phaseFor = (day, readyDay = READY_DAY) => {
+  const list = phasesFor(readyDay);
+  return list.find((p) => day >= p.from && day <= p.to) || list[list.length - 1];
+};
+const phaseIndex = (day, readyDay = READY_DAY) => phasesFor(readyDay).findIndex((p) => p.n === phaseFor(day, readyDay).n);
 
-module.exports = { PHASES, READY_DAY, CHECKLIST, phaseFor, phaseIndex };
+module.exports = { PHASES, READY_DAY, CHECKLIST, phasesFor, phaseFor, phaseIndex };

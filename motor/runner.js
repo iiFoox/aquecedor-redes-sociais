@@ -379,7 +379,7 @@ async function openSession(account, { manual = false } = {}) {
   const platform = platforms[account.platform];
   const day = store.dayOf(account);
   const plan = store.planOf(account, platform.planForDay);
-  const phase = phaseFor(day);
+  const phase = phaseFor(day, store.readyDayOf(account));
   const status = rules.dayStatus(platform.activities, plan, store.todayOf(id), account);
   if (status === 'done') throw new Error('As metas desta conta já foram batidas hoje. Volte amanhã.');
   if (status === 'limit') throw new Error('O que falta hoje passaria do limite de 120% do plano. Volte amanhã.');

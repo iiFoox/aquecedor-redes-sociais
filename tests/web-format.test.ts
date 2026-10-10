@@ -127,3 +127,46 @@ test('O que há de novo?: mais nova primeiro, versões sem repetir, a versão do
   for (let i = 1; i < NOVIDADES.length; i++) assert.ok(NOVIDADES[i - 1].data >= NOVIDADES[i].data, `fora de ordem: ${vs[i]}`);
   for (const n of NOVIDADES) assert.ok(n.titulo && n.itens.length, `${n.versao} sem título ou itens`);
 });
+
+test('meta personalizada no painel: fases iguais às do motor para todo prazo de 5 a 90 dias', async () => {
+  const { phasesFor } = await import('../web/src/lib/meta.ts');
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const motor = req('../motor/platforms/phases.js');
+  for (let d = 5; d <= 90; d++)
+    assert.deepEqual(
+      phasesFor(motor.PHASES, d).map((p: { from: number; to: number }) => [p.from, p.to]),
+      motor.phasesFor(d).map((p: { from: number; to: number }) => [p.from, p.to]),
+      `prazo ${d}`,
+    );
+});
+
+test('meta personalizada no painel: avisos de prazo, acima do recomendado, follow cedo, fora da ordem e TikTok sem fechar', async () => {
+  const { avisos, nivelDe } = await import('../web/src/lib/meta.ts');
+  const plans = [
+    { minutes: 12, watch: 30, like: 4, follow: 0 },
+    { minutes: 18, watch: 45, like: 10, follow: 2 },
+    { minutes: 25, watch: 60, like: 20, follow: 5 },
+    { minutes: 30, watch: 80, like: 30, follow: 8 },
+    { minutes: 35, watch: 100, like: 40, follow: 12 },
+  ];
+  const labels = { watch: 'Vídeos assistidos', like: 'Curtidas', follow: 'Follows' };
+  // A própria recomendada: nenhum aviso
+  assert.deepEqual(avisos('tiktok', { readyDay: 22, phases: plans }, plans, labels), []);
+  const t = { readyDay: 8, phases: plans.map((p) => ({ ...p })) };
+  t.phases[0].follow = 2; // follow na fase 1 (recomendado nenhum)
+  t.phases[1].like = 16; // 1,6x
+  t.phases[2].like = 70; // 3,5x
+  t.phases[3].watch = 50; // menor que na fase 3 (60)
+  t.phases[4].like = 120; // mais que os 100 vídeos
+  const list = avisos('tiktok', t, plans, labels);
+  assert.ok(list.some((a) => a.fase === null && a.nivel === 'risco' && /8 dias/.test(a.msg)));
+  assert.equal(nivelDe(list, 1, 'follow'), 'risco');
+  assert.equal(nivelDe(list, 2, 'like'), 'atencao');
+  assert.equal(nivelDe(list, 3, 'like'), 'risco');
+  assert.equal(nivelDe(list, 4, 'watch'), 'atencao');
+  assert.ok(list.some((a) => a.fase === 5 && /o dia não fecha/.test(a.msg)));
+  assert.equal(nivelDe(list, 1, 'like'), null);
+  // Prazo curto (10 a 14): só atenção
+  assert.equal(avisos('tiktok', { readyDay: 12, phases: plans }, plans, labels)[0].nivel, 'atencao');
+});

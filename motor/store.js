@@ -9,7 +9,7 @@ const rules = require('./rules');
 const human = require('./human');
 
 // Configuração: piloto e férias valem para o usuário (todos os aparelhos); o resto é de cada aparelho.
-const USER_KEYS = ['active', 'pausedUntil', 'pausedFrom'];
+const USER_KEYS = ['active', 'pausedUntil', 'pausedFrom', 'goalTemplates'];
 const DEFAULT_CONFIG = {
   active: false,
   start: '08:00',
@@ -20,6 +20,7 @@ const DEFAULT_CONFIG = {
   pausedUntil: null, // férias: até quando (ms)
   pausedFrom: null, // férias: desde quando (ms)
   lastBackup: null, // { at, file, sizeMB, error, triedAt }
+  goalTemplates: [], // modelos de meta personalizada (motor/custom.js), de todos os aparelhos do usuário
 };
 const CONFIG_KEYS = Object.keys(DEFAULT_CONFIG);
 const KEEP = { events: 400, alerts: 100, history: 300 }; // quanto fica em memória por conta
@@ -436,10 +437,61 @@ function todayOf(id) {
   return (a.daily[k] = a.daily[k] || {});
 }
 
+const templateById = (id) => (config.goalTemplates || []).find((t) => t.id === id) || null;
+
+// Salva (cria ou troca) um modelo. As contas deste aparelho que usam ele: plano de hoje sorteado de novo.
+function saveTemplate(t) {
+  const list = (config.goalTemplates || []).filter((x) => x.id !== t.id);
+  setConfig({ goalTemplates: [...list, t] });
+  for (const a of mine().filter((x) => x.goalTemplate === t.id)) resetToday(a);
+  return t;
+}
+// Apaga um modelo: as contas que usavam voltam para a meta recomendada (sem modelo achado = recomendada)
+function removeTemplate(id) {
+  setConfig({ goalTemplates: (config.goalTemplates || []).filter((x) => x.id !== id) });
+  for (const a of mine().filter((x) => x.goalTemplate === id)) {
+    resetToday(a);
+    addLog(a.id, 'O modelo de meta foi apagado: meta recomendada de volta');
+  }
+}
+// Modelos mudados em outro aparelho (rede de segurança a cada 2 min): relê e sorteia de novo o plano de hoje das
+// contas daqui cujo modelo mudou
+async function reloadUserConfig() {
+  if (!sb) return;
+  const { data, error } = await sb.from('user_config').select('data').maybeSingle();
+  if (error || !data || !data.data) return;
+  const next = data.data.goalTemplates || [];
+  const was = new Map((config.goalTemplates || []).map((t) => [t.id, JSON.stringify(t)]));
+  const now = new Map(next.map((t) => [t.id, JSON.stringify(t)]));
+  const changed = new Set([...was.keys(), ...now.keys()].filter((id) => was.get(id) !== now.get(id)));
+  if (!changed.size) return;
+  config = { ...config, goalTemplates: next };
+  for (const a of mine().filter((x) => x.goalTemplate && changed.has(x.goalTemplate))) resetToday(a);
+}
+
+// Modelo de meta personalizada da conta (da mesma plataforma) ou null: usa a meta recomendada
+function templateOf(a) {
+  if (!a || !a.goalTemplate) return null;
+  return (config.goalTemplates || []).find((t) => t.id === a.goalTemplate && t.platform === a.platform) || null;
+}
+const readyDayOf = (a) => (templateOf(a) || {}).readyDay || 22;
+
+// A meta da conta mudou (outro modelo, modelo editado): o plano e a rotina de HOJE são sorteados de novo com a meta
+// nova. O que já foi feito hoje continua contando.
+function resetToday(a) {
+  const d = a && a.daily[rules.localDate()];
+  if (!d) return;
+  delete d.plan;
+  delete d.slots;
+  delete d.slotsFit;
+  touch(a.id);
+}
+
 // Plano do dia: sorteado uma vez por data e gravado
 // Follows pausados (o site não estava gravando): o follow sai do plano até a pausa acabar.
 function planOf(a, gen) {
-  const { plan, created } = rules.ensurePlan(a.daily, rules.localDate(), rules.dayOf(a), gen);
+  const t = templateOf(a);
+  const { plan, created } = rules.ensurePlan(a.daily, rules.localDate(), rules.dayOf(a), (day) => gen(day, Math.random, t));
   const paused = rules.pauseFollows(plan, a.daily[rules.localDate()], a.followPauseUntil);
   if (created || paused) touch(a.id);
   return plan;
@@ -819,6 +871,13 @@ module.exports = {
   todayOf,
   planOf,
   slotsOf,
+  templateOf,
+  templateById,
+  saveTemplate,
+  removeTemplate,
+  reloadUserConfig,
+  readyDayOf,
+  resetToday,
   setHours,
   hours: () => hoursOf(),
   lastStartAny,

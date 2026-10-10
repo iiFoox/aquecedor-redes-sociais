@@ -51,6 +51,10 @@ export interface Account {
   startedAt: string;
   day: number;
   phase: Phase;
+  // Meta da conta: recomendada (goal null) ou um modelo personalizado; fases e dia de pronta seguem a meta
+  goal: { id: string; name: string } | null;
+  readyDay: number;
+  phases: Phase[];
   plan: Record<string, number>;
   today: Record<string, number>;
   completion: number;
@@ -153,6 +157,16 @@ export interface AccountFull extends Account {
   screens: string[];
   proxyUrl: string;
   persona: Persona | null;
+}
+
+// Modelo de meta personalizada (aba "Metas personalizadas")
+export interface GoalTemplate {
+  id: string;
+  name: string;
+  platform: Platform;
+  readyDay: number;
+  vary: boolean;
+  phases: Record<string, number>[];
 }
 
 export interface Meta {

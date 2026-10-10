@@ -2817,3 +2817,45 @@ tr:last-child td {
     width: 100%;
   }
 }
+
+/* Metas personalizadas: grade do editor e avisos (atenção = amarelo, risco = vermelho) */
+.meta-grid td {
+  vertical-align: top;
+}
+.meta-grid td .input.sm {
+  width: 76px;
+  display: block;
+}
+.meta-grid td .dim {
+  font-size: 11px;
+}
+.meta-grid td.meta-atencao input {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+}
+.meta-grid td.meta-risco input {
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, var(--panel));
+}
+li.meta-atencao b {
+  color: var(--warn);
+}
+li.meta-risco b {
+  color: var(--bad);
+}
+.meta-grid th,
+.meta-grid td {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.meta-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Botão desativado (ex.: "Salvar modelo" antes de aceitar o risco) */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: saturate(0.6);
+}

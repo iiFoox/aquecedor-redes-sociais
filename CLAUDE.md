@@ -68,6 +68,11 @@ este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma con
   `/api/_device/link` e `/api/_device/vault` não passam do navegador: só o painel chama, depois de conferir a senha
   (`/auth/chave`: abrir a chave com a senha antiga ou começar uma nova).
 - Banco: regras por dono (`auth.uid()`) em tudo; o 1º usuário fica com as contas antigas (`claim_legacy_accounts`).
+- Metas personalizadas (`motor/custom.js`): modelos na configuração do usuário (`config.goalTemplates`, vale para todos os
+  aparelhos; relidos a cada 2 min), conta escolhe com `goalTemplate` (sem = recomendada). Prazo de 5 a 90 dias:
+  `phases.phasesFor(readyDay)` estica as 5 fases na mesma proporção. `planForDay(day, rng, template)`; trocar ou editar
+  a meta refaz o plano de HOJE (`store.resetToday`). Limites por dia em `custom.LIMITS`; avisos do editor em
+  `web/src/lib/meta.ts` (não bloqueiam). Testes: `tests/meta.test.js` (simulador com modelos).
 - `web/`: o painel (React + TypeScript + Vite). `src/store.tsx` (dados, tempo real, ações), `src/views/` (telas),
   `src/components/`, `src/lib/format.ts` (funções puras, testadas em `tests/web-format.test.ts`). Estilos em `src/styles.css`,
   com tokens de cor no `:root` e tema claro/escuro. Responsivo: funciona no celular, sem app instalável.

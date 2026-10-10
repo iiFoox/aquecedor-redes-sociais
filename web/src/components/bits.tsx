@@ -89,16 +89,16 @@ export function BarChart({
   );
 }
 
-// Jornada de 22 dias: um trecho por fase e a bandeira do dia 22
-export function Journey({ a, meta }: { a: Account; meta: Meta }) {
-  const ready = a.day >= meta.readyDay;
-  const left = meta.readyDay - a.day;
+// Jornada: um trecho por fase e a bandeira do dia em que a conta fica pronta (22, ou o prazo da meta personalizada)
+export function Journey({ a }: { a: Account; meta?: Meta }) {
+  const ready = a.day >= a.readyDay;
+  const left = a.readyDay - a.day;
   const today = a.days[a.days.length - 1].date;
   const readyDate = addDays(today, left);
   return (
     <div className="journey">
       <div className="j-track">
-        {meta.phases.slice(0, 4).map((p) => {
+        {a.phases.slice(0, 4).map((p) => {
           const len = p.to - p.from + 1;
           const f = Math.max(0, Math.min(1, (a.day - p.from + 1) / len));
           return (
@@ -112,8 +112,8 @@ export function Journey({ a, meta }: { a: Account; meta: Meta }) {
             </span>
           );
         })}
-        <span className={`j-flag ${ready ? 'done' : ''}`} title={`Dia ${meta.readyDay}: pronta`}>
-          {ready ? <Icon name="check" /> : meta.readyDay}
+        <span className={`j-flag ${ready ? 'done' : ''}`} title={`Dia ${a.readyDay}: pronta`}>
+          {ready ? <Icon name="check" /> : a.readyDay}
         </span>
       </div>
       <div className="j-meta">
@@ -175,7 +175,7 @@ export function StatePill({ a }: { a: Account }) {
       </span>
     );
   if (a.dayStatus === 'limit') return <span className="pill">Limite do plano</span>;
-  if (meta && a.day >= meta.readyDay) return <span className="pill ready">Pronta</span>;
+  if (meta && a.day >= a.readyDay) return <span className="pill ready">Pronta</span>;
   return <span className="pill">Parada</span>;
 }
 

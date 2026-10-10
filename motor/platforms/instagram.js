@@ -2,6 +2,7 @@
 const { AbortError, isFatal } = require('../bot');
 const human = require('../human');
 const { phaseIndex } = require('./phases');
+const custom = require('../custom');
 
 const HOME = 'https://www.instagram.com/';
 // Seletores conferidos no Instagram de verdade (2026-10-07, conta nova logada, Edge 1920x1080):
@@ -459,7 +460,9 @@ module.exports = {
   actions: ACTIONS,
   activities: ACTIVITY_GOALS,
   plans: PLANS,
-  planForDay: (day, rng = Math.random) => {
+  // template: modelo de meta personalizada da conta (motor/custom.js) ou null (a recomendada)
+  planForDay: (day, rng = Math.random, template = null) => {
+    if (template) return custom.planFrom(template, phaseIndex(day, template.readyDay), rng);
     const base = PLANS[phaseIndex(day)];
     // Adiciona "White Noise" (Ruído Branco) na variação do comportamento diário
     return {

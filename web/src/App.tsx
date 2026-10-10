@@ -16,6 +16,7 @@ import { Proxies } from './views/Proxies.tsx';
 import { Rotina } from './views/Rotina.tsx';
 import { ComoUsar } from './views/ComoUsar.tsx';
 import { lastSeen, Novidades } from './views/Novidades.tsx';
+import { Metas } from './views/Metas.tsx';
 import { NOVIDADES } from './novidades.ts';
 
 const NAV: [View, string, string][] = [
@@ -23,6 +24,7 @@ const NAV: [View, string, string][] = [
   ['rotina', 'Rotina', 'calendar'],
   ['proxies', 'Proxies', 'globe'],
   ['analises', 'Análises', 'chart'],
+  ['metas', 'Metas personalizadas', 'flame'],
   ['ajustes', 'Ajustes', 'sliders'],
   ['ajuda', 'Como usar', 'help'],
   ['novidades', 'O que há de novo?', 'bell'],
@@ -37,6 +39,7 @@ const SUB: Record<View, string> = {
   ajustes: 'Sua conta, aparência, navegador, motor e backup',
   ajuda: 'O que cada tela faz e como o aquecimento funciona',
   novidades: 'Tudo o que mudou em cada versão do app',
+  metas: 'Seus modelos de meta: prazo e números de cada fase, por sua conta e risco',
 };
 
 // Primeira vez neste navegador: um convite discreto para o "Como usar" (some ao abrir ou fechar)
@@ -318,6 +321,8 @@ export function App() {
           <ComoUsar />
         ) : view === 'novidades' ? (
           <Novidades />
+        ) : view === 'metas' ? (
+          <Metas />
         ) : view === 'cockpit' && !accounts.length ? (
           <div className="panel empty">
             <div className="empty-art">

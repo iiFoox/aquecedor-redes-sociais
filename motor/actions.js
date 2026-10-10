@@ -10,9 +10,27 @@ const { CHECKLIST } = require('./platforms/phases');
 
 const fail = (msg, status = 409) => Object.assign(new Error(msg), { status });
 
-// Muda proxy, interesses, janela de horário ou checklist (no aparelho dono da conta)
-function applyPatch(acc, body) {
+// Muda proxy, interesses, janela de horário, checklist ou meta (no aparelho dono da conta)
+async function applyPatch(acc, body) {
   const patch = { ...body };
+  if ('goalTemplate' in patch) {
+    // Modelo criado agora em outro aparelho: relê a configuração antes de dizer que não existe
+    if (patch.goalTemplate && !store.templateById(patch.goalTemplate)) await store.reloadUserConfig().catch(() => {});
+    const t = patch.goalTemplate ? store.templateById(patch.goalTemplate) : null;
+    if (patch.goalTemplate && (!t || t.platform !== acc.platform)) throw fail('Modelo de meta não encontrado para esta plataforma');
+    const before = acc.goalTemplate || null;
+    patch.goalTemplate = t ? t.id : null;
+    if (before !== patch.goalTemplate) {
+      store.updateAccount(acc.id, { goalTemplate: patch.goalTemplate });
+      store.resetToday(acc);
+      store.addLog(
+        acc.id,
+        t ? `Meta personalizada: "${t.name}" (pronta no dia ${t.readyDay}). Por sua conta e risco` : 'Meta recomendada de volta',
+      );
+    }
+    delete patch.goalTemplate;
+    if (!Object.keys(patch).length) return;
+  }
   if (patch.checklist) {
     const before = acc.checklist || {};
     patch.checklist = { ...before, ...patch.checklist };

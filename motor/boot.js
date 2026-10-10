@@ -70,6 +70,7 @@ async function startDevice() {
     // Rede de segurança do tempo real: relê as contas dos outros aparelhos a cada 2 min
     setInterval(() => {
       store.reloadAccounts().catch(() => {});
+      store.reloadUserConfig().catch(() => {});
       logins.reload().catch(() => {});
       v.check()
         .then((st) => st === 'trancada' && console.warn(VAULT_MSG.trancada))

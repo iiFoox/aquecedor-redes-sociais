@@ -103,7 +103,8 @@ async function simulate({ account, days = 3, from = startOfDay(Date.now() + DAY)
       runningCount: 0,
       running: false,
       browserOpen: false,
-      plan: () => rules.ensurePlan(acc.daily, date, rules.dayOf(acc, now), (d) => platform.planForDay(d, rng)).plan,
+      plan: () =>
+        rules.ensurePlan(acc.daily, date, rules.dayOf(acc, now), (d) => platform.planForDay(d, rng, account.template || null)).plan,
       today,
       activities: platform.activities,
       // Rotina do dia, igual ao motor: planejada na primeira olhada dentro da janela

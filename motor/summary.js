@@ -4,7 +4,7 @@ const store = require('./store');
 const runner = require('./runner');
 const rules = require('./rules');
 const platforms = require('./platforms');
-const { READY_DAY, phaseFor } = require('./platforms/phases');
+const { phaseFor, phasesFor } = require('./platforms/phases');
 const backup = require('./backup');
 const logins = require('./logins');
 const power = require('./power');
@@ -56,6 +56,8 @@ function summarize(a, full = false, devices = []) {
   const dev = devices.find((d) => d.id === a.deviceId) || null;
   const plan = store.planOf(a, p.planForDay);
   const today = a.daily[store.localDate()] || {};
+  const tpl = store.templateOf(a);
+  const readyDay = store.readyDayOf(a);
   const out = {
     id: a.id,
     platform: a.platform,
@@ -72,13 +74,17 @@ function summarize(a, full = false, devices = []) {
     deviceOnline: dev ? dev.online : false,
     startedAt: a.startedAt,
     day,
-    phase: phaseFor(day),
+    phase: phaseFor(day, readyDay),
+    // Meta: recomendada (goal null) ou modelo personalizado; as fases e o dia de pronta seguem a meta
+    goal: tpl ? { id: tpl.id, name: tpl.name } : null,
+    readyDay,
+    phases: phasesFor(readyDay),
     plan,
     today,
     completion: rules.completion(plan, today),
     dayStatus: rules.dayStatus(p.activities, plan, today, a),
     attention: a.attention,
-    warmProgress: Math.min(100, Math.round(((day - 1) / (READY_DAY - 1)) * 100)),
+    warmProgress: Math.min(100, Math.round(((day - 1) / (readyDay - 1)) * 100)),
     health: rules.computeHealth(a),
     sessions: a.history.length,
     nextAfter: a.nextAfter || null,

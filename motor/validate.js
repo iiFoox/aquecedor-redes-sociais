@@ -62,6 +62,8 @@ const accountPatch = z
     proxy: accountProxy.optional(),
     interests: interests.optional(),
     checklist: checklist.optional(),
+    // Meta personalizada: id de um modelo da mesma plataforma, ou null para voltar à recomendada
+    goalTemplate: z.string().max(60).nullable().optional(),
   })
   .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)));
 
