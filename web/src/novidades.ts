@@ -9,6 +9,12 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.5',
+    data: '2026-10-10',
+    titulo: '"O que há de novo?" mais fácil de ler',
+    itens: ['As versões aparecem em linha do tempo, uma embaixo da outra, com a mais nova em destaque no topo.'],
+  },
+  {
     versao: '2.1.4',
     data: '2026-10-10',
     titulo: 'Metas personalizadas',

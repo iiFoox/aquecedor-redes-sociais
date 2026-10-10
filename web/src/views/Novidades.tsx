@@ -25,31 +25,29 @@ export function Novidades() {
     }
   }, []);
   return (
-    <div className="guide">
-      {NOVIDADES.map((n) => {
+    <div className="news">
+      {NOVIDADES.map((n, i) => {
         const running = system?.version === n.versao;
-        const fresh = !!seen && seen !== n.versao && NOVIDADES.findIndex((x) => x.versao === seen) > NOVIDADES.indexOf(n);
+        const fresh = !!seen && seen !== n.versao && NOVIDADES.findIndex((x) => x.versao === seen) > i;
         return (
-          <section key={n.versao} className="panel">
-            <div className="panel-head">
-              <h2>
-                Versão {n.versao}
-                <span className="dim"> · {ddmm(n.data)}</span>
-              </h2>
-              <span>
-                {running && <span className="pill running">{system?.channel === 'teste' ? 'rodando aqui (teste)' : 'rodando aqui'}</span>}
-                {fresh && <span className="pill">novo</span>}
-              </span>
+          <article key={n.versao} className={`news-item${i === 0 ? ' latest' : ''}`}>
+            <div className="news-when">
+              <span className="news-ver mono">{n.versao}</span>
+              <span className="dim">{ddmm(n.data)}</span>
             </div>
-            <p>
-              <b>{n.titulo}</b>
-            </p>
-            <ul className="guide-list">
-              {n.itens.map((i) => (
-                <li key={i}>{i}</li>
-              ))}
-            </ul>
-          </section>
+            <section className="panel news-body">
+              <div className="news-head">
+                <h2>{n.titulo}</h2>
+                {running && <span className="pill running">{system?.channel === 'teste' ? 'rodando aqui (teste)' : 'rodando aqui'}</span>}
+                {fresh && <span className="pill ready">novo</span>}
+              </div>
+              <ul className="guide-list">
+                {n.itens.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </section>
+          </article>
         );
       })}
     </div>
