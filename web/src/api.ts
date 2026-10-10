@@ -203,6 +203,7 @@ export interface SystemInfo {
   uptime: number;
   pm2: boolean;
   app: boolean; // aberto pelo aplicativo do Windows
+  channel?: 'teste' | 'estavel'; // canal de atualização deste aparelho
   restarts: number;
   autostart: boolean;
   sessions: number;

@@ -10,7 +10,8 @@ npm install
 cp .env.example .env   # SUPABASE_URL + chave SECRETA do Supabase
 npm run app            # o aplicativo do Windows (Electron) a partir do projeto
 npm run instalador     # gera release/WarmUp-Studio-Setup-<versão>.exe (confere que nenhum segredo vai junto)
-npm run publicar       # gera e publica no bucket "downloads" (suba "version" no package.json antes)
+npm run publicar       # gera e publica no CANAL DE TESTE (suba "version" e escreva em web/src/novidades.ts antes)
+npm run liberar        # passa a versão em teste para TODOS os aparelhos (só quando o dono mandar)
 npm start              # motor + painel no terminal; painel em http://localhost:3001
 npm run ligar          # o mesmo em segundo plano pelo PM2 (desligar / status / logs / autostart:ligar)
 npm run restaurar      # restaura data/profiles de um backup (motor desligado)
@@ -94,6 +95,12 @@ este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma con
 Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
 
 ## Regras
+
+- Lançamento em duas etapas: `npm run publicar` vai só para o canal de teste (`latest-teste.json`; aparelhos com
+  "Receber atualizações em teste" no ícone, o PC do dono). `npm run liberar` (copia o aviso de teste para `latest.json`,
+  todos os aparelhos) NUNCA sem o dono dizer que testou e está tudo ok. Outros computadores do dono rodam no estável e
+  ele não tem acesso a eles: nada pode chegar lá sem passar pelo teste.
+- Toda versão nova tem entrada em `web/src/novidades.ts` (aba "O que há de novo?"); o `publicar` para se faltar.
 
 - O ID de uma conta e a pasta `data/profiles/<id>` nunca mudam: mudar perde o login.
 - Instalador e atualização: NUNCA testar com o id de verdade (`com.warmupstudio.app`). O NSIS acha a instalação pelo id e

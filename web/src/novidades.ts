@@ -1,0 +1,114 @@
+// "O que há de novo?": tudo o que mudou em cada versão do app, da mais nova para a mais antiga.
+// Toda versão nova ganha uma entrada AQUI antes de publicar (o "npm run publicar" confere e para se faltar).
+export interface Novidade {
+  versao: string;
+  data: string; // AAAA-MM-DD
+  titulo: string;
+  itens: string[];
+}
+
+export const NOVIDADES: Novidade[] = [
+  {
+    versao: '2.1.3',
+    data: '2026-10-10',
+    titulo: 'Atualizações em teste antes de chegar aos outros computadores',
+    itens: [
+      'Canal de teste: as versões novas chegam primeiro só no computador que testa (ícone perto do relógio → "Receber atualizações em teste"). Os outros computadores só recebem quando a versão é liberada.',
+      'Nova aba "O que há de novo?" com tudo o que mudou em cada versão.',
+      'A versão que está rodando aparece embaixo, à esquerda, com "(teste)" quando é uma versão em teste.',
+    ],
+  },
+  {
+    versao: '2.1.2',
+    data: '2026-10-10',
+    titulo: 'O app se conserta sozinho',
+    itens: [
+      'Se a instalação ficar incompleta (atualização interrompida num computador lento), o app percebe ao abrir, baixa a versão certa e se reinstala sozinho.',
+      'Aberto no meio de uma instalação, ele não abre por cima: espera o instalador terminar.',
+      'Aviso antes de atualizar: "leva alguns minutos e ele abre sozinho no fim".',
+      'Mais leve: a tela ao vivo das sessões só é transmitida enquanto você olha, e a janela fechada libera memória.',
+    ],
+  },
+  {
+    versao: '2.1.1',
+    data: '2026-10-10',
+    titulo: 'Captcha: a janela fica aberta até você resolver',
+    itens: [
+      'A janela da conta nunca fecha sozinha num captcha: o robô espera você o tempo que for e continua sozinho depois.',
+      'Faixa no topo do painel "Captcha em @conta" com o botão "Mostrar a janela".',
+      'Enquanto um captcha espera você, as outras contas continuam aquecendo.',
+    ],
+  },
+  {
+    versao: '2.1.0',
+    data: '2026-10-10',
+    titulo: 'Captcha com a janela na tela e follow do TikTok conferido',
+    itens: [
+      'Num captcha, o robô para de mexer em tudo e mostra a janela da conta na tela para você resolver.',
+      'TikTok: o follow só conta se o botão mudou; se o TikTok estiver descartando os follows da conta, o painel avisa e os follows dela pausam por 3 dias.',
+    ],
+  },
+  {
+    versao: '2.0.9',
+    data: '2026-10-10',
+    titulo: 'Instagram para na meta e Rotina no horário do seu computador',
+    itens: [
+      'Instagram: a sessão termina na hora em que a meta fecha, sem reel ou story a mais.',
+      'Rotina: o app aprende em que horário cada computador costuma ficar ligado e marca as sessões dentro dele.',
+    ],
+  },
+  {
+    versao: '2.0.8',
+    data: '2026-10-07',
+    titulo: 'Instagram: seguir funcionando',
+    itens: ['O botão "Seguir" da publicação aberta no Explorar passou a ser achado de verdade (conferido no site).'],
+  },
+  {
+    versao: '2.0.7',
+    data: '2026-10-07',
+    titulo: 'Instagram: reels e curtidas conferidos no site',
+    itens: [
+      'Os reels trocam de verdade (antes o mesmo reel podia contar várias vezes).',
+      'Curtida sempre no coração, e só conta se o coração ficou curtido.',
+    ],
+  },
+  {
+    versao: '2.0.6',
+    data: '2026-10-07',
+    titulo: 'Versão à vista',
+    itens: ['A versão do app aparece embaixo, à esquerda, no painel.'],
+  },
+  {
+    versao: '2.0.5',
+    data: '2026-10-07',
+    titulo: 'Instagram conferido no site e proxy sem vazamento',
+    itens: [
+      'Instagram: stories pela foto de quem postou, legenda certa para o nicho, janelas fecham no X.',
+      'Proxy: o IP real não escapa mais pelo navegador, o fuso segue o país do proxy e SOCKS5 com senha é recusado no cadastro.',
+    ],
+  },
+  {
+    versao: '2.0.4',
+    data: '2026-10-07',
+    titulo: 'Atualização confiável',
+    itens: [
+      'Instalador em português, com atalhos na Área de Trabalho e no Menu Iniciar.',
+      'Atualiza sozinho com a janela fechada e volta já logado; o login do aparelho não cai mais depois de trocar a senha.',
+    ],
+  },
+  {
+    versao: '2.0.3',
+    data: '2026-10-07',
+    titulo: 'Guia "Como usar"',
+    itens: ['Guia dentro do app explicando cada tela.'],
+  },
+  {
+    versao: '2.0.0',
+    data: '2026-10-07',
+    titulo: 'Aplicativo do Windows',
+    itens: [
+      'O WarmUp Studio virou um aplicativo do Windows, com ícone perto do relógio, notificações e atualização automática.',
+      'Vários computadores ao mesmo tempo, cada um com as próprias contas; logins das contas guardados cifrados.',
+    ],
+  },
+];

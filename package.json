@@ -1,6 +1,6 @@
 {
   "name": "insta-warmer",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "WarmUp Studio: aquecimento de contas do TikTok e do Instagram, com painel web e Supabase",
   "private": true,
   "main": "desktop/main.js",
@@ -16,6 +16,7 @@
     "app": "node scripts/app.js",
     "instalador": "node scripts/publicar.js --so-gerar",
     "publicar": "node scripts/publicar.js",
+    "liberar": "node scripts/liberar.js",
     "icones": "node scripts/icones.js",
     "ligar": "node scripts/servico.js ligar",
     "desligar": "node scripts/servico.js desligar",

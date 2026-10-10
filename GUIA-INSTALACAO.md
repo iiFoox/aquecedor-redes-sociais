@@ -20,7 +20,7 @@ enxergam tudo pelo painel. Uma conta nunca roda em dois aparelhos ao mesmo tempo
    ```
    robocopy "C:\Users\vfbnn\.gemini\antigravity-ide\scratch\insta-warmer\data\profiles" "$env:APPDATA\WarmUp Studio\data\profiles" /E
    ```
-3. **Instale:** dê dois cliques em `release\WarmUp-Studio-Setup-2.1.2.exe` (ou use o comando do item 3, abaixo).
+3. **Instale:** dê dois cliques em `release\WarmUp-Studio-Setup-2.1.3.exe` (ou use o comando do item 3, abaixo).
    O Windows mostra "O Windows protegeu o computador" (o app não tem assinatura paga): **Mais informações → Executar assim mesmo**.
    O instalador, em português, mostra a pasta (pode trocar) e cria os atalhos na Área de Trabalho e no Menu Iniciar.
    Não pede administrador e abre o app no final.
@@ -55,6 +55,15 @@ enxergam tudo pelo painel. Uma conta nunca roda em dois aparelhos ao mesmo tempo
 - **Bateria abaixo de 20%:** o robô não abre sessão nova até ligar na tomada.
 
 ## 5. Publicar uma versão nova (quando houver mudança no código)
+
+Duas etapas: primeiro só no computador de teste, depois para todos.
+
+- **No computador que testa** (o seu PC): ícone perto do relógio → marque **Receber atualizações em teste**.
+- `npm run publicar` → a versão vai **só para o canal de teste**. Teste no seu PC.
+- Tudo certo? `npm run liberar` → a mesma versão, sem gerar nada de novo, vai para **todos os computadores**.
+- O que mudou em cada versão fica na aba **O que há de novo?** do app.
+
+Detalhes:
 
 1. Suba a versão em `package.json` (ex.: `"version": "2.0.1"`).
 2. `npm run publicar` (gera, confere que nenhum segredo vai junto e envia em partes para o Supabase).

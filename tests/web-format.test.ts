@@ -117,3 +117,13 @@ test('horário em que o PC fica ligado: faixas de horas; sem saber ainda = null'
   assert.equal(f.hoursText(on()), null);
   assert.equal(f.hoursText(null), null);
 });
+
+test('O que há de novo?: mais nova primeiro, versões sem repetir, a versão do app está lá', async () => {
+  const { NOVIDADES } = await import('../web/src/novidades.ts');
+  const pkg = JSON.parse((await import('node:fs')).readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(NOVIDADES[0].versao, pkg.version, 'a versão do package.json precisa ser a primeira do "O que há de novo?"');
+  const vs = NOVIDADES.map((n) => n.versao);
+  assert.equal(new Set(vs).size, vs.length, 'versão repetida');
+  for (let i = 1; i < NOVIDADES.length; i++) assert.ok(NOVIDADES[i - 1].data >= NOVIDADES[i].data, `fora de ordem: ${vs[i]}`);
+  for (const n of NOVIDADES) assert.ok(n.titulo && n.itens.length, `${n.versao} sem título ou itens`);
+});

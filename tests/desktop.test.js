@@ -177,3 +177,23 @@ test('instalação: lista de arquivos no empacotamento; faltou ou mudou de taman
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('canais: estável lê latest.json, teste lê latest-teste.json; canal desconhecido = estável', async (t) => {
+  const updater = require('../desktop/updater');
+  const man = (version) => ({ version, file: 'x.exe', sha256: 'a'.repeat(64), parts: [] });
+  const realFetch = global.fetch;
+  const asked = [];
+  global.fetch = async (url) => {
+    const name = new URL(url).pathname.split('/').pop();
+    asked.push(name);
+    if (name === 'latest.json') return new Response(JSON.stringify(man('2.1.2')));
+    if (name === 'latest-teste.json') return new Response(JSON.stringify(man('2.2.0')));
+    return new Response('nada', { status: 404 });
+  };
+  t.after(() => (global.fetch = realFetch));
+  assert.equal((await updater.latest('2.1.0')).version, '2.1.2');
+  assert.equal((await updater.latest('2.1.0', updater.BASE, 'teste')).version, '2.2.0');
+  assert.equal((await updater.latest('2.1.0', updater.BASE, 'qualquer')).version, '2.1.2');
+  assert.equal(await updater.latest('2.2.0', updater.BASE, 'teste'), null, 'já está na versão em teste');
+  assert.deepEqual(asked, ['latest.json', 'latest-teste.json', 'latest.json', 'latest-teste.json']);
+});

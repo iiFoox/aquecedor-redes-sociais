@@ -11,8 +11,13 @@ const { newer } = require('./logic');
 
 const BASE = 'https://cuuuudyjqjyeqvvfqtkl.supabase.co/storage/v1/object/public/downloads';
 
-async function latest(current, base = BASE) {
-  const r = await fetch(`${base}/latest.json?t=${Date.now()}`, { cache: 'no-store' });
+// Canais: "estavel" (latest.json, todos os aparelhos) e "teste" (latest-teste.json, só os aparelhos do dono que testam).
+// "npm run publicar" publica no teste; "npm run liberar" passa a versão em teste para o estável.
+const CHANNELS = { estavel: 'latest.json', teste: 'latest-teste.json' };
+const channelOf = (c) => (c === 'teste' ? 'teste' : 'estavel');
+
+async function latest(current, base = BASE, channel = 'estavel') {
+  const r = await fetch(`${base}/${CHANNELS[channelOf(channel)]}?t=${Date.now()}`, { cache: 'no-store' });
   if (r.status === 400 || r.status === 404) return null; // nada publicado ainda
   if (!r.ok) throw new Error(`Servidor de atualização respondeu ${r.status}`);
   const m = await r.json();
@@ -82,4 +87,4 @@ function install(exe) {
   });
 }
 
-module.exports = { latest, download, install, hashFile, BASE };
+module.exports = { latest, download, install, hashFile, BASE, CHANNELS, channelOf };

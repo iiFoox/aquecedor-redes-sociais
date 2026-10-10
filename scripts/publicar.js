@@ -1,6 +1,8 @@
-// Gera o instalador do aplicativo do Windows e publica a versão para os aparelhos atualizarem sozinhos.
+// Gera o instalador do aplicativo do Windows e publica a versão no CANAL DE TESTE.
 //   npm run instalador   só gera (release/WarmUp-Studio-Setup-<versão>.exe)
-//   npm run publicar     gera e envia para o bucket público "downloads" do Supabase (em partes de 45 MB + latest.json)
+//   npm run publicar     gera e envia para o bucket público "downloads" do Supabase (partes de 45 MB + latest-teste.json):
+//                        só os aparelhos com "Receber atualizações em teste" ligado recebem (o PC do dono)
+//   npm run liberar      (scripts/liberar.js) passa a versão em teste para todos os aparelhos (latest.json)
 // Antes de publicar, suba a versão em package.json ("version"): é ela que os aparelhos comparam.
 // Usa a chave secreta do .env só para ENVIAR os arquivos; ela nunca entra no instalador (conferido aqui).
 const fs = require('fs');
@@ -73,7 +75,6 @@ async function enviar(exe) {
     buf: buf.subarray(s, e),
   }));
   for (const p of parts) await put(p.name, p.buf, 'application/octet-stream');
-  await put('instalar.ps1', fs.readFileSync(path.join(__dirname, 'instalar.ps1')), 'text/plain; charset=utf-8');
   const manifest = {
     version,
     file: path.basename(exe),
@@ -82,28 +83,34 @@ async function enviar(exe) {
     date: new Date().toISOString(),
     parts: parts.map((p) => ({ name: p.name, size: p.buf.length, sha256: sha(p.buf) })),
   };
-  // Por último: é ele que avisa os aparelhos que há versão nova
-  await put('latest.json', Buffer.from(JSON.stringify(manifest, null, 2)), 'application/json');
-  // Partes de versões antigas saem (fica só a atual e a anterior)
+  // Por último: é ele que avisa os aparelhos do canal de teste que há versão nova
+  await put('latest-teste.json', Buffer.from(JSON.stringify(manifest, null, 2)), 'application/json');
+  // Partes de versões antigas saem: ficam as duas mais novas e a liberada para todos (nunca apagar a do estável)
   const { data } = await sb.storage.from(BUCKET).list('', { limit: 1000 });
   const versions = [...new Set((data || []).map((f) => (f.name.match(/^WarmUp-Studio-(.+)\.parte\d+$/) || [])[1]).filter(Boolean))];
+  const stable = await publicada('estavel');
   const keep = versions.sort((a, b) => (newer(a, b) ? -1 : 1)).slice(0, 2);
+  if (stable) keep.push(stable);
   const old = (data || []).filter((f) => /\.parte\d+$/.test(f.name) && !keep.some((v) => f.name.startsWith(`WarmUp-Studio-${v}.`)));
   if (old.length) await sb.storage.from(BUCKET).remove(old.map((f) => f.name));
 }
 
-// Versão já publicada (os aparelhos só atualizam se a nova for maior)
-async function publicada() {
-  const { BASE } = require('../desktop/updater');
-  const r = await fetch(`${BASE}/latest.json?t=${Date.now()}`).catch(() => null);
+// Versão já publicada num canal (os aparelhos só atualizam se a nova for maior)
+async function publicada(canal = 'teste') {
+  const { BASE, CHANNELS } = require('../desktop/updater');
+  const r = await fetch(`${BASE}/${CHANNELS[canal]}?t=${Date.now()}`).catch(() => null);
   if (!r || !r.ok) return null;
   return (await r.json().catch(() => ({}))).version || null;
 }
 
 (async () => {
   console.log(`📦 WarmUp Studio ${version}`);
+  // Toda versão entra no "O que há de novo?" antes de sair (web/src/novidades.ts)
+  const novidades = fs.readFileSync(path.join(ROOT, 'web', 'src', 'novidades.ts'), 'utf8');
+  if (!novidades.includes(`versao: '${version}'`))
+    fail(`A versão ${version} não está em web/src/novidades.ts. Escreva o que mudou ("O que há de novo?") antes de publicar.`);
   if (!onlyBuild && !force) {
-    const atual = await publicada();
+    const atual = [await publicada('teste'), await publicada('estavel')].filter(Boolean).sort((a, b) => (newer(a, b) ? -1 : 1))[0];
     if (atual && !newer(version, atual))
       fail(
         `A versão ${version} não é mais nova que a publicada (${atual}). Suba "version" no package.json (ex.: ${atual.replace(/\d+$/, (n) => Number(n) + 1)}).`,
@@ -118,9 +125,9 @@ async function publicada() {
   console.log(`✅ Instalador: ${exe}`);
   if (onlyBuild) return;
   await enviar(exe);
-  console.log(`\n✅ Versão ${version} publicada. Os aparelhos atualizam em até 6 h (ou "Procurar atualização" no ícone).`);
-  console.log('   Instalar num aparelho novo (PowerShell):');
-  console.log(`   irm ${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/instalar.ps1 | iex`);
+  console.log(`\n✅ Versão ${version} publicada no CANAL DE TESTE. Só os aparelhos com "Receber atualizações em teste"`);
+  console.log('   recebem (em até 6 h, ou "Procurar atualização" no ícone). Os outros continuam na versão liberada.');
+  console.log('   Testou e está tudo certo? npm run liberar (passa esta versão para todos os aparelhos).');
 })().catch((e) => {
   console.error(`❌ ${e.publicar ? e.message : e.stack}`);
   process.exitCode = 1;

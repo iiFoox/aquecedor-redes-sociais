@@ -15,6 +15,8 @@ import { Conta } from './views/Conta.tsx';
 import { Proxies } from './views/Proxies.tsx';
 import { Rotina } from './views/Rotina.tsx';
 import { ComoUsar } from './views/ComoUsar.tsx';
+import { lastSeen, Novidades } from './views/Novidades.tsx';
+import { NOVIDADES } from './novidades.ts';
 
 const NAV: [View, string, string][] = [
   ['cockpit', 'Cockpit', 'gauge'],
@@ -23,6 +25,7 @@ const NAV: [View, string, string][] = [
   ['analises', 'Análises', 'chart'],
   ['ajustes', 'Ajustes', 'sliders'],
   ['ajuda', 'Como usar', 'help'],
+  ['novidades', 'O que há de novo?', 'bell'],
 ];
 
 const SUB: Record<View, string> = {
@@ -33,6 +36,7 @@ const SUB: Record<View, string> = {
   analises: 'Últimos 30 dias, todas as contas',
   ajustes: 'Sua conta, aparência, navegador, motor e backup',
   ajuda: 'O que cada tela faz e como o aquecimento funciona',
+  novidades: 'Tudo o que mudou em cada versão do app',
 };
 
 // Primeira vez neste navegador: um convite discreto para o "Como usar" (some ao abrir ou fechar)
@@ -96,6 +100,9 @@ function Side() {
           <button key={v} aria-current={view === v ? 'page' : undefined} onClick={() => go(v)}>
             <Icon name={i} />
             <span>{l}</span>
+            {v === 'novidades' && view !== 'novidades' && lastSeen() !== NOVIDADES[0].versao && (
+              <span className="dot running" title="Novidades que você ainda não viu" />
+            )}
           </button>
         ))}
       </nav>
@@ -136,6 +143,7 @@ function Side() {
           <div className="dim">
             {system.app ? 'Aplicativo do Windows' : system.pm2 ? 'Reinicia sozinho (PM2)' : 'Rodando pelo npm start'}
             {system.version ? ` · versão ${system.version}` : ''}
+            {system.channel === 'teste' ? ' (teste)' : ''}
           </div>
         )}
       </div>
@@ -308,6 +316,8 @@ export function App() {
           </div>
         ) : view === 'ajuda' ? (
           <ComoUsar />
+        ) : view === 'novidades' ? (
+          <Novidades />
         ) : view === 'cockpit' && !accounts.length ? (
           <div className="panel empty">
             <div className="empty-art">

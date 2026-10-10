@@ -26,6 +26,8 @@ const LOCAL = settings();
 const PANEL_PORT = Number(LOCAL.panelPort) || 3001;
 const MOTOR_PORT = Number(LOCAL.motorPort) || 3101;
 const UPDATE_BASE = LOCAL.updateBase || updater.BASE;
+// Canal de atualização deste aparelho: "estavel" (padrão) ou "teste" (recebe primeiro; só o PC do dono)
+const channel = () => updater.channelOf(settings().channel);
 const PANEL_URL = `http://localhost:${PANEL_PORT}`;
 const HIDDEN = process.argv.includes('--escondido'); // aberto pelo Windows ao ligar: começa só na bandeja
 const AUTOSTART_ARGS = ['--escondido'];
@@ -135,6 +137,7 @@ function startChild(name, script) {
     WU_APP: '1',
     PORT: String(PANEL_PORT),
     MOTOR_PORT: String(MOTOR_PORT),
+    WU_CHANNEL: channel(),
   };
   const child = spawn(process.execPath, [path.join(ROOT, script)], {
     cwd: ROOT,
@@ -343,6 +346,24 @@ function menu() {
       enabled: app.isPackaged,
       click: (m) => setAutostart(m.checked),
     },
+    {
+      label: 'Receber atualizações em teste (antes dos outros computadores)',
+      type: 'checkbox',
+      checked: channel() === 'teste',
+      enabled: app.isPackaged,
+      click: (m) => {
+        saveSettings({ channel: m.checked ? 'teste' : 'estavel' });
+        log(`Canal de atualização: ${channel()}`);
+        notify(
+          m.checked ? 'Canal de teste ligado' : 'Canal estável',
+          m.checked
+            ? 'Este computador recebe as versões em teste antes dos outros. Procurando agora.'
+            : 'Este computador recebe só as versões liberadas para todos.',
+        );
+        if (tray) tray.setContextMenu(menu());
+        if (m.checked) checkUpdates(false);
+      },
+    },
     { label: 'Abrir a pasta dos registros', click: () => shell.openPath(path.join(DATA, 'logs')) },
     { type: 'separator' },
     { label: `Sair (para o robô neste aparelho)`, click: () => app.quit() },
@@ -499,7 +520,7 @@ async function checkUpdates(manual) {
   }
   updating = true;
   try {
-    const m = await updater.latest(app.getVersion(), UPDATE_BASE);
+    const m = await updater.latest(app.getVersion(), UPDATE_BASE, channel());
     if (!m) {
       if (manual) notify('Sem atualização', `Você já está na versão ${app.getVersion()}.`);
       return;
@@ -607,7 +628,7 @@ async function repair(reason, detail = '') {
     'Faltam arquivos do aplicativo. Ele baixa a versão certa e se reinstala sozinho em alguns minutos. Não precisa fazer nada.',
   );
   try {
-    const m = await updater.latest('0.0.0', UPDATE_BASE);
+    const m = await updater.latest('0.0.0', UPDATE_BASE, channel());
     if (!m) throw new Error('nenhuma versão publicada');
     updateFile = await updater.download(m, path.join(app.getPath('temp'), `${APP_ID}-update`), () => {}, UPDATE_BASE);
     updateSha = m.sha256;

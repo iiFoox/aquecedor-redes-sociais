@@ -69,6 +69,7 @@ function createApi({ token, deviceUser = () => (cloud.ready() && !cloud.needsLog
       uptime: Math.round(process.uptime()),
       pm2: process.env.pm_id !== undefined,
       app: process.env.WU_APP === '1', // aberto pelo aplicativo do Windows (desktop/main.js)
+      channel: process.env.WU_CHANNEL === 'teste' ? 'teste' : 'estavel', // canal de atualização deste aparelho
       restarts: Number(process.env.restart_time) || 0,
       autostart: fs.existsSync(AUTOSTART),
       sessions: Object.keys(runner.activeSessions()).length,
