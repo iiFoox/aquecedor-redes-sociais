@@ -102,14 +102,13 @@ test('plano do dia do modelo: o número escrito é o MÁXIMO (variação só des
   }
 });
 
-test('teto do dia: recomendada 120%; meta personalizada no máximo o número escrito; follow pausado continua pausado', () => {
+test('teto do dia: recomendada 120%; meta personalizada no máximo o número escrito', () => {
   assert.equal(rules.limitOf({ like: 10 }, 'like'), 12);
   assert.equal(rules.limitOf({ like: 9, caps: { like: 10 } }, 'like'), 10, 'variou para 9: teto é o 10 escrito, não 11');
   assert.equal(rules.limitOf({ like: 10, caps: { like: 10 } }, 'like'), 10);
   assert.equal(rules.limitOf({ follow: 0, caps: { follow: 0 } }, 'follow'), 0);
   const plan = { like: 10, follow: 5, caps: { like: 10, follow: 5 } };
-  rules.pauseFollows(plan, { follow: 1 }, Date.now() + 3600000);
-  assert.equal(rules.limitOf(plan, 'follow'), 1);
+  assert.equal(rules.limitOf(plan, 'follow'), 5);
   assert.equal(rules.isCapped(plan, { like: 10 }, 'like'), true);
   assert.equal(rules.isCapped(plan, { like: 9 }, 'like'), false);
   // O objeto de tetos não vira meta

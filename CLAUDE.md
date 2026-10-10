@@ -145,9 +145,10 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
   `motor/humanwait.js`) e espera o dono resolver SEM limite (a janela nunca fecha sozinha: captcha abandonado pesa contra a conta); resolvido, a
   sessão continua. Faixa no painel com "Mostrar a janela"; a sessão que espera não ocupa vaga (`runner.busySessions`).
   Robô nunca resolve captcha.
-- TikTok pode mostrar "Seguindo" e descartar o follow (conta nova/desconfiada): follow só conta se o botão mudou e, em
-  dia com follow, a sessão confere o "Seguindo" do próprio perfil no começo e no fim; não subiu = alerta e follows
-  pausados 3 dias (`followPauseUntil`, `rules.pauseFollows`).
+- TikTok pode mostrar "Seguindo" e descartar o follow (conta nova/desconfiada: é da conta, não do robô): follow só conta
+  se o botão mudou e, em dia com follow, a sessão confere o "Seguindo" do próprio perfil no começo e no fim;
+  não subiu = aviso no painel (`FOLLOW_NOT_SAVED`, texto fixo: as sessões somam no mesmo aviso) dizendo que é da conta e
+  para testar seguir pelo celular. NÃO pausa os follows (o dono pediu para tirar essa restrição em 2026-10-10).
 - Navegador nunca headless (sem janela o Edge se apresenta como "HeadlessChrome"): "Esconder as janelas" abre fora da
   tela (`rules.windowMode`).
 - Navegador: Microsoft Edge instalado no Windows (`channel: 'msedge'`), sem user-agent inventado: ele se apresenta como

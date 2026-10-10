@@ -9,6 +9,15 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.7',
+    data: '2026-10-10',
+    titulo: 'TikTok: follows sem pausa, com aviso',
+    itens: [
+      'Quando o TikTok não grava os follows de uma conta, os follows NÃO são mais pausados por 3 dias: continuam sendo feitos.',
+      'No lugar da pausa, um aviso no painel: o robô clica em Seguir e o botão muda, mas o "Seguindo" do perfil não sobe. É restrição do TikTok na conta, não do programa. Para confirmar, siga alguém pelo celular e veja se o número sobe.',
+    ],
+  },
+  {
     versao: '2.1.6',
     data: '2026-10-10',
     titulo: 'Metas personalizadas mais seguras e mais fáceis de usar',

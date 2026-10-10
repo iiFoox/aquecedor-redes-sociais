@@ -548,15 +548,13 @@ function resetToday(a, { ramp = false } = {}) {
 }
 
 // Plano do dia: sorteado uma vez por data e gravado
-// Follows pausados (o site não estava gravando): o follow sai do plano até a pausa acabar.
 // Depois de trocar a meta (goalRamp), o plano passa pela transição suave (custom.withRamp).
 function planOf(a, gen) {
   const t = templateOf(a);
   const today = rules.localDate();
   const make = (day) => require('./custom').withRamp(a, gen(day, Math.random, t), today);
   const { plan, created } = rules.ensurePlan(a.daily, today, rules.dayOf(a), make);
-  const paused = rules.pauseFollows(plan, a.daily[rules.localDate()], a.followPauseUntil);
-  if (created || paused) touch(a.id);
+  if (created) touch(a.id);
   return plan;
 }
 

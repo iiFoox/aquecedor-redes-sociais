@@ -375,6 +375,10 @@ const ACTIVITIES = {
   },
 };
 
+// Aviso quando o TikTok mostra "Seguindo" mas não grava o follow (o robô clicou certo: o problema é a conta)
+const FOLLOW_NOT_SAVED =
+  'O TikTok não está gravando os follows desta conta: o robô clica em Seguir, o botão muda, mas o número de "Seguindo" do perfil não sobe. Não é o programa, é restrição do TikTok na conta. Para confirmar, siga alguém pelo celular e veja se o número sobe. Os follows continuam sendo feitos.';
+
 async function run({ page, bot, ctl, account }) {
   await bot.goto(HOME, 'Abrindo o TikTok');
   if ((await page.locator(SEL.login).count()) > 0) {
@@ -384,17 +388,16 @@ async function run({ page, bot, ctl, account }) {
   await dismissPopups(bot);
   await bot.guard();
 
-  // O TikTok às vezes mostra "Seguindo" e descarta o follow (conta nova ou desconfiada). Dia com follow: guarda
-  // quantas contas ela segue agora e confere no fim; se não subiu, avisa e pausa os follows da conta.
+  // O TikTok às vezes mostra "Seguindo" e descarta o follow (conta nova ou desconfiada: é da conta, não do robô).
+  // Dia com follow: guarda quantas contas ela segue agora e confere no fim. Não subiu: aviso no painel (texto fixo, para
+  // as sessões seguintes somarem no mesmo aviso) e o detalhe no registro. Não pausa: os follows do plano continuam.
   const baseline = ctl.left('follow') > 0 ? await followingCount({ page, bot, account }) : null;
   const reason = await loop({ page, bot, ctl, account });
   if (baseline !== null && (ctl.stats.follow || 0) > 0) {
     const now = await followingCount({ page, bot, account });
     if (now !== null && now <= baseline) {
-      const msg = `O TikTok não está gravando os follows de @${account.username}: ${ctl.stats.follow} follow(s) nesta sessão e o perfil continua seguindo ${now}. Follows pausados por 3 dias (é restrição do TikTok na conta, comum em conta nova)`;
-      ctl.alert('warn', msg, 'follow');
-      ctl.pauseFollows(3);
-      ctl.log(msg, 'warn');
+      ctl.alert('warn', FOLLOW_NOT_SAVED, 'follow');
+      ctl.log(`Follows não gravados: ${ctl.stats.follow} feito(s) nesta sessão e o perfil continua seguindo ${now}`, 'warn');
     } else if (now !== null) ctl.log(`Follows conferidos no perfil: seguindo ${baseline} → ${now} ✔`);
   }
   return reason;

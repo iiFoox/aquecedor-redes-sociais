@@ -61,18 +61,6 @@ function ensurePlan(daily, dateKey, day, gen) {
   return { plan: d.plan, created: true };
 }
 
-// Follows pausados até "until" (o site não estava gravando): o plano do dia fica só com os follows já feitos.
-// Devolve true se mudou o plano.
-function pauseFollows(plan, done, until, now = Date.now()) {
-  if (!until || now >= until || !plan) return false;
-  const made = (done && done.follow) || 0;
-  if ((plan.follow || 0) <= made && plan.caps && plan.caps.follow === made) return false;
-  plan.follow = Math.min(plan.follow || 0, made);
-  // Teto também: com 120% sobre "made" ainda caberia mais um follow
-  plan.caps = { ...(plan.caps || {}), follow: made };
-  return true;
-}
-
 // Teto de uma meta: 120% do plano, arredondado para cima. Meta zerada = teto zero.
 const capOf = (planned) => Math.ceil((planned || 0) * GOAL_CAP);
 // Meta personalizada: plan.caps tem o teto escrito no modelo (motor/custom.js); vale o menor dos dois.
@@ -565,7 +553,6 @@ module.exports = {
   sessionCap,
   nextAfter,
   planSlots,
-  pauseFollows,
   addUptime,
   uptimeFromLog,
   onHours,

@@ -433,9 +433,6 @@ async function openSession(account, { manual = false } = {}) {
         store.addAlert(id, level, msg, kind);
         emit({ type: 'alert', id, level, msg });
       },
-      pauseFollows(days) {
-        store.updateAccount(id, { followPauseUntil: Date.now() + days * 86400000 });
-      },
     },
   });
   const { goalKeys, left } = ctl;
