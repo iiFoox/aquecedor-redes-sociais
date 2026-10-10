@@ -61,6 +61,16 @@ function ensurePlan(daily, dateKey, day, gen) {
   return { plan: d.plan, created: true };
 }
 
+// Follows pausados até "until" (o site não estava gravando): o plano do dia fica só com os follows já feitos.
+// Devolve true se mudou o plano.
+function pauseFollows(plan, done, until, now = Date.now()) {
+  if (!until || now >= until || !plan) return false;
+  const made = (done && done.follow) || 0;
+  if ((plan.follow || 0) <= made) return false;
+  plan.follow = made;
+  return true;
+}
+
 // Teto de uma meta: 120% do plano, arredondado para cima. Meta zerada = teto zero.
 const capOf = (planned) => Math.ceil((planned || 0) * GOAL_CAP);
 const isCapped = (plan, done, k) => (done[k] || 0) >= capOf(plan[k]);
@@ -547,6 +557,7 @@ module.exports = {
   sessionCap,
   nextAfter,
   planSlots,
+  pauseFollows,
   addUptime,
   uptimeFromLog,
   onHours,

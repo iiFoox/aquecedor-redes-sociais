@@ -19,6 +19,8 @@ video{position:absolute;left:440px;top:30px;width:400px;height:700px;background:
 .css-x-DivCommentMain{position:absolute;left:990px;top:60px;width:350px;height:600px;overflow-y:auto;display:none}
 .css-x-DivCommentMain.open{display:block} .css-x-DivCommentMain p{height:120px;margin:0}
 button[aria-label="exit"]{position:absolute;left:1300px;top:20px;width:32px;height:32px;display:none}
+[data-e2e="feed-follow"]{position:absolute;left:870px;top:300px;width:24px;height:24px;background:#f33}
+[data-e2e="following-count"]{position:absolute;left:20px;top:100px}
 </style></head><body>
 <form data-e2e="search-box" action="/search"><input data-e2e="search-user-input" name="q" type="search" placeholder="Pesquisar"></form>
 <span id="tab-videos" style="position:absolute;left:560px;top:5px;padding:4px">Vídeos</span>
@@ -26,6 +28,8 @@ button[aria-label="exit"]{position:absolute;left:1300px;top:20px;width:32px;heig
 <div role="button" data-e2e="like-icon" aria-label="Curtir vídeo" aria-pressed="false"></div>
 <div role="button" data-e2e="comment-icon"></div>
 <button aria-label="exit"></button>
+<button data-e2e="feed-follow"><div><svg viewBox="0 0 48 48"><path d="M22 4 mais"></path></svg></div></button>
+<strong data-e2e="following-count">7</strong>
 <div class="css-x-DivCommentMain">${'<p>comentário</p>'.repeat(20)}</div>
 <script>
 const like = document.querySelector('[data-e2e="like-icon"]');
@@ -40,6 +44,10 @@ document.querySelector('[data-e2e="comment-icon"]').addEventListener('click', ()
 exit.addEventListener('click', () => toggle(false));
 // Aba "Vídeos" da busca: leva para /search/video com o mesmo termo
 document.getElementById('tab-videos').addEventListener('click', () => (location.href = '/search/video' + location.search));
+// "+" da foto do criador vira "✓" (a não ser que o TikTok recuse: o teste trava)
+document.querySelector('[data-e2e="feed-follow"] path').closest('button').addEventListener('click', (e) => {
+  if (!window.blockFollow) e.currentTarget.querySelector('path').setAttribute('d', 'M43 6 certo');
+});
 window.events = [];
 addEventListener('mousemove', () => window.events.push('move'));
 </script></body></html>`;
@@ -172,5 +180,29 @@ test('navegador real: captcha na tela é reconhecido; página normal não dá al
   // Captcha escondido (contêiner vazio que não aparece) não para a sessão
   await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div class="captcha-holder" style="display:none"></div>'));
   assert.equal(await tiktok.detectProblem(page), null);
+  await page.close();
+});
+
+test('navegador real: follow do vídeo só conta se o "+" virou "✓"; botão que não muda não conta', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  let s = await setup();
+  assert.equal(await tiktok._followHere(s.bot, s.ctl, '[data-e2e="feed-follow"]', 'Criador do vídeo'), true);
+  assert.match(await s.page.getAttribute('[data-e2e="feed-follow"] path', 'd'), /certo/, 'o clique não chegou no botão');
+  assert.deepEqual(s.actions, ['follow:Criador do vídeo']);
+  await s.page.close();
+
+  s = await setup();
+  await s.page.evaluate(() => (window.blockFollow = true));
+  assert.equal(await tiktok._followHere(s.bot, s.ctl, '[data-e2e="feed-follow"]', 'Criador do vídeo'), false);
+  assert.deepEqual(s.actions, []);
+  assert.match(s.logs.pop(), /não pegou/);
+  await s.page.close();
+});
+
+test('navegador real: lê quantas contas a própria conta segue', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot } = await setup();
+  assert.equal(await tiktok._followingCount({ page, bot, account: { username: 'conta' } }), 7);
+  assert.equal(new URL(page.url()).pathname, '/@conta');
   await page.close();
 });

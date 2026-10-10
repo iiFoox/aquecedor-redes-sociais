@@ -213,7 +213,10 @@ export function ComoUsar() {
           <p>Se a plataforma desconfiar, o robô para a sessão na hora e a conta fica esperando você. Nada volta sozinho, de propósito.</p>
           <ul className="guide-list">
             <Item t="Pediu login:">clique em Login na página da conta e entre de novo.</Item>
-            <Item t="Captcha:">clique em Abrir navegador, resolva o captcha e feche a janela.</Item>
+            <Item t="Captcha:">
+              o robô para na hora, a janela da conta aparece na tela e o Windows avisa. Resolva o captcha nela: a sessão continua sozinha.
+              Se ninguém resolver em 15 min, a sessão para; depois clique em Abrir navegador, resolva e feche a janela.
+            </Item>
             <Item t="Bloqueio de ações:">a conta fica parada até você clicar em Liberar na página dela.</Item>
             <Item t="Proxy fora do ar:">espera o proxy voltar.</Item>
           </ul>

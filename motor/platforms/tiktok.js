@@ -146,6 +146,37 @@ async function likeVideo(bot, ctl, icon, detail) {
   return true;
 }
 
+// Segue e só conta se o botão mudou ("+" da foto do criador vira "✓"; "Seguir" do perfil vira "Seguindo").
+// Botão igual depois do clique = o follow não pegou. Não deu para ler (botão trocado na página): vale o clique.
+async function followHere(bot, ctl, sel, detail) {
+  const [el] = await bot.visible(sel);
+  if (!el) return false;
+  const h = typeof el.elementHandle === 'function' ? await el.elementHandle().catch(() => null) : null;
+  const look = () =>
+    h ? h.evaluate((e) => (e.isConnected ? `${e.innerHTML}|${e.innerText}` : null)).catch(() => null) : Promise.resolve(null);
+  const before = await look();
+  await bot.click(el, false);
+  await bot.wait(800, 1600);
+  const after = await look();
+  if (before !== null && after !== null && before === after) {
+    ctl.log('O follow não pegou (o botão não mudou)', 'warn');
+    return false;
+  }
+  ctl.action('follow', detail);
+  return true;
+}
+
+// Quantas contas a própria conta segue (perfil dela). null = não deu para ler.
+async function followingCount({ page, bot, account }) {
+  await bot.goto(`https://www.tiktok.com/@${account.username}`, 'Olhando o próprio perfil');
+  const t = await page
+    .locator('[data-e2e="following-count"]')
+    .first()
+    .textContent({ timeout: 5000 })
+    .catch(() => null);
+  return t && /^\d+$/.test(t.trim()) ? Number(t.trim()) : null;
+}
+
 // Busca como gente: clica na caixa de busca, digita e aperta Enter.
 // Se a caixa não estiver na tela (layout estreito) ou a busca não abrir, vai direto pelo endereço.
 async function typedSearch({ page, bot, ctl }, term) {
@@ -248,10 +279,7 @@ const ACTIVITIES = {
 
       if (waitTime > 15000 && bot.random() < followChance(ctl, 'fyp')) {
         ctl.status('Assistiu até o fim, seguindo o criador');
-        if (await bot.clickVisible(SEL.feedFollow)) {
-          ctl.action('follow', 'Criador do vídeo');
-          await bot.pause('afterAction');
-        }
+        if (await followHere(bot, ctl, SEL.feedFollow, 'Criador do vídeo')) await bot.pause('afterAction');
       }
       await bot.guard();
       ctl.status('Indo para o próximo vídeo');
@@ -325,10 +353,8 @@ const ACTIVITIES = {
     if (bot.random() < followChance(ctl, 'profile')) {
       await bot.scroll(-2500);
       await bot.pause('decide');
-      if (await bot.clickVisible(SEL.follow)) {
-        ctl.action('follow', handle ? `@${handle}` : 'Pelo perfil');
+      if (await followHere(bot, ctl, SEL.follow, handle ? `@${handle}` : 'Pelo perfil'))
         await bot.pause('afterAction', 'Pausa após seguir');
-      }
     }
     // Volta como gente: botão "Voltar" do navegador. Se não cair no Para Você, abre pelo endereço.
     ctl.status('Voltando ao Para Você');
@@ -357,6 +383,23 @@ async function run({ page, bot, ctl, account }) {
   await dismissPopups(bot);
   await bot.guard();
 
+  // O TikTok às vezes mostra "Seguindo" e descarta o follow (conta nova ou desconfiada). Dia com follow: guarda
+  // quantas contas ela segue agora e confere no fim; se não subiu, avisa e pausa os follows da conta.
+  const baseline = ctl.left('follow') > 0 ? await followingCount({ page, bot, account }) : null;
+  const reason = await loop({ page, bot, ctl, account });
+  if (baseline !== null && (ctl.stats.follow || 0) > 0) {
+    const now = await followingCount({ page, bot, account });
+    if (now !== null && now <= baseline) {
+      const msg = `O TikTok não está gravando os follows de @${account.username}: ${ctl.stats.follow} follow(s) nesta sessão e o perfil continua seguindo ${now}. Follows pausados por 3 dias (é restrição do TikTok na conta, comum em conta nova)`;
+      ctl.alert('warn', msg, 'follow');
+      ctl.pauseFollows(3);
+      ctl.log(msg, 'warn');
+    } else if (now !== null) ctl.log(`Follows conferidos no perfil: seguindo ${baseline} → ${now} ✔`);
+  }
+  return reason;
+}
+
+async function loop({ page, bot, ctl, account }) {
   const fails = {};
   const skip = new Set(); // metas que se mostraram inalcançáveis NESTA sessão
   const interests = account.interests || [];
@@ -432,6 +475,8 @@ module.exports = {
   detectProblem,
   run,
   _likeVideo: likeVideo, // para os testes
+  _followHere: followHere,
+  _followingCount: followingCount,
   _activities: ACTIVITIES,
   _browseComments: browseComments,
   _typedSearch: typedSearch,

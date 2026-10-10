@@ -63,6 +63,11 @@ function createCtl({ state, plan, done, now = Date.now, hooks, target = 1 }) {
     alert(level, msg, kind) {
       hooks.alert(level, msg, kind);
     },
+    // O site não está gravando os follows: tira o follow do plano de hoje e dos próximos dias
+    pauseFollows(days) {
+      if (hooks.pauseFollows) hooks.pauseFollows(days);
+      if ((plan.follow || 0) > (done().follow || 0)) plan.follow = done().follow || 0;
+    },
     // Falha numa atividade: vai para o log e, se a mesma falha se repete, vira alerta no painel
     // (assim um erro do robô ou uma mudança no site não passa dias escondido no log)
     fail(label, err) {

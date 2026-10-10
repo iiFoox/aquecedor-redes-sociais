@@ -203,3 +203,15 @@ test('navegador: nunca headless (o Edge sem janela se denuncia como HeadlessChro
   assert.deepEqual(rules.windowMode({ headless: true }), { headless: false, args: ['--window-position=-32000,-32000'] });
   assert.deepEqual(rules.windowMode({ headless: true }, true), { headless: false, args: [] }, 'janela de login/captcha fica à vista');
 });
+
+test('follows pausados (o site não gravava): o plano do dia fica com os já feitos até a pausa acabar', () => {
+  const now = Date.parse('2026-10-10T15:00:00Z');
+  const plan = { watch: 40, like: 8, follow: 3 };
+  assert.equal(rules.pauseFollows(plan, { follow: 1 }, now + 86400000, now), true);
+  assert.equal(plan.follow, 1);
+  assert.equal(rules.pauseFollows(plan, { follow: 1 }, now + 86400000, now), false, 'já estava pausado');
+  const later = { follow: 2 };
+  assert.equal(rules.pauseFollows(later, {}, now - 1, now), false, 'pausa vencida');
+  assert.equal(later.follow, 2);
+  assert.equal(rules.pauseFollows({ follow: 2 }, {}, null, now), false);
+});

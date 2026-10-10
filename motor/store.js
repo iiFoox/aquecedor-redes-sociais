@@ -437,9 +437,11 @@ function todayOf(id) {
 }
 
 // Plano do dia: sorteado uma vez por data e gravado
+// Follows pausados (o site não estava gravando): o follow sai do plano até a pausa acabar.
 function planOf(a, gen) {
   const { plan, created } = rules.ensurePlan(a.daily, rules.localDate(), rules.dayOf(a), gen);
-  if (created) touch(a.id);
+  const paused = rules.pauseFollows(plan, a.daily[rules.localDate()], a.followPauseUntil);
+  if (created || paused) touch(a.id);
   return plan;
 }
 

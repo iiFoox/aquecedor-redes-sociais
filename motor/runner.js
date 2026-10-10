@@ -8,7 +8,8 @@ const store = require('./store');
 const rules = require('./rules');
 const platforms = require('./platforms');
 const { phaseFor } = require('./platforms/phases');
-const { createBot, AbortError } = require('./bot');
+const { createBot, AbortError, StopError } = require('./bot');
+const { waitForHuman } = require('./humanwait');
 const { createCtl } = require('./ctl');
 const human = require('./human');
 const { checkProxy, proxyUpdate } = require('./proxycheck');
@@ -177,13 +178,81 @@ function needsAttention(account, kind, reason) {
   emit({ type: 'attention', id: account.id, attention: store.get(account.id).attention });
 }
 
-// Captcha, bloqueio ou login pedido no meio da sessão: para na hora, sem esperar
-async function guard(page, platform, account) {
+// Captcha, bloqueio ou login pedido no meio da sessão: para na hora.
+// Captcha: o robô solta tudo, mostra a janela da conta na tela e espera você resolver (até 15 min); resolvido,
+// a sessão continua de onde estava. Sem resolver a tempo (ou janela fechada): para e a conta espera você, como antes.
+async function guard(page, platform, account, s, ctl) {
   const p = await platform.detectProblem(page).catch(() => null);
   if (!p) return;
   const kind = p.kind === 'logout' ? 'login' : p.kind;
+  if (kind === 'captcha' && s && ctl) {
+    const r = await captchaWait(page, platform, account, s, ctl);
+    if (r === 'resolvido') return;
+    if (r === 'parou') throw new StopError();
+  }
   needsAttention(account, kind, p.msg);
   throw new AbortError(p.msg, kind.toUpperCase());
+}
+
+const CAPTCHA_WAIT_MS = 15 * 60000;
+
+// Mostra a janela da conta na tela (ela roda minimizada ou fora da tela) ou volta a escondê-la
+async function showWindow(page, visible) {
+  try {
+    const cdp = await page.context().newCDPSession(page);
+    const { windowId } = await cdp.send('Browser.getWindowForTarget');
+    if (visible) {
+      await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+      await cdp.send('Browser.setWindowBounds', { windowId, bounds: { left: 40, top: 20 } });
+      await page.bringToFront();
+    } else await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+    await cdp.detach().catch(() => {});
+  } catch {
+    /* sem janela para mexer */
+  }
+}
+
+async function captchaWait(page, platform, account, s, ctl) {
+  const name = platforms[account.platform].name;
+  const started = Date.now();
+  store.setAttention(
+    account.id,
+    'captcha',
+    `${name} pediu um captcha. A janela da conta está aberta na tela: resolva por lá. O robô espera até 15 min e continua sozinho`,
+  );
+  emit({ type: 'attention', id: account.id, attention: store.get(account.id).attention });
+  ctl.log('Captcha na tela: parei tudo e abri a janela para você resolver', 'warn');
+  await showWindow(page, true);
+  const r = await waitForHuman({
+    check: async () => {
+      const p = await platform.detectProblem(page).catch(() => null);
+      return !!p && p.kind === 'captcha';
+    },
+    closed: () => page.isClosed(),
+    stopped: () => s.stop,
+    onTick: (left) => {
+      // Não conta como sessão travada nem como tempo da sessão
+      s.lastProgress = Date.now();
+      s.endsAt = Math.max(s.endsAt, Date.now() + 2 * 60000);
+      ctl.status(`Esperando você resolver o captcha na janela da conta (até ${Math.ceil(left / 60000)} min)`);
+    },
+    sleep: wait,
+    timeoutMs: CAPTCHA_WAIT_MS,
+  });
+  if (r === 'resolvido') {
+    s.endsAt += Date.now() - started;
+    store.clearAttention(account.id, 'Captcha resolvido. A sessão continuou', ['captcha']);
+    emit({ type: 'attention', id: account.id, attention: null });
+    ctl.log('Captcha resolvido por você ✔ Continuando a sessão');
+    await wait(1500);
+    await showWindow(page, false);
+  } else
+    ctl.log(
+      { tempo: 'O captcha não foi resolvido em 15 min. Sessão encerrada', fechou: 'A janela foi fechada com o captcha na tela' }[r] ||
+        'Sessão interrompida por você',
+      'warn',
+    );
+  return r;
 }
 
 // Abre o navegador da conta para você. purpose 'login': página de login, fecha sozinho ao detectar o login.
@@ -324,6 +393,9 @@ async function openSession(account, { manual = false } = {}) {
         store.addAlert(id, level, msg, kind);
         emit({ type: 'alert', id, level, msg });
       },
+      pauseFollows(days) {
+        store.updateAccount(id, { followPauseUntil: Date.now() + days * 86400000 });
+      },
     },
   });
   const { goalKeys, left } = ctl;
@@ -361,7 +433,7 @@ async function run(account, platform, s, ctl) {
     await startScreencast(page, account.id);
     // Personalidade da conta + humor do dia (pequena variação de um dia para o outro)
     const bot = createBot(page, ctl, { persona: account.persona, mood: human.dayMood(account.persona, rules.localDate()) });
-    bot.guard = () => guard(page, platform, account);
+    bot.guard = () => guard(page, platform, account, s, ctl);
     const likeLeft = ctl.left('like');
     const reason = await platform.run({ page, bot, ctl, plan: s.plan, account });
     const noLike = rules.noLikeWarning(likeLeft, s.stats);
