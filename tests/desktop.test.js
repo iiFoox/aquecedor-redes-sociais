@@ -146,3 +146,34 @@ test('depois de atualizar: confere a versão, tenta de novo até 3 vezes e esque
 test('instalar: avisa na hora se o instalador nem abre (arquivo sumiu)', async () => {
   await assert.rejects(updater.install(path.join(os.tmpdir(), `nao-existe-${Date.now()}.exe`)));
 });
+
+test('instalação: lista de arquivos no empacotamento; faltou ou mudou de tamanho = incompleta (o app se reinstala)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const integrity = require('../desktop/integrity');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wu-integ-'));
+  try {
+    // Rodando pelo projeto (sem lista): não confere
+    assert.deepEqual(integrity.check(dir), { ok: true, total: 0, missing: [], count: 0 });
+    fs.mkdirSync(path.join(dir, 'node_modules', 'playwright-extra'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'node_modules', 'playwright-extra', 'index.js'), 'x'.repeat(50));
+    fs.mkdirSync(path.join(dir, 'motor'));
+    fs.writeFileSync(path.join(dir, 'motor', 'runner.js'), 'y'.repeat(10));
+    assert.equal(integrity.writeManifest(dir, '9.9.9'), 2);
+    assert.deepEqual(integrity.check(dir), { ok: true, total: 2, missing: [], count: 0 });
+    // A atualização ficou pela metade: sumiu um módulo (o caso do notebook)
+    fs.rmSync(path.join(dir, 'node_modules', 'playwright-extra'), { recursive: true });
+    const r = integrity.check(dir);
+    assert.equal(r.ok, false);
+    assert.deepEqual(r.missing, ['node_modules/playwright-extra/index.js']);
+    // Arquivo cortado (tamanho errado) também conta
+    fs.writeFileSync(path.join(dir, 'motor', 'runner.js'), 'y');
+    assert.equal(integrity.check(dir).count, 2);
+    // Lista estragada: incompleta
+    fs.writeFileSync(path.join(dir, 'arquivos.json'), '{lixo');
+    assert.equal(integrity.check(dir).ok, false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

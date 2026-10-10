@@ -6,8 +6,11 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
+const os = require('os');
 const logic = require('./logic');
 const updater = require('./updater');
+const integrity = require('./integrity');
+const { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } = require('../motor/supabase-config');
 
 const ROOT = path.join(__dirname, '..');
 const pkg = require('../package.json');
@@ -86,6 +89,30 @@ function writePending(p) {
 }
 const removePending = () => fs.rmSync(PENDING, { force: true });
 
+// ---------- Relatório de erro para o dono (tabela app_reports no Supabase; só grava, ninguém lê pelo app) ----------
+// Assim um problema num aparelho (motor caindo, instalação incompleta) aparece sem ninguém ir até ele buscar o registro.
+// Caminho do usuário do Windows sai do texto. Até 10 por hora. Falhou (sem internet, sem a tabela): fica só no app.log.
+let reported = [];
+const redact = (t) => String(t || '').replace(/(\\Users\\+)[^\\\s'"]+/gi, '$1…'); // C:\Users\<nome> e C:\\Users\\<nome>
+function report(kind, message) {
+  if (!app.isPackaged) return;
+  reported = reported.filter((t) => Date.now() - t < 3600000);
+  if (reported.length >= 10) return;
+  reported.push(Date.now());
+  const body = {
+    device: os.hostname().slice(0, 120) || 'sem-nome',
+    version: app.getVersion().slice(0, 20),
+    kind: String(kind).slice(0, 40),
+    message: redact(message).slice(0, 4000),
+  };
+  fetch(`${SUPABASE_URL}/rest/v1/app_reports`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => {});
+}
+
 // ---------- Motor e painel (processos filhos, com o Node do próprio Electron) ----------
 function logStream(name) {
   const dir = path.join(DATA, 'logs');
@@ -119,17 +146,27 @@ function startChild(name, script) {
   out.write(`\n===== ${stamp()} ${name} ligado (versão ${app.getVersion()}) =====\n`);
   child.stdout.pipe(out, { end: false });
   child.stderr.pipe(out, { end: false });
-  const c = (children[name] = { child, script, crashes: (children[name] && children[name].crashes) || [] });
+  const c = (children[name] = { child, script, crashes: (children[name] && children[name].crashes) || [], tail: '' });
+  // Fim do que ele escreveu (para o relatório de erro e para reconhecer arquivo faltando)
+  const keep = (d) => (c.tail = (c.tail + d).slice(-3000));
+  child.stdout.on('data', keep);
+  child.stderr.on('data', keep);
   child.on('exit', (code) => {
     out.write(`===== ${stamp()} ${name} parou (código ${code}) =====\n`);
     out.end();
     if (quitting || children[name] !== c) return;
     log(`O ${name} parou sozinho (código ${code}). Ligando de novo em 3 s`);
+    // Arquivo do app faltando (instalação incompleta): religar não adianta, conserta reinstalando
+    if (/Cannot find module|MODULE_NOT_FOUND/.test(c.tail)) {
+      log(`O ${name} não acha um arquivo do app: instalação incompleta`);
+      return repair(`o ${name} não acha um arquivo do app`, c.tail);
+    }
     // Caiu: liga de novo (como o PM2 fazia). 5 quedas em 2 min: para e avisa.
     c.crashes = c.crashes.filter((t) => Date.now() - t < 120000).concat(Date.now());
     if (c.crashes.length >= 5) {
       gaveUp = name;
       log(`O ${name} parou 5 vezes em 2 min: desisti de religar (veja ${name}.log)`);
+      report(`${name}-caiu`, c.tail);
       setState('vermelho', `${NAME}: o ${name} parou várias vezes`);
       notify(`O ${name} parou várias vezes`, `Veja o registro em ${path.join(DATA, 'logs', `${name}.log`)}`);
       return;
@@ -238,11 +275,10 @@ function showWindow(hash = '') {
         if (/^https?:\/\//.test(url)) shell.openExternal(url);
       }
     });
-    // Fechar a janela não desliga o robô: ele continua perto do relógio
-    win.on('close', (e) => {
+    // Fechar a janela não desliga o robô: ele continua perto do relógio. A janela fecha de verdade (libera ~100 MB e o
+    // processamento do painel, que ninguém está vendo) e abre de novo pelo ícone.
+    win.on('close', () => {
       if (quitting) return;
-      e.preventDefault();
-      win.hide();
       if (!settings().closedOnce) {
         saveSettings({ closedOnce: true });
         notify('Continua rodando', 'O WarmUp Studio segue aquecendo as contas. Abra pelo ícone perto do relógio.');
@@ -521,6 +557,8 @@ async function installUpdate(opts) {
   const hidden = auto || !(win && win.isVisible());
   writePending({ from: app.getVersion(), to, at: Date.now(), attempts, hidden });
   log(`Atualização: instalando ${app.getVersion()} → ${to} (${auto ? 'sozinha, nada aberto' : 'você pediu'}, tentativa ${attempts})`);
+  if (!(opts && opts.repair))
+    notify('Atualizando o WarmUp Studio', `Versão ${to}: leva alguns minutos e ele abre sozinho no fim. Não precisa abrir enquanto isso.`);
   quitting = true;
   setState('cinza', `${NAME}: atualizando...`);
   await stopChildren();
@@ -530,6 +568,7 @@ async function installUpdate(opts) {
   } catch (e) {
     // O instalador nem abriu: continua nesta versão (religa motor e painel) e avisa
     log(`Atualização: o instalador não abriu (${e.message}). Continuo na versão ${app.getVersion()}`);
+    report('atualizacao-falhou', `o instalador não abriu: ${e.message}`);
     removePending();
     quitting = false;
     autoWhenIdle = false;
@@ -539,6 +578,58 @@ async function installUpdate(opts) {
     return;
   }
   app.exit(0);
+}
+
+// ---------- Autoconserto: instalação incompleta (faltam arquivos do app) ----------
+// Baixa a versão publicada e se reinstala sozinho, como numa atualização. No máximo 2 vezes em 6 h (não fica em laço).
+let repairing = false;
+async function repair(reason, detail = '') {
+  if (repairing || quitting || !app.isPackaged) return;
+  repairing = true;
+  const recent = (settings().repairs || []).filter((t) => Date.now() - t < 6 * 3600000);
+  if (recent.length >= 2) {
+    log(`Instalação incompleta (${reason}), mas já tentei consertar 2 vezes em 6 h. Precisa reinstalar`);
+    report('reparo-desistiu', `${reason}\n${detail}`);
+    setState('vermelho', `${NAME}: precisa reinstalar`);
+    notify(
+      'O WarmUp Studio precisa ser reinstalado',
+      'Faltam arquivos do aplicativo e o conserto sozinho não resolveu. Rode o instalador de novo (seus dados ficam).',
+    );
+    repairing = false;
+    return;
+  }
+  saveSettings({ repairs: recent.concat(Date.now()) });
+  log(`Instalação incompleta (${reason}): baixando a versão publicada para reinstalar sozinho`);
+  report('reparo', `${reason}\n${detail}`);
+  setState('cinza', `${NAME}: consertando a instalação...`);
+  notify(
+    'Consertando o WarmUp Studio',
+    'Faltam arquivos do aplicativo. Ele baixa a versão certa e se reinstala sozinho em alguns minutos. Não precisa fazer nada.',
+  );
+  try {
+    const m = await updater.latest('0.0.0', UPDATE_BASE);
+    if (!m) throw new Error('nenhuma versão publicada');
+    updateFile = await updater.download(m, path.join(app.getPath('temp'), `${APP_ID}-update`), () => {}, UPDATE_BASE);
+    updateSha = m.sha256;
+    updateReady = m.version;
+    repairing = false;
+    await installUpdate({ auto: !(win && win.isVisible()), repair: true });
+  } catch (e) {
+    log(`Conserto: não consegui baixar (${e.message}). Tento de novo na próxima abertura`);
+    report('reparo-falhou', e.message);
+    setState('vermelho', `${NAME}: instalação incompleta`);
+    notify('Não consegui consertar agora', `Sem conseguir baixar (${e.message}). Tento de novo quando o app abrir; ou rode o instalador.`);
+    repairing = false;
+  }
+}
+
+// Instalador do WarmUp Studio rodando agora? (atualização em andamento)
+function installerRunning() {
+  return new Promise((resolve) =>
+    execFile('tasklist', ['/FI', 'IMAGENAME eq WarmUp-Studio*', '/NH'], { windowsHide: true }, (err, out) =>
+      resolve(!err && /WarmUp-Studio[\w.-]*Setup/i.test(out || '')),
+    ),
+  );
 }
 
 // Abriu depois de uma atualização? Confere se ficou na versão nova. Devolve se deve começar escondido.
@@ -558,6 +649,7 @@ function checkPending() {
   }
   if (d === 'desistir') {
     log(`Atualização para ${p.to}: ${p.attempts} tentativas sem sucesso. Paro de tentar sozinho`);
+    report('atualizacao-desistiu', `${p.from} → ${p.to}, ${p.attempts} tentativas`);
     removePending();
     notify(
       'Não consegui atualizar sozinho',
@@ -577,6 +669,18 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => showWindow());
   app.setAppUserModelId(APP_ID); // notificações com o nome do app
   app.whenReady().then(async () => {
+    // Aberto no meio de uma atualização (o instalador ainda trocando os arquivos): espera até 15 s o instalador
+    // terminar (é ele que abre o app no fim); se ainda estiver instalando, sai sem mexer em nada. Abrir o app com a
+    // instalação pela metade deixava arquivos faltando.
+    if (app.isPackaged && (await installerRunning())) {
+      for (let i = 0; i < 5 && (await installerRunning()); i++) await new Promise((r) => setTimeout(r, 3000));
+      if (await installerRunning()) {
+        log('Aberto durante uma atualização: fechei para não atrapalhar (o instalador abre o app no fim)');
+        new Notification({ title: NAME, body: 'Atualizando: ele abre sozinho quando terminar. Não precisa abrir agora.' }).show();
+        quitting = true;
+        return app.quit();
+      }
+    }
     const pending = checkPending();
     log(`App ligou: versão ${app.getVersion()}${HIDDEN || pending.hidden ? ', escondido' : ''}`);
     if (await portBusy()) {
@@ -593,6 +697,15 @@ if (!app.requestSingleInstanceLock()) {
     tray = new Tray(icon('cinza'));
     tray.on('click', () => showWindow());
     setState('cinza', `${NAME}: ligando...`);
+    // Instalação completa? (lista de arquivos gravada no empacotamento) Faltando algo: conserta antes de ligar o motor
+    const integ = integrity.check(ROOT);
+    if (!integ.ok) {
+      log(
+        `Instalação incompleta: ${integ.count} de ${integ.total} arquivos faltando ou errados (ex.: ${integ.missing.slice(0, 3).join(', ')})`,
+      );
+      return repair(`${integ.count} arquivos faltando`, integ.missing.join('\n'));
+    }
+    if (app.isPackaged) saveSettings({ repairs: [] }); // instalação boa: zera as tentativas de conserto
     startChild('motor', 'motor/index.js');
     startChild('painel', 'painel/index.js');
     // Primeira abertura do app instalado: liga "Iniciar com o Windows". Já ligado: confere se aponta para este

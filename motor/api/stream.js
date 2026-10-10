@@ -35,7 +35,11 @@ router.get('/live/:id', (req, res) => {
   if (last) res.write(`data: ${last}\n\n`);
   const on = (fid, data) => fid === id && res.write(`data: ${data}\n\n`);
   runner.hub.on('frame', on);
-  req.on('close', () => runner.hub.off('frame', on));
+  const unwatch = runner.watchLive(id); // a transmissão só roda enquanto esta tela está aberta
+  req.on('close', () => {
+    runner.hub.off('frame', on);
+    unwatch();
+  });
 });
 
 module.exports = router;

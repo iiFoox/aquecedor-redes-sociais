@@ -153,9 +153,13 @@ async function saveLogin(ctx, account, announce = false) {
   }
 }
 
-// Transmite a tela do navegador via CDP (Chrome DevTools Protocol)
-async function startScreencast(page, id) {
-  const cdp = await page.context().newCDPSession(page);
+// Tela do navegador ao vivo via CDP (Chrome DevTools Protocol), SÓ enquanto alguém olha (tela da conta no painel):
+// gerar ~8 imagens por segundo sem ninguém ver pesa no PC (notebook fraco) durante toda a sessão.
+const casts = {}; // id -> { page, cdp, on, watchers }
+
+async function castOn(c, id) {
+  if (c.cdp || c.page.isClosed()) return;
+  const cdp = (c.cdp = await c.page.context().newCDPSession(c.page));
   let last = 0;
   cdp.on('Page.screencastFrame', ({ data, sessionId }) => {
     cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
@@ -166,7 +170,39 @@ async function startScreencast(page, id) {
     hub.emit('frame', id, data);
   });
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 60, maxWidth: 1280, maxHeight: 800 });
-  return cdp;
+}
+
+async function castOff(c) {
+  const cdp = c.cdp;
+  c.cdp = null;
+  if (!cdp) return;
+  await cdp.send('Page.stopScreencast').catch(() => {});
+  await cdp.detach().catch(() => {});
+}
+
+// Navegador da conta aberto (sessão ou janela manual): transmite se já tem alguém olhando
+async function startScreencast(page, id) {
+  const prev = casts[id];
+  const c = (casts[id] = { page, cdp: null, watchers: prev ? prev.watchers : 0 });
+  if (prev) await castOff(prev);
+  page.once('close', () => {
+    if (casts[id] === c) {
+      castOff(c);
+      c.page = null;
+    }
+  });
+  if (c.watchers > 0) await castOn(c, id);
+}
+
+// A tela da conta abriu no painel: liga a transmissão. Devolve a função que desliga quando a tela fecha.
+function watchLive(id) {
+  const c = (casts[id] = casts[id] || { page: null, cdp: null, watchers: 0 });
+  c.watchers++;
+  if (c.page) castOn(c, id).catch(() => {});
+  return () => {
+    c.watchers = Math.max(0, c.watchers - 1);
+    if (!c.watchers) castOff(c).catch(() => {});
+  };
 }
 
 // A conta precisa de você: grava o aviso, cria o alerta e avisa o painel
@@ -597,6 +633,7 @@ module.exports = {
   isBrowserOpen: (id) => !!manual[id],
   browserPurpose: (id) => (manual[id] ? manual[id].purpose : null),
   lastFrame: (id) => lastFrames[id],
+  watchLive,
   activeSessions: () => sessions,
   pingProxy: checkProxy,
   listScreens,
