@@ -48,9 +48,20 @@ const ACTIVITY_GOALS = {
   profile: { produces: ['profile'], advances: ['profile', 'follow'] },
 };
 
-// Continua a rodada (mais um vídeo)? Só se ainda tem tempo, não bateu o teto de vídeos, a atividade
-// ainda adianta alguma meta que falta e a sessão não cumpriu a parte dela do dia.
-const keepGoing = (ctl, act) => ctl.timeLeft() > 0 && !ctl.capped('watch') && ctl.useful(ACTIVITY_GOALS[act]) && !ctl.goalsDone();
+// Vídeos guardados para as buscas que ainda faltam (cada busca assiste pelo menos 1 vídeo): o Para Você não gasta
+// esses vídeos. Sem isso, com o teto exato da meta personalizada, os vídeos acabavam antes e a busca nunca fechava.
+const searchReserve = (ctl, skip) => (skip && skip.has('search') ? 0 : Math.max(0, ctl.left('search')));
+
+// E o contrário: a busca (que não segue ninguém) deixa um vídeo por follow que falta para o Para Você seguir.
+// O 1º vídeo de cada busca sempre é visto (ela já contou).
+// (e um vídeo para cada próxima busca que falta).
+const reserveFor = (ctl, act, skip, i) =>
+  act === 'fyp' ? searchReserve(ctl, skip) : act === 'search' && i > 1 ? Math.max(0, ctl.left('follow')) + searchReserve(ctl, skip) : 0;
+
+// Continua a rodada (mais um vídeo)? Só se ainda tem tempo, sobra vídeo até o teto além da reserva (reserveFor), a
+// atividade ainda adianta alguma meta que falta e a sessão não cumpriu a parte dela do dia.
+const keepGoing = (ctl, act, skip, i = 1) =>
+  ctl.timeLeft() > 0 && ctl.room('watch') > reserveFor(ctl, act, skip, i) && ctl.useful(ACTIVITY_GOALS[act]) && !ctl.goalsDone();
 
 // Gosto de base de cada atividade (variedade); quem decide mesmo é o que falta no dia
 const BASE_WEIGHT = { fyp: 1.5, search: 1, profile: 1 };
@@ -72,6 +83,9 @@ function likePace(ctl) {
 // Chance de curtir: ~metade dos vídeos é elegível (vistos por mais de 8 s), então ~2,2x o ritmo.
 // Normal: até 70%. Curtidas apertadas: até 95%, pulando menos vídeos (sem passar do plano de curtidas).
 const ELIGIBLE = 2.2;
+// Última chance das curtidas: os vídeos que ainda cabem até o teto são só os necessários para as curtidas que faltam.
+// Aí cada vídeo é curtido (meta personalizada tem teto exato: sem isso, o dia não fechava).
+const likeLast = (ctl) => ctl.left('like') > 0 && ctl.room('watch') <= ctl.left('like');
 const likeChance = (ctl, base) => {
   const pace = likePace(ctl);
   return pace ? Math.min(0.95, Math.max(base, pace * ELIGIBLE)) : 0;
@@ -81,9 +95,19 @@ const likesTight = (ctl) => likePace(ctl) * ELIGIBLE > 0.7;
 // Follows: mesmo raciocínio. Vêm do perfil (onde seguir é natural) e, às vezes, de um vídeo visto até o fim.
 // A chance sobe se os follows que faltam estão apertados em relação ao que ainda dá para fazer hoje.
 const roomOf = (ctl, k) => (ctl.left(k) > 0 ? ctl.left(k) : ctl.room(k));
+// Follows apertados: sobram poucos vídeos até o teto para os follows que faltam (meta personalizada tem teto exato).
+// Aí o vídeo é visto com mais calma e o follow quase sempre sai, como nas curtidas apertadas.
+// Última chance: os vídeos (ou perfis) que ainda cabem são só os necessários para os follows que faltam: segue com certeza.
+const followsTight = (ctl) => ctl.left('follow') > 0 && ctl.room('watch') - Math.max(0, ctl.left('search')) <= ctl.left('follow') * 2;
+// (vídeos: desconta os guardados para as buscas que faltam, que não seguem ninguém)
+const lastChance = (ctl, where) =>
+  ctl.left('follow') > 0 &&
+  (where === 'profile' ? ctl.room('profile') : ctl.room('watch') - Math.max(0, ctl.left('search'))) <= ctl.left('follow');
 function followChance(ctl, where) {
   const f = ctl.left('follow');
   if (f <= 0) return 0;
+  if (lastChance(ctl, where)) return 1;
+  if (where === 'fyp' && followsTight(ctl)) return 0.95;
   if (where === 'profile') return Math.min(0.95, Math.max(0.55, f / Math.max(1, roomOf(ctl, 'profile'))));
   // Para Você: só vídeos vistos por 15 s ou mais (~1 em 3)
   return Math.min(0.8, Math.max(0.35, (f / Math.max(1, roomOf(ctl, 'watch'))) * 3));
@@ -242,10 +266,10 @@ async function dismissPopups(bot) {
 }
 
 const ACTIVITIES = {
-  async fyp({ page, bot, ctl, account }) {
+  async fyp({ page, bot, ctl, account, skip }) {
     if (!page.url().includes('/foryou')) await bot.goto(HOME, 'Abrindo o Para Você');
     const n = bot.rand(5, 12);
-    for (let i = 1; i <= n && keepGoing(ctl, 'fyp'); i++) {
+    for (let i = 1; i <= n && keepGoing(ctl, 'fyp', skip); i++) {
       // Legenda para checar o nicho (timeout de 1 s pra não travar)
       const desc = await page
         .locator('[data-e2e="video-desc"]')
@@ -255,13 +279,15 @@ const ACTIVITIES = {
       const niche = bot.isNiche(desc, account.interests || []);
       // Tempo assistido a partir da duração real do vídeo (se deu para ler)
       const info = await bot.videoInfo();
-      const tight = likesTight(ctl);
+      const ftight = followsTight(ctl);
+      const last = likeLast(ctl);
+      const tight = likesTight(ctl) || ftight || last;
       const { ms: waitTime, outcome } = watchFor(bot, niche, info ? info.duration : null, tight);
       // Decide antes se vai curtir e curte num momento sorteado do vídeo.
       // Meta de curtidas batida = chance zero (antes o nicho furava e passava do teto de 120%).
       const chance = likeChance(ctl, 0.25);
       const likeP = human.likeProbability(chance, { niche, persona: bot.persona, max: Math.max(0.75, chance) });
-      const willLike = waitTime > (tight ? 5000 : 8000) && bot.random() < likeP;
+      const willLike = last || (waitTime > (tight ? 5000 : 8000) && bot.random() < likeP);
       await bot.watchWithLike(
         waitTime,
         `Assistindo vídeo ${i}/${n} por ${Math.round(waitTime / 1000)}s${WATCH_NOTE[outcome]}${niche ? ' · nicho' : ''}`,
@@ -278,7 +304,7 @@ const ACTIVITIES = {
         await browseComments({ page, bot, ctl });
       }
 
-      if (waitTime > 15000 && bot.random() < followChance(ctl, 'fyp')) {
+      if ((waitTime > 15000 || (ftight && waitTime > 6000) || lastChance(ctl, 'fyp')) && bot.random() < followChance(ctl, 'fyp')) {
         ctl.status('Assistiu até o fim, seguindo o criador');
         if (await followHere(bot, ctl, SEL.feedFollow, 'Criador do vídeo')) await bot.pause('afterAction');
       }
@@ -299,7 +325,7 @@ const ACTIVITIES = {
     return true;
   },
 
-  async search({ page, bot, ctl, account }) {
+  async search({ page, bot, ctl, account, skip }) {
     const term = bot.pick(account.interests).trim();
     await typedSearch({ page, bot, ctl }, term);
     ctl.action('search', term);
@@ -312,16 +338,18 @@ const ACTIVITIES = {
     }
     await bot.pause('load', 'Abrindo o vídeo');
     const n = bot.rand(3, 6);
-    for (let i = 1; i <= n && keepGoing(ctl, 'search'); i++) {
+    for (let i = 1; i <= n && keepGoing(ctl, 'search', skip, i); i++) {
       // Veio de uma busca do nicho: conta como conteúdo do nicho
       const info = await bot.videoInfo();
-      const tight = likesTight(ctl);
+      const last = likeLast(ctl);
+      const tight = likesTight(ctl) || last;
       const { ms, outcome } = watchFor(bot, true, info ? info.duration : null, tight);
       const chance = likeChance(ctl, 0.45);
       const willLike =
-        ms > (tight ? 5000 : 8000) &&
-        ctl.left('like') > 0 &&
-        bot.random() < human.likeProbability(chance, { niche: true, nicheMin: 0.45, persona: bot.persona, max: Math.max(0.75, chance) });
+        last ||
+        (ms > (tight ? 5000 : 8000) &&
+          ctl.left('like') > 0 &&
+          bot.random() < human.likeProbability(chance, { niche: true, nicheMin: 0.45, persona: bot.persona, max: Math.max(0.75, chance) }));
       await bot.watchWithLike(
         ms,
         `Vídeo ${i}/${n} de "${term}" por ${Math.round(ms / 1000)}s${WATCH_NOTE[outcome]}`,
@@ -413,7 +441,12 @@ async function loop({ page, bot, ctl, account }) {
   // Distrações: o intervalo médio entre elas é sorteado por sessão (personalidade + acaso)
   const afkGap = human.distractionGapMin(bot.persona, bot.random) * 60000;
   // Atividade liberada: não falhou nesta sessão, não passa nenhuma meta do teto e ainda adianta alguma
-  const can = (act) => !skip.has(act) && ctl.allowed(ACTIVITY_GOALS[act], account) && ctl.useful(ACTIVITY_GOALS[act]);
+  // (o Para Você só se ainda sobra vídeo além da reserva das buscas que faltam)
+  const can = (act) =>
+    !skip.has(act) &&
+    ctl.allowed(ACTIVITY_GOALS[act], account) &&
+    ctl.useful(ACTIVITY_GOALS[act]) &&
+    (act !== 'fyp' || ctl.room('watch') > searchReserve(ctl, skip));
 
   // Loop guiado por META: só para quando bater tudo (ou teto de segurança / travamento)
   while (true) {
@@ -434,7 +467,7 @@ async function loop({ page, bot, ctl, account }) {
     ctl.log(`Próxima atividade: ${ACT_LABEL[act]} · falta: ${ctl.missing(ACTIONS)}`);
     let ok = false;
     try {
-      ok = await ACTIVITIES[act]({ page, bot, ctl, account });
+      ok = await ACTIVITIES[act]({ page, bot, ctl, account, skip });
     } catch (e) {
       if (isFatal(e)) throw e;
       ctl.fail(ACT_LABEL[act], e);

@@ -256,6 +256,7 @@ const nextAfter = (endedAt, rand = Math.random) => endedAt + Math.round(human.bo
 // ---------- Rotina do dia ----------
 
 const MIN_SLOT_GAP = 45; // minutos entre o começo de duas sessões planejadas
+const SLOT_MIN_REST = 20; // minutos de descanso, no mínimo, entre o fim de uma sessão e a sessão planejada seguinte
 // Dia da semana da data 'AAAA-MM-DD' (0 = domingo)
 const weekdayOf = (date) => new Date(`${date}T12:00:00Z`).getUTCDay();
 const isWeekend = (date) => [0, 6].includes(weekdayOf(date));
@@ -508,7 +509,11 @@ function decide(account, ctx) {
   const slot = slots && slots[ctx.today.sessions || 0];
   if (slot && now.getTime() < slot.at) return 'agendada';
   if (account.nextAfter) {
-    if (now.getTime() < account.nextAfter) return 'intervalo';
+    // Sessão da Rotina que já chegou vale mais que o intervalo sorteado (até 3 h: podia passar do fim da janela e o dia
+    // não fechava). Só espera o descanso mínimo depois da última sessão.
+    const last = (account.history || [])[account.history.length - 1];
+    const rested = last && now.getTime() - Date.parse(last.date) >= SLOT_MIN_REST * 60000;
+    if (now.getTime() < account.nextAfter && !(slot && rested)) return 'intervalo';
   } else {
     const last = (account.history || [])[account.history.length - 1];
     if (last && now.getTime() - Date.parse(last.date) < legacyGap(account.id)) return 'intervalo';

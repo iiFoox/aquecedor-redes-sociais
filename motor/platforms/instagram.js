@@ -198,6 +198,9 @@ async function reelStep({ page, bot }, dir) {
 }
 
 // Segue o autor da publicação aberta e só conta se o botão virou "Seguindo" (ou "Solicitado", conta privada)
+// Publicações que uma visita ao Explorar abre, no máximo (o follow do Instagram só sai delas; ver custom.impossible)
+const POSTS_MAX = 15;
+
 async function followHere({ bot, ctl }, detail) {
   const [btn] = await bot.visible(SEL.follow);
   if (!btn) return false;
@@ -373,10 +376,22 @@ const ACTIVITIES = {
     await bot.goto(url, tag ? `Explorando a hashtag #${tag}` : 'Abrindo o Explorar');
     await bot.scroll(bot.rand(300, 700));
     await bot.pause('read', 'Olhando a grade de publicações');
-    const posts = bot.rand(2, 4);
+    // O follow só sai daqui. Publicações por visita: 2 a 4, ou o bastante para os follows que faltam divididos pelas
+    // visitas que ainda contam (até 15). Na última visita, insiste até fechar os follows (meta personalizada tem teto
+    // exato de visitas: antes as visitas acabavam e os follows ficavam faltando).
+    const lastVisit = ctl.left('explore') <= 1;
+    const perVisit = Math.ceil(Math.max(0, ctl.left('follow')) / Math.max(1, ctl.left('explore')));
+    const posts = Math.min(POSTS_MAX, Math.max(bot.rand(2, 4), perVisit + (lastVisit && perVisit ? 1 : 0)));
     let opened = 0;
-    for (let i = 1; i <= posts && ctl.timeLeft() > 0 && !ctl.goalsDone(); i++) {
-      ctl.status(`Abrindo publicação ${i}/${posts}`);
+    for (
+      let i = 1;
+      (i <= posts || (lastVisit && ctl.left('follow') > 0 && i <= POSTS_MAX)) &&
+      ctl.timeLeft() > 0 &&
+      // A última visita fecha os follows mesmo numa sessão curta da Rotina (que já cumpriu a parte dela)
+      (!ctl.goalsDone() || (lastVisit && ctl.left('follow') > 0));
+      i++
+    ) {
+      ctl.status(`Abrindo publicação ${i}/${Math.max(posts, i)}`);
       if (!(await bot.clickVisible(SEL.post, { random: true, minSize: 80 }))) break;
       await bot.pause('load', 'Abrindo a publicação');
       const dialog = await page
@@ -393,7 +408,10 @@ const ACTIVITIES = {
       await bot.pause('read', 'Vendo a publicação');
       if (ctl.left('like') > 0 && bot.random() < 0.5 && (await likeHere({ bot, ctl }, where, { dialog: true })))
         await bot.pause('afterAction', 'Pausa após curtir');
-      if (ctl.left('follow') > 0 && bot.random() < 0.55 && (await followHere({ bot, ctl }, `Autor em ${where}`)))
+      // Chance de seguir: 55%, ou mais se os follows que faltam estão apertados nas publicações que restam desta visita
+      const postsLeft = Math.max(1, posts - i + 1);
+      const fChance = Math.min(1, Math.max(0.55, ctl.left('follow') / (lastVisit ? postsLeft : postsLeft * 1.5)));
+      if (ctl.left('follow') > 0 && bot.random() < fChance && (await followHere({ bot, ctl }, `Autor em ${where}`)))
         await bot.pause('afterAction', 'Pausa após seguir');
       await closeDialog({ page, bot });
       await bot.pause('decide', 'Voltando à grade');

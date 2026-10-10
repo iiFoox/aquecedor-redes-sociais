@@ -183,3 +183,52 @@ test('simulador: modelo com números pequenos (1 e 2) não varia e nunca passa d
       });
   }
 });
+
+test('simulador: TikTok com números exatos e pequenos fecha o dia inteiro (busca incluída, sem passar dos vídeos)', async () => {
+  const small = { minutes: 8, watch: 8, like: 2, follow: 1, profile: 1, search: 1 };
+  const template = tpl('tiktok', { readyDay: 22, vary: false, phases: [small, small, small, small, small] });
+  for (let seed = 1; seed <= 8; seed++) {
+    const r = await simulate({ account: { platform: 'tiktok', username: 't', interests: ['skate'], template }, days: 2, seed });
+    for (const [date, d] of Object.entries(r.daily)) {
+      if (!d.plan) continue;
+      for (const k of Object.keys(small)) {
+        if (k === 'minutes') continue;
+        assert.ok((d[k] || 0) <= small[k], `s${seed} ${date}: ${k} ${d[k]} passou de ${small[k]}`);
+      }
+      assert.equal(rules.completion(d.plan, d), 1, `s${seed} ${date}: dia não fechou: ${JSON.stringify(d)}`);
+    }
+  }
+});
+
+// Bateria: metas personalizadas de vários tamanhos (exatas e variando) nas duas redes fecham o dia inteiro sem passar do
+// número escrito. Cobre as reservas do TikTok (busca e follow disputando os últimos vídeos) e o Explorar do Instagram
+// (de onde saem os follows) com teto exato de visitas.
+test('simulador: metas personalizadas pequenas, médias e grandes fecham o dia nas duas redes sem passar do escrito', async () => {
+  const sets = {
+    tiktok: [
+      { minutes: 6, watch: 5, like: 5, follow: 2, profile: 0, search: 1 },
+      { minutes: 10, watch: 12, like: 6, follow: 3, profile: 1, search: 2 },
+      { minutes: 20, watch: 60, like: 30, follow: 10, profile: 3, search: 3 },
+      { minutes: 9, watch: 10, like: 10, follow: 10, profile: 0, search: 0 },
+    ],
+    instagram: [
+      { minutes: 8, like: 5, follow: 2, story: 3, reel: 3, explore: 1 },
+      { minutes: 20, like: 25, follow: 10, story: 10, reel: 12, explore: 3 },
+      { minutes: 6, like: 1, follow: 1, story: 0, reel: 0, explore: 1 },
+    ],
+  };
+  for (const [platform, list] of Object.entries(sets))
+    for (const c of list)
+      for (const vary of [false, true]) {
+        const template = tpl(platform, { vary, phases: [c, c, c, c, c] });
+        for (let seed = 1; seed <= 6; seed++) {
+          const r = await simulate({ account: { platform, username: 't', interests: ['skate'], template }, days: 2, seed });
+          for (const [date, d] of Object.entries(r.daily)) {
+            if (!d.plan) continue;
+            const label = `${platform} ${JSON.stringify(c)}${vary ? ' variando' : ''} s${seed} ${date}`;
+            for (const k of Object.keys(c)) if (k !== 'minutes') assert.ok((d[k] || 0) <= c[k], `${label}: ${k} ${d[k]} passou de ${c[k]}`);
+            assert.equal(rules.completion(d.plan, d), 1, `${label}: dia não fechou ${JSON.stringify(d)}`);
+          }
+        }
+      }
+});

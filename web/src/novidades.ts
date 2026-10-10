@@ -11,8 +11,12 @@ export const NOVIDADES: Novidade[] = [
   {
     versao: '2.1.7',
     data: '2026-10-10',
-    titulo: 'TikTok: follows sem pausa, com aviso',
+    titulo: 'Metas personalizadas fecham o dia certinho; TikTok: follows sem pausa, com aviso',
     itens: [
+      'Metas personalizadas fecham o dia inteiro mesmo com números apertados (conferido em milhares de dias simulados e em sessões de verdade no TikTok e no Instagram), sem passar do que você escreveu.',
+      'TikTok: o Para Você guarda vídeos para as buscas que faltam e a busca guarda vídeos para os follows; quando os vídeos que sobram são só os necessários, curte e segue com certeza (antes a busca ou o follow podiam ficar faltando).',
+      'Instagram: cada visita ao Explorar abre publicações suficientes para os follows que faltam (até 15) e a última visita insiste até fechar os follows.',
+      'Rotina: a sessão marcada para o horário dela não fica mais presa no intervalo sorteado (que às vezes passava do fim da janela e o dia não fechava); só espera 20 minutos de descanso depois da última sessão.',
       'Quando o TikTok não grava os follows de uma conta, os follows NÃO são mais pausados por 3 dias: continuam sendo feitos.',
       'No lugar da pausa, um aviso no painel: o robô clica em Seguir e o botão muda, mas o "Seguindo" do perfil não sobe. É restrição do TikTok na conta, não do programa. Para confirmar, siga alguém pelo celular e veja se o número sobe.',
     ],

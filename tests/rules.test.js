@@ -170,6 +170,42 @@ test('agendador decide quando iniciar e por que não iniciou', () => {
   assert.equal(rules.decide({ ...acc, nextAfter: now.getTime() - 60000 }, ctx()), 'iniciar');
 });
 
+test('agendador: sessão da Rotina que já chegou vale mais que o intervalo sorteado (só espera 20 min de descanso)', () => {
+  const config = { active: true, start: '08:00', end: '22:00', max: 2 };
+  const plan = { watch: 27, like: 5 };
+  const now = at('2026-10-07T20:45:00-03:00');
+  const slots = [
+    { at: at('2026-10-07T10:00:00-03:00').getTime(), target: 0.4 },
+    { at: at('2026-10-07T20:40:00-03:00').getTime(), target: 1 },
+  ];
+  const ctx = {
+    now,
+    config,
+    runningCount: 0,
+    running: false,
+    browserOpen: false,
+    plan,
+    today: { sessions: 1 },
+    slots,
+    activities: tiktok.activities,
+  };
+  const ended = (min) => ({
+    id: 'a',
+    interests: [],
+    attention: null,
+    history: [{ date: new Date(now.getTime() - min * 60000).toISOString() }],
+  });
+  // Intervalo sorteado até 22:04 (depois do fim da janela): a sessão planejada para 20:40 abre mesmo assim
+  const late = at('2026-10-07T22:04:00-03:00').getTime();
+  assert.equal(rules.decide({ ...ended(90), nextAfter: late }, ctx), 'iniciar');
+  // Acabou de sair de uma sessão: espera o descanso mínimo
+  assert.equal(rules.decide({ ...ended(10), nextAfter: late }, ctx), 'intervalo');
+  // Sem sessão planejada sobrando (rotina cumprida): o intervalo sorteado continua valendo
+  assert.equal(rules.decide({ ...ended(90), nextAfter: late }, { ...ctx, today: { sessions: 2 } }), 'intervalo');
+  // A sessão planejada ainda não chegou
+  assert.equal(rules.decide({ ...ended(90), nextAfter: late }, { ...ctx, now: at('2026-10-07T20:30:00-03:00') }), 'agendada');
+});
+
 test('captcha e bloqueio seguram a conta até você resolver (não voltam sozinhos em 24 h)', () => {
   const config = { active: true, start: '08:00', end: '22:00', max: 2 };
   const now = at('2026-10-10T10:00:00-03:00');

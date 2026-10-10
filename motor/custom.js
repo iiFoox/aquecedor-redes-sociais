@@ -21,6 +21,7 @@ const LIMITS = {
   explore: [0, 30],
 };
 const NAME_MAX = 40;
+const IG_POSTS_MAX = 15; // publicações que uma visita ao Explorar abre, no máximo (instagram.js: POSTS_MAX)
 const RAMP = 1.25; // transição: no máximo +25% por dia sobre o que a conta fez no último dia com sessão
 const RAMP_LOOKBACK = 7; // dias para trás procurando o último dia com sessão
 const fail = (msg) => {
@@ -79,6 +80,10 @@ function impossible(platform, ph, labels = {}) {
   }
   if (platform === 'instagram' && n('follow') > 0 && n('explore') === 0)
     out.push(`${lc('follow')} precisam de pelo menos 1 em ${labels.explore || 'Explorar'} (é de lá que eles saem)`);
+  else if (platform === 'instagram' && n('follow') > n('explore') * IG_POSTS_MAX)
+    out.push(
+      `${lc('follow')} demais para ${n('explore')} em ${labels.explore || 'Explorar'} (cada um abre até ${IG_POSTS_MAX} publicações)`,
+    );
   return out;
 }
 

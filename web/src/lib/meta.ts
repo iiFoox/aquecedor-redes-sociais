@@ -5,6 +5,7 @@ import type { Phase } from '../api.ts';
 export const READY_DAY = 22;
 const ENDS = [3, 7, 14, 21];
 type Nums = Record<string, number>;
+const IG_POSTS_MAX = 15; // igual a motor/custom.js
 export type Limits = Record<string, [number, number]>;
 
 // Dias de cada fase para o prazo "readyDay": as 5 fases na mesma ordem, na mesma proporção das recomendadas
@@ -48,6 +49,11 @@ export function impossiveis(platform: 'tiktok' | 'instagram', ph: Nums, labels: 
   }
   if (platform === 'instagram' && n('follow') > 0 && n('explore') === 0)
     out.push({ key: 'follow', msg: `${lc('follow')} precisam de pelo menos 1 em ${labels.explore || 'Explorar'} (é de lá que eles saem)` });
+  else if (platform === 'instagram' && n('follow') > n('explore') * IG_POSTS_MAX)
+    out.push({
+      key: 'follow',
+      msg: `${lc('follow')} demais para ${n('explore')} em ${labels.explore || 'Explorar'} (cada um abre até ${IG_POSTS_MAX} publicações)`,
+    });
   return out;
 }
 

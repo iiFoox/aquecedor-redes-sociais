@@ -37,6 +37,7 @@ npm run format         # Prettier
   - `cursor.js`: mouse do Playwright (curvas do ghost-cursor, clique em ponto variado). Não usar o `createCursor` do ghost-cursor:
     ele é do Puppeteer e quebra todo clique no Playwright.
   - Rotina do dia: `rules.planSlots` (horários e tamanho de cada sessão, perto do pico da conta). Sessão curta para em `ctl.target`.
+    Sessão planejada que já chegou vale mais que o intervalo sorteado (`nextAfter`, até 3 h); só espera `SLOT_MIN_REST` (20 min).
     As sessões só caem nas horas em que o aparelho costuma ficar ligado (`motor/uptime.js` grava em `data/uptime.json` os
     minutos com internet por hora; na 1ª vez reconstrói pelo `logs/motor.log`, sem intervalos de 12 h+ = PC em espera;
     `rules.onHours` precisa de 2 dias). Rotina do dia com sessão futura fora dessas horas é replanejada uma vez (`slotsOf`).
@@ -81,6 +82,10 @@ este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma con
     conta o que mudou (`custom.diffTemplate`).
   - Recusado no motor e marcado como erro no editor (os dois iguais, conferido em teste): fora de `custom.LIMITS` e
     combinação impossível (`custom.impossible` = `impossiveis` em `web/src/lib/meta.ts`). Atenção e risco não bloqueiam.
+  - Teto exato não tem folga: o TikTok reserva vídeos (Para Você guarda 1 por busca que falta, busca guarda 1 por follow
+    que falta: `reserveFor`) e na "última chance" curte/segue com certeza (`likeLast`, `lastChance`); o Explorar do
+    Instagram abre publicações para os follows que faltam (até `POSTS_MAX` = 15) e a última visita insiste. A bateria do
+    simulador (metas pequenas a grandes, exatas e variando) tem de fechar 100% dos dias.
   - Testes: `tests/meta.test.js`, `tests/metas-transicao.test.js` (simulador trocando de meta), `tests/metas-aparelhos.test.js`
     (banco falso, `store._useClient`).
 - Perguntas do painel: `store.ask` (janela do app, `components/Confirm.tsx`), nunca `confirm()`. Tela com mudança não
