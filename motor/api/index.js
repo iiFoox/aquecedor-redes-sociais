@@ -74,6 +74,7 @@ function createApi({ token, deviceUser = () => (cloud.ready() && !cloud.needsLog
       sessions: Object.keys(runner.activeSessions()).length,
       pending: store.pendingCount(),
       tz: require('../rules').TZ,
+      onHours: store.hours(), // horas em que este PC costuma ficar ligado (Rotina)
     });
   });
   app.use('/api', require('./device'), require('./accounts'), require('./proxies'), require('./config'), require('./stream'));

@@ -443,14 +443,37 @@ function planOf(a, gen) {
   return plan;
 }
 
+// Horas em que este aparelho costuma ficar ligado (motor/uptime.js, ligado no boot). Sem isso: null (não sabe).
+let hoursOf = () => null;
+const setHours = (fn) => {
+  hoursOf = fn;
+};
+
 // Rotina do dia (horários e tamanho de cada sessão), planejada uma vez por data.
 // Só planeja depois que o plano do dia existe; nada antes de agora (motor ligado no meio do dia).
+// As sessões caem nas horas em que o aparelho costuma estar ligado. Rotina feita antes de saber essas horas (ou
+// com sessões que ainda vão cair fora delas): planeja de novo o resto do dia, uma vez por dia.
 function slotsOf(a, gen) {
   const date = rules.localDate();
   const plan = planOf(a, gen);
-  const { slots, created } = rules.ensureSlots(a.daily, date, () =>
-    rules.planSlots({ date, window: rules.windowOf(a, config), persona: a.persona, planMinutes: plan.minutes, notBefore: Date.now() }),
-  );
+  const hours = hoursOf();
+  const fresh = () =>
+    rules.planSlots({
+      date,
+      window: rules.windowOf(a, config),
+      persona: a.persona,
+      planMinutes: plan.minutes,
+      notBefore: Date.now(),
+      onHours: hours,
+    });
+  const { slots, created } = rules.ensureSlots(a.daily, date, fresh);
+  const d = a.daily[date];
+  if (!created && !d.slotsFit && rules.slotsOffHours(slots, d.sessions || 0, hours)) {
+    d.slots = rules.replanRest(slots, d.sessions || 0, fresh());
+    d.slotsFit = true;
+    touch(a.id);
+    return d.slots;
+  }
   if (created) touch(a.id);
   return slots;
 }
@@ -794,6 +817,8 @@ module.exports = {
   todayOf,
   planOf,
   slotsOf,
+  setHours,
+  hours: () => hoursOf(),
   lastStartAny,
   add,
   remove,

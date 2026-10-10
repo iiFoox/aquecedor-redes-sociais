@@ -70,7 +70,8 @@ const ACT_LABEL = {
 const ACTIVITY_GOALS = {
   feed: { produces: [], advances: ['like'] },
   stories: { produces: ['story'], advances: ['story'] },
-  reels: { produces: ['reel'], advances: ['reel', 'like'] },
+  // Reels só enquanto falta reel: curtida que falta sai do feed ou do Explorar (reel a mais passaria do plano)
+  reels: { produces: ['reel'], advances: ['reel'] },
   explore: { produces: ['explore'], advances: ['explore', 'like', 'follow'] },
 };
 // Gosto de base de cada atividade (variedade); quem decide mesmo é o que falta no dia
@@ -214,7 +215,8 @@ const ACTIVITIES = {
   async feed({ page, bot, ctl, account }) {
     if (!atHome(page)) await bot.goto(HOME, 'Voltando ao feed');
     const rounds = bot.rand(3, 7);
-    for (let i = 0; i < rounds && ctl.timeLeft() > 0; i++) {
+    // Para na hora em que a meta do dia (ou a parte desta sessão) fecha
+    for (let i = 0; i < rounds && ctl.timeLeft() > 0 && !ctl.goalsDone(); i++) {
       ctl.status('Rolando o feed');
       await bot.scroll(bot.rand(350, 900));
       ctl.action('scroll', 'Feed');
@@ -274,7 +276,7 @@ const ACTIVITIES = {
       const sms = Math.round(human.bounded(bot.random, 5200 * (bot.persona ? bot.persona.patience : 1), 0.45, 1500, 15500));
       await bot.watch(sms, `Assistindo story ${i}/${n}`);
       ctl.action('story', `Story ${i}/${n}`);
-      if (ctl.timeLeft() <= 0 || i === n) break;
+      if (ctl.timeLeft() <= 0 || i === n || ctl.goalsDone()) break;
       await page.keyboard.press('ArrowRight');
       await bot.wait(300, 900);
       if (!page.url().includes('/stories/')) break; // acabaram os stories: o visor fechou sozinho
@@ -286,10 +288,10 @@ const ACTIVITIES = {
 
   async reels({ page, bot, ctl, account }) {
     await bot.goto(`${HOME}reels/`, 'Abrindo Reels');
-    // Se a meta de reels já bateu mas faltam curtidas, assiste alguns mesmo assim
-    const n = ctl.left('reel') > 0 ? Math.min(ctl.left('reel'), bot.rand(3, 6)) : bot.rand(2, 4);
+    // Nunca mais reels do que faltam no plano do dia
+    const n = Math.min(ctl.left('reel'), bot.rand(3, 6));
     // Para quando não sobra nada que os reels adiantem (ou a sessão cumpriu a parte dela do dia)
-    for (let i = 1; i <= n && ctl.timeLeft() > 0 && !ctl.capped('reel') && ctl.useful(ACTIVITY_GOALS.reels) && !ctl.goalsDone(); i++) {
+    for (let i = 1; i <= n && ctl.timeLeft() > 0 && ctl.left('reel') > 0 && !ctl.goalsDone(); i++) {
       const text = await screenText(page);
       const isNiche = bot.isNiche(text, account.interests || []);
       const info = await bot.videoInfo();
@@ -348,7 +350,7 @@ const ACTIVITIES = {
     await bot.pause('read', 'Olhando a grade de publicações');
     const posts = bot.rand(2, 4);
     let opened = 0;
-    for (let i = 1; i <= posts && ctl.timeLeft() > 0; i++) {
+    for (let i = 1; i <= posts && ctl.timeLeft() > 0 && !ctl.goalsDone(); i++) {
       ctl.status(`Abrindo publicação ${i}/${posts}`);
       if (!(await bot.clickVisible(SEL.post, { random: true, minSize: 80 }))) break;
       await bot.pause('load', 'Abrindo a publicação');

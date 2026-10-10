@@ -274,3 +274,91 @@ test('"Iniciar" (sessão inteira): fecha 100% do dia em todas as fases, sem pass
     }
   }
 });
+
+// ---------- Horas em que o aparelho costuma ficar ligado ----------
+
+const LOG = [
+  '===== 07/10/2026, 19:01:15 motor ligado (versão 2.0.2) =====',
+  '===== 07/10/2026, 21:00:00 motor parou (código 0) =====',
+  '===== 07/10/2026, 22:17:59 motor ligado (versão 2.0.7) =====',
+  '===== 08/10/2026, 10:18:15 motor parou (código 0) =====', // 12 h: PC em espera a noite toda
+  '===== 08/10/2026, 10:19:02 motor ligado (versão 2.0.8) =====',
+  '===== 08/10/2026, 17:11:36 motor parou (código 0) =====',
+  '===== 09/10/2026, 10:02:11 motor ligado (versão 2.0.8) =====',
+  '===== 09/10/2026, 15:07:29 motor parou (código 0) =====',
+  '===== 10/10/2026, 09:39:53 motor ligado (versão 2.0.8) =====', // ainda ligado: fica de fora
+].join('\n');
+
+test('horas ligado: o passado vem do registro do motor; noite em espera (mais de 12 h) não conta', () => {
+  const u = rules.uptimeFromLog(LOG);
+  assert.deepEqual(Object.keys(u).sort(), ['2026-10-07', '2026-10-08', '2026-10-09']);
+  assert.equal(u['2026-10-07'][19], 59);
+  assert.equal(u['2026-10-07'][22], 0, 'contou a noite em espera');
+  assert.equal(u['2026-10-08'][3], 0);
+  assert.equal(u['2026-10-08'][12], 60);
+  assert.equal(u['2026-10-09'][15], 8);
+  // Guarda só 21 dias
+  const big = {};
+  for (let i = 0; i < 30; i++) rules.addUptime(big, Date.parse('2026-09-01T15:00:00Z') + i * 86400000, 5);
+  assert.equal(Object.keys(big).length, 21);
+});
+
+test('horas ligado: hora boa é a ligada em pelo menos metade dos dias; menos de 2 dias = ainda não sabe', () => {
+  const u = rules.uptimeFromLog(LOG);
+  const h = rules.onHours(u, '2026-10-10');
+  assert.deepEqual(
+    h.map((b, i) => (b ? i : null)).filter((x) => x !== null),
+    [10, 11, 12, 13, 14],
+  );
+  assert.equal(rules.onHours(u, '2026-10-08'), null, 'só 1 dia de histórico antes do dia 8');
+  assert.equal(rules.onHours({}, '2026-10-10'), null);
+});
+
+test('Rotina: com as horas do aparelho, toda sessão começa nelas e cabe nelas (30 min); dia começado tarde = uma agora', () => {
+  const hours = rules.onHours(rules.uptimeFromLog(LOG), '2026-10-10');
+  for (let seed = 1; seed <= 60; seed++) {
+    const persona = human.makePersona(seed);
+    const slots = rules.planSlots({ date: '2026-10-11', window: WIN, persona, planMinutes: 20, rng: human.makeRng(seed), onHours: hours });
+    assert.ok(slots.length >= 1);
+    for (const s of slots) {
+      const m = minuteOf(s.at);
+      assert.ok(hours[Math.floor(m / 60)] && hours[Math.floor((m + 30) / 60)], `seed ${seed}: sessão às ${Math.floor(m / 60)}:${m % 60}`);
+    }
+    assert.equal(slots[slots.length - 1].target, 1);
+  }
+  // Ligou às 16h (fora do costume): uma sessão só, já
+  const late = Date.parse('2026-10-11T19:00:00Z'); // 16:00 em São Paulo
+  const one = rules.planSlots({
+    date: '2026-10-11',
+    window: WIN,
+    persona: human.makePersona(1),
+    rng: human.makeRng(1),
+    onHours: hours,
+    notBefore: late,
+  });
+  assert.equal(one.length, 1);
+  assert.ok(one[0].at - late < 10 * 60000);
+  assert.equal(one[0].target, 1);
+});
+
+test('Rotina: sessões que ainda vão cair fora das horas do aparelho são replanejadas; as feitas ficam', () => {
+  const hours = new Array(24).fill(false).map((_, h) => h >= 10 && h < 15);
+  const at = (hh, mm) => Date.parse(`2026-10-10T${String(hh + 3).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00Z`);
+  const slots = [
+    { at: at(10, 30), target: 0.4 },
+    { at: at(19, 40), target: 1 },
+  ];
+  const now = at(11, 0);
+  assert.equal(rules.slotsOffHours(slots, 1, hours, now), true);
+  assert.equal(rules.slotsOffHours(slots, 2, hours, now), false, 'nada mais a fazer hoje');
+  assert.equal(rules.slotsOffHours(slots, 1, null, now), false, 'sem saber as horas não mexe');
+  const fresh = [
+    { at: at(12, 0), target: 0.5 },
+    { at: at(14, 0), target: 1 },
+  ];
+  assert.deepEqual(rules.replanRest(slots, 1, fresh), [
+    { at: at(10, 30), target: 0.4 },
+    { at: at(12, 0), target: 0.7 },
+    { at: at(14, 0), target: 1 },
+  ]);
+});

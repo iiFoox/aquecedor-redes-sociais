@@ -260,9 +260,12 @@ const isWeekend = (date) => [0, 6].includes(weekdayOf(date));
  * e quanto da meta do dia cada uma cobre (sessões de tamanhos diferentes; a última fecha 100%).
  *  - Quantas: 1 a 4, conforme o tamanho do plano (plano curto = menos sessões). Fim de semana: menos e mais tarde.
  *  - notBefore: não planeja nada antes disso (conta criada ou motor ligado no meio do dia).
+ *  - onHours: horas em que este aparelho costuma ficar ligado (rules.onHours; null = ainda não sabe). As sessões só
+ *    caem nelas: sessão marcada para a noite num PC que só fica ligado de dia nunca acontece (o dia se perde).
+ *    Nenhuma hora boa sobrando hoje (ligou fora do costume): uma sessão só, agora.
  * Devolve [{ at (ms), target (0..1) }] em ordem.
  */
-function planSlots({ date, window, persona, planMinutes = 15, rng = Math.random, notBefore = 0 }) {
+function planSlots({ date, window, persona, planMinutes = 15, rng = Math.random, notBefore = 0, onHours = null }) {
   const ws = toMinutes(window.start);
   const we = toMinutes(window.end);
   const len = (we - ws + 1440) % 1440 || 1440; // janela em minutos (pode passar da meia-noite)
@@ -283,12 +286,32 @@ function planSlots({ date, window, persona, planMinutes = 15, rng = Math.random,
   const earliest = notBefore ? Math.max(0, Math.ceil((notBefore - (dayStart + ws * 60000)) / 60000)) : 0;
   const latest = len - 20; // nada começa nos últimos 20 min da janela
 
+  // Horários possíveis (de 5 em 5 min) com o aparelho costumando estar ligado no começo e 30 min depois
+  let pool = null;
+  if (onHours) {
+    const on = (off) => onHours[Math.floor(((ws + Math.round(off)) % 1440) / 60)];
+    pool = [];
+    for (let v = Math.ceil(earliest / 5) * 5; v <= latest; v += 5) if (on(v) && on(v + 30)) pool.push(v);
+    if (!pool.length) {
+      n = 1;
+      pool = [Math.min(latest, earliest)];
+    }
+    const nearest = (v) => pool.reduce((b, x) => (Math.abs(x - v) < Math.abs(b - v) ? x : b), pool[0]);
+    peakOff = nearest(peakOff);
+    pool.nearest = nearest;
+  }
+
   let offs = [];
   for (; n >= 1 && !offs.length; n--) {
     for (let tries = 0; tries < 40; tries++) {
       const cand = [];
       for (let i = 0; i < n; i++) {
         // Metade em volta do pico, metade espalhada pela janela (ninguém usa só num horário)
+        if (pool) {
+          const v = rng() < 0.6 ? pool.nearest(peakOff + sd * normalish(rng)) : pool[Math.floor(rng() * pool.length)];
+          cand.push(v + rng() * 4); // dentro dos 5 min do horário
+          continue;
+        }
         let v = rng() < 0.6 ? peakOff + sd * normalish(rng) : earliest + rng() * Math.max(0, latest - earliest);
         for (let k = 0; k < 4 && (v < earliest || v > latest); k++) v = earliest + rng() * Math.max(0, latest - earliest);
         cand.push(Math.min(latest, Math.max(earliest, v)));
@@ -332,6 +355,70 @@ function ensureSlots(daily, date, gen) {
   if (d.slots) return { slots: d.slots, created: false };
   d.slots = gen();
   return { slots: d.slots, created: true };
+}
+
+// ---------- Horas em que o aparelho costuma ficar ligado ----------
+// uptime: { 'AAAA-MM-DD': [minutos ligado em cada hora 0..23] } (motor/uptime.js grava; só minutos com internet)
+
+const UPTIME_KEEP_DAYS = 21;
+
+// Soma minutos ligado na hora local de "ms" e guarda só os últimos 21 dias
+function addUptime(uptime, ms, minutes = 1) {
+  const d = new Date(ms);
+  const date = localDate(d);
+  const h = Math.floor(localMinutes(d) / 60);
+  const row = (uptime[date] = uptime[date] || new Array(24).fill(0));
+  row[h] = Math.min(60, row[h] + minutes);
+  const dates = Object.keys(uptime).sort();
+  for (const old of dates.slice(0, Math.max(0, dates.length - UPTIME_KEEP_DAYS))) delete uptime[old];
+  return uptime;
+}
+
+// Passado reconstruído pelo registro do motor ("===== DD/MM/AAAA, HH:MM:SS motor ligado/parou"), na primeira vez.
+// Intervalo de mais de 12 h fica de fora: é o PC em espera (sem internet), não ligado de verdade.
+function uptimeFromLog(text) {
+  const uptime = {};
+  const re = /^===== (\d{2})\/(\d{2})\/(\d{4}), (\d{2}):(\d{2}):(\d{2}) motor (ligado|parou)/gm;
+  let on = null;
+  for (let m; (m = re.exec(text));) {
+    const date = `${m[3]}-${m[2]}-${m[1]}`;
+    const ms = Date.parse(`${date}T${m[4]}:${m[5]}:${m[6]}Z`) - offsetMinutes(date) * 60000;
+    if (m[7] === 'ligado') on = ms;
+    else if (on !== null) {
+      if (ms > on && ms - on <= 12 * 3600000) for (let t = on; t < ms; t += 60000) addUptime(uptime, t, 1);
+      on = null;
+    }
+  }
+  return uptime;
+}
+
+/**
+ * Horas (0..23) em que o aparelho costuma estar ligado, pelos dias anteriores a "today" em que ele ligou (até 14):
+ * hora boa = ligado 30+ min nela em pelo menos metade desses dias. null = menos de 2 dias de histórico.
+ */
+function onHours(uptime, today, { minDays = 2, lookback = 14 } = {}) {
+  const days = Object.keys(uptime || {})
+    .filter((d) => d < today && uptime[d].reduce((a, b) => a + b, 0) >= 30)
+    .sort()
+    .slice(-lookback);
+  if (days.length < minDays) return null;
+  const hours = Array.from({ length: 24 }, (_, h) => days.filter((d) => uptime[d][h] >= 30).length >= days.length / 2);
+  return hours.some(Boolean) ? hours : null;
+}
+
+// Alguma sessão que ainda vai acontecer hoje cai numa hora em que o aparelho costuma estar desligado?
+function slotsOffHours(slots, done, hours, now = Date.now()) {
+  if (!hours) return false;
+  return slots.slice(done).some((s) => s.at > now && !hours[Math.floor(localMinutes(new Date(s.at)) / 60)]);
+}
+
+// Junta as sessões já feitas com uma rotina nova para o resto do dia. As partes novas cobrem o que falta
+// (de onde a última sessão feita parou até 100%).
+function replanRest(slots, done, fresh) {
+  const prev = done ? slots[Math.min(done, slots.length) - 1].target : 0;
+  return slots
+    .slice(0, done)
+    .concat(fresh.map((s) => ({ at: s.at, target: s.target === 1 ? 1 : Math.round((prev + (1 - prev) * s.target) * 100) / 100 })));
 }
 
 // Espaço mínimo entre o começo de sessões de contas diferentes: 4 a 14 min, sorteado por conta e por dia
@@ -460,6 +547,11 @@ module.exports = {
   sessionCap,
   nextAfter,
   planSlots,
+  addUptime,
+  uptimeFromLog,
+  onHours,
+  slotsOffHours,
+  replanRest,
   ensureSlots,
   spacingMs,
   isWeekend,

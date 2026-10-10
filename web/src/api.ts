@@ -207,6 +207,7 @@ export interface SystemInfo {
   autostart: boolean;
   sessions: number;
   pending: number;
+  onHours?: boolean[] | null; // horas (0..23) em que este PC costuma ficar ligado; null = ainda aprendendo
 }
 
 // Evento do tempo real (/api/stream)

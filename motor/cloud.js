@@ -23,6 +23,7 @@ let client = null;
 let user = null; // { id, email }
 let device = null; // { id, name }
 let beat = null;
+let lastOk = 0; // último sinal do aparelho que chegou no Supabase (motor/uptime.js: minuto com internet)
 let commandsChannel = null;
 // O login do aparelho caiu enquanto ele rodava (senha trocada, sessão encerrada): precisa entrar de novo no painel
 let needsLogin = false;
@@ -188,7 +189,10 @@ function startHeartbeat() {
       .from('devices')
       .update({ last_seen: new Date().toISOString(), app_version: version })
       .eq('id', device.id)
-      .then(({ error }) => error && console.error(`⚠️  Sinal do aparelho: ${error.message}`));
+      .then(({ error }) => {
+        if (error) console.error(`⚠️  Sinal do aparelho: ${error.message}`);
+        else lastOk = Date.now();
+      });
   tick();
   beat = setInterval(tick, HEARTBEAT_MS);
 }
@@ -285,6 +289,7 @@ module.exports = {
   device: () => device,
   ready: () => !!(client && user && device),
   needsLogin: () => needsLogin,
+  lastBeatOk: () => lastOk,
   ONLINE_MS,
   SUPABASE_URL,
   SUPABASE_PUBLISHABLE_KEY,

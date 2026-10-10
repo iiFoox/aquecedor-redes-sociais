@@ -135,6 +135,27 @@ test('simulador: nenhuma meta passa do teto de 120% e nenhum dia fica com meta p
   }
 });
 
+// Instagram fecha exatamente na meta: nenhuma meta passa do plano do dia (nem dentro do teto de 120%)
+// e a sessão não continua depois de bater tudo (a última ação de uma sessão que fechou o dia conta uma meta).
+test('simulador: Instagram para na meta, sem reel ou story a mais', async () => {
+  const ig = require('../motor/platforms/instagram');
+  for (let seed = 1; seed <= 8; seed++) {
+    const r = await simulate({ account: { platform: 'instagram', username: 't', interests: ['IA'] }, days: 4, seed });
+    for (const [date, d] of Object.entries(r.daily)) {
+      if (!d.plan) continue;
+      for (const k of Object.keys(d.plan)) {
+        if (k === 'minutes') continue;
+        assert.ok((d[k] || 0) <= d.plan[k], `s${seed} ${date}: ${k} ${d[k]} passou do plano ${d.plan[k]}`);
+      }
+    }
+    for (const s of r.sessions.filter((x) => x.reason === 'goals')) {
+      const goalActs = s.actions.filter((a) => Object.keys(ig.actions).includes(a.type) && a.type !== 'scroll');
+      const last = s.actions[s.actions.length - 1];
+      assert.ok(!goalActs.length || last === goalActs[goalActs.length - 1], `s${seed}: continuou depois da meta (${last && last.type})`);
+    }
+  }
+});
+
 test('simulador: ações não acontecem em intervalos fixos', async () => {
   const r = await simulate({ account: { platform: 'tiktok', username: 't', interests: ['IA'] }, days: 1, seed: 5 });
   const t = r.sessions.flatMap((s) => s.actions.map((a) => a.t));

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Config } from '../api.ts';
 import { Icon, PlatformBadge } from '../components/Icon.tsx';
-import { addDays, ddmm, isoDate, windowSegments } from '../lib/format.ts';
+import { addDays, ddmm, hoursText, isoDate, windowSegments } from '../lib/format.ts';
 import { useStore } from '../store.tsx';
 
 function Track({ start, end }: { start: string; end: string }) {
@@ -17,7 +17,7 @@ function Track({ start, end }: { start: string; end: string }) {
 }
 
 export function Rotina() {
-  const { config, setConfig, accounts, run, go, reload } = useStore();
+  const { config, setConfig, accounts, run, go, reload, system } = useStore();
   const [form, setForm] = useState<Pick<Config, 'start' | 'end' | 'max'> | null>(null);
   const [until, setUntil] = useState(addDays(isoDate(new Date()), 3));
   useEffect(() => {
@@ -90,6 +90,13 @@ export function Rotina() {
               style={{ width: 72 }}
               aria-label="Contas ao mesmo tempo"
             />
+          </div>
+          <div className="set-row">
+            <div>
+              <b>Horário em que este PC fica ligado</b>
+              <span>Aprendido nos últimos dias. As sessões caem dentro dele, para nenhum dia se perder com o PC desligado.</span>
+            </div>
+            <span className="mono">{hoursText(system?.onHours) || 'aprendendo (2 dias)'}</span>
           </div>
           <div className="set-row">
             <div>

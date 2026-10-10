@@ -139,6 +139,10 @@ export function ComoUsar() {
           </Item>
           <Item t="Janela padrão:">o horário em que as contas podem aquecer (ex.: 08:00 às 22:00).</Item>
           <Item t="Contas ao mesmo tempo:">quantos navegadores abertos juntos. Mais de 2 pesa no PC.</Item>
+          <Item t="Horário em que este PC fica ligado:">
+            o app aprende sozinho (em 2 dias) quando o computador costuma ficar ligado e planeja as sessões dentro desse horário. Assim
+            nenhum dia se perde com sessão marcada para quando o PC já está desligado.
+          </Item>
           <Item t="Intervalo entre sessões:">sorteado a cada vez, para não ter horário fixo.</Item>
           <Item t="Janelas por conta:">um horário diferente só para uma conta.</Item>
           <Item t="Modo férias:">pausa tudo até uma data. Na volta, cada conta continua do dia em que parou (o plano não pula dias).</Item>

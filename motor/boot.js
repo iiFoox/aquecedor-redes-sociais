@@ -13,6 +13,7 @@ const vaultLib = require('./vault');
 const dpapi = require('./dpapi');
 const logins = require('./logins');
 const screens = require('./screens');
+const uptime = require('./uptime');
 const { DATA } = require('./paths');
 
 let vault = null;
@@ -74,6 +75,9 @@ async function startDevice() {
         .then((st) => st === 'trancada' && console.warn(VAULT_MSG.trancada))
         .catch(() => {});
     }, 120000).unref();
+    // Rotina: sessões nas horas em que este aparelho costuma ficar ligado
+    uptime.start();
+    store.setHours(() => uptime.hours());
     scheduler.start();
     runner.startWatchdog();
     backup.start();
@@ -120,6 +124,7 @@ function stopAll() {
   scheduler.stop();
   backup.stop();
   runner.stopWatchdog();
+  uptime.stop(); // grava as horas ligado
 }
 
 module.exports = {

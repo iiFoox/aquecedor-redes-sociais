@@ -36,6 +36,9 @@ npm run format         # Prettier
   - `cursor.js`: mouse do Playwright (curvas do ghost-cursor, clique em ponto variado). Não usar o `createCursor` do ghost-cursor:
     ele é do Puppeteer e quebra todo clique no Playwright.
   - Rotina do dia: `rules.planSlots` (horários e tamanho de cada sessão, perto do pico da conta). Sessão curta para em `ctl.target`.
+    As sessões só caem nas horas em que o aparelho costuma ficar ligado (`motor/uptime.js` grava em `data/uptime.json` os
+    minutos com internet por hora; na 1ª vez reconstrói pelo `logs/motor.log`, sem intervalos de 12 h+ = PC em espera;
+    `rules.onHours` precisa de 2 dias). Rotina do dia com sessão futura fora dessas horas é replanejada uma vez (`slotsOf`).
   - `sim/`: simulador com relógio e página falsos (`npm run simular -- <conta|nova-tiktok> <dias>`). Roda o código real das plataformas.
   - `backup.js`: backup diário dos perfis (04:00, sem cache, 7 últimos). `proxycheck.js`: teste de proxy sem navegador (IP, país e fuso).
   - `platforms/`: TikTok e Instagram. Cada atividade declara as metas que conta (`produces`) e as que adianta (`advances`).
@@ -106,6 +109,9 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
   "Seguir" vira "Seguindo"/"Solicitado"). Janela do Instagram (post, comentários, story) fecha no X, Esc só sem o X na tela.
   Instagram pelo computador: dois cliques no reel NÃO curtem (curtida sempre no coração) e a rodinha só troca de reel com
   o mouse em cima do vídeo; o reel só conta de novo se o endereço mudou (`reelStep`), senão a atividade para.
+- Sessão para na meta: as atividades conferem `ctl.goalsDone()` no meio do que fazem. Instagram nunca passa do plano
+  (reels só enquanto falta reel; curtida que falta sai do feed/Explorar). TikTok pode ver vídeos a mais para fechar as
+  curtidas, até o teto de 120%.
 - Falha repetida (a mesma 3x numa sessão) e sessão que vê vídeos sem curtir viram alerta no painel (`ctl.fail`, `rules.noLikeWarning`).
 - Não aumentar a atividade das contas além do plano de fases. Humanizar muda COMO e QUANDO, nunca QUANTO
   (o simulador e tests/human.test.js conferem o teto de 120%). Nenhuma meta passa de 120% do plano do dia (`rules.GOAL_CAP`).

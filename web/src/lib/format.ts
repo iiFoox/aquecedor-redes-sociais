@@ -266,3 +266,16 @@ export function deviceOf(ua: string | null | undefined) {
             : '';
   return os ? `${browser} no ${os}` : browser;
 }
+
+// Horas em que o PC costuma ficar ligado, em faixas: [10..14 boas] → "10h–15h". null = ainda aprendendo.
+export function hoursText(hours: boolean[] | null | undefined) {
+  if (!hours) return null;
+  const out: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    if (!hours[h] || (h > 0 && hours[h - 1])) continue;
+    let e = h;
+    while (e + 1 < 24 && hours[e + 1]) e++;
+    out.push(`${h}h–${e + 1 === 24 ? 0 : e + 1}h`);
+  }
+  return out.length ? out.join(', ') : null;
+}

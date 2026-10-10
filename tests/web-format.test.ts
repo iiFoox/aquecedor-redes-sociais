@@ -108,3 +108,12 @@ test('loginSaved: hora de hoje, data de outro dia, ou ainda não salvo', () => {
   assert.equal(f.loginSaved(new Date(2026, 9, 7, 9, 5).getTime(), now), 'Login salvo no Supabase às 09:05');
   assert.equal(f.loginSaved(new Date(2026, 9, 6, 22, 40).getTime(), now), 'Login salvo no Supabase em 06/10 às 22:40');
 });
+
+test('horário em que o PC fica ligado: faixas de horas; sem saber ainda = null', () => {
+  const on = (...hs: number[]) => Array.from({ length: 24 }, (_, h) => hs.includes(h));
+  assert.equal(f.hoursText(on(10, 11, 12, 13, 14)), '10h–15h');
+  assert.equal(f.hoursText(on(9, 10, 19, 20, 21)), '9h–11h, 19h–22h');
+  assert.equal(f.hoursText(on(22, 23)), '22h–0h');
+  assert.equal(f.hoursText(on()), null);
+  assert.equal(f.hoursText(null), null);
+});
