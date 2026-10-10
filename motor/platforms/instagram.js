@@ -30,6 +30,11 @@ const SEL = {
   post: 'a[href*="/p/"], a[href*="/reel/"]',
   // Bandeja de stories (quem a conta segue) ou o anel na foto de quem postou no feed
   story: 'main li [role="button"]:has(canvas), article [role="button"]:has(> canvas)',
+  // Bandeja de stories no topo do feed: "Story de <autor>, visto" / "..., não visto" (lido no site em 2026-10-10)
+  storyTray: 'main li [role="button"]:has(canvas)',
+  storyNew: 'main li [role="button"]:has(canvas)[aria-label*="não visto"], main li [role="button"]:has(canvas):not([aria-label*="visto"])',
+  // Anel na foto de quem postou
+  storyPost: 'article [role="button"]:has(> canvas)',
   // Setas ao lado dos reels
   nextReel: '[aria-label="Navegar para o próximo reel"], [aria-label="Navigate to next reel"]',
   prevReel: '[aria-label="Navegar para o reel anterior"], [aria-label="Navigate to previous reel"]',
@@ -253,22 +258,41 @@ const ACTIVITIES = {
   async stories({ page, bot, ctl }) {
     if (!atHome(page)) await bot.goto(HOME, 'Indo para os stories');
     await dismissPopups(bot);
-    let opened = await bot.clickVisible(SEL.story, { random: true });
-    if (!opened) {
-      // Nenhuma foto com story na tela: desce um pouco o feed e procura de novo
-      await bot.scroll(bot.rand(300, 700));
+    // A bandeja de stories fica no topo do feed: se o feed já desceu (sessão que rolou o feed antes), volta para cima
+    const y = await page.evaluate(() => window.scrollY).catch(() => 0); // eslint-disable-line no-undef -- roda na página
+    if (y > 150) {
+      await bot.scroll(-y);
       await bot.pause('decide');
-      opened = await bot.clickVisible(SEL.story, { random: true });
     }
-    if (!opened) {
-      ctl.log('Não encontrei stories disponíveis', 'warn');
-      return false;
-    }
-    await bot.pause('load', 'Abrindo story');
-    if (!page.url().includes('/stories/')) {
-      // A foto abriu o perfil (sem story): volta
+    // Clica numa foto e confere se abriu o visor. null = nada desse tipo na tela; false = clicou e não abriu (volta)
+    const tryOpen = async (sel) => {
+      if (!(await bot.clickVisible(sel, { random: true }))) return null;
+      await bot.pause('load', 'Abrindo story');
+      if (page.url().includes('/stories/')) return true;
       ctl.log('A foto não abriu um story', 'warn');
       if (!atHome(page)) await page.goBack().catch(() => {});
+      return false;
+    };
+    // Ordem: story ainda não visto na bandeja, anel na foto de quem postou, e por último rever um da bandeja
+    // (conta que já viu todos os stories do dia continua com o que assistir)
+    let opened = false;
+    let clicked = false;
+    for (const sel of [SEL.storyNew, SEL.storyPost, SEL.storyTray]) {
+      const r = await tryOpen(sel);
+      if (r !== null) clicked = true;
+      if (r) {
+        opened = true;
+        break;
+      }
+    }
+    if (!opened && !clicked) {
+      // Nenhuma foto com story na tela: desce um pouco o feed e procura nas fotos de quem postou
+      await bot.scroll(bot.rand(300, 700));
+      await bot.pause('decide');
+      opened = !!(await tryOpen(SEL.storyPost));
+    }
+    if (!opened) {
+      ctl.log(clicked ? 'Nenhum story abriu' : 'Não encontrei stories disponíveis', 'warn');
       return false;
     }
     const n = Math.min(ctl.left('story'), bot.rand(3, 6));

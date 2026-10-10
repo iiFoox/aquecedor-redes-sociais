@@ -22,6 +22,7 @@ export const NOVIDADES: Novidade[] = [
       'Escolha as contas direto no modelo ("Aplicar em contas"), vendo em que aparelho cada uma roda e para que fase ela vai.',
       'Sair do editor com mudança não salva pergunta antes; as perguntas do app agora aparecem numa janela do próprio app.',
       'No celular, o editor mostra uma fase por cartão. "O que há de novo?" ocupa a largura toda da página.',
+      'Instagram: stories voltam ao topo do feed para achar a bandeja, preferem os ainda não vistos e, se a conta já viu todos, reveem um (antes a sessão desistia dos stories quando o feed já tinha rolado).',
     ],
   },
   {

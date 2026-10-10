@@ -54,12 +54,22 @@ function dialog(inner) {
 }
 if (path === '/') {
   window.backTo = '/';
-  app.innerHTML = [0, 1].map((i) =>
-    '<article style="top:' + (20 + i * 900) + 'px"><div class="avatar" role="button"><canvas width="42" height="42"></canvas></div>' +
+  // Bandeja de stories no topo (como no site): ?bandeja=nova (um não visto) ou ?bandeja=vista (todos vistos)
+  const tray = new URLSearchParams(location.search).get('bandeja');
+  const trayHtml = !tray ? '' : '<main style="position:absolute;left:400px;top:0;width:600px"><ul style="display:flex;gap:10px;list-style:none;margin:0;padding:10px">' +
+    [['velho', 'visto'], ['nova', tray === 'nova' ? 'não visto' : 'visto']].map(([n, v]) =>
+      '<li><div role="button" class="tray" data-n="' + n + '" aria-label="Story de ' + n + ', ' + v + '" style="width:60px;height:60px"><canvas width="60" height="60" style="width:60px;height:60px;background:#f0a"></canvas></div></li>').join('') +
+    '</ul></main>';
+  const top = tray ? 120 : 20;
+  app.innerHTML = trayHtml + [0, 1, 2].map((i) =>
+    '<article style="top:' + (top + i * 900) + 'px"><div class="avatar" role="button"><canvas width="42" height="42"></canvas></div>' +
     '<span dir="auto" style="position:absolute;left:60px;top:10px">autor' + i + '</span><div class="media"></div>' +
     '<div class="bar">' + heart + '<div role="button" class="comment">' + icon('Comentar') + '</div></div>' +
     '<span dir="auto" class="cap">receita de bolo de cenoura ' + i + '</span></article>').join('');
-  document.querySelectorAll('.avatar').forEach((a) => a.addEventListener('click', () => (location.href = '/stories/autor/')));
+  document.body.style.height = '3200px';
+  // window.avatarSemStory: a foto de quem postou não abre story (anel de story que já acabou)
+  document.querySelectorAll('.avatar').forEach((a) => a.addEventListener('click', () => { if (!window.avatarSemStory) location.href = '/stories/autor/'; }));
+  document.querySelectorAll('.tray').forEach((a) => a.addEventListener('click', () => (location.href = '/stories/' + a.dataset.n + '/')));
   document.querySelectorAll('.comment').forEach((c) => c.addEventListener('click', () => {
     history.pushState(null, '', '/p/1/');
     dialog('<p style="color:#fff;margin:200px">comentários</p>');
@@ -264,6 +274,35 @@ test('Instagram real: stories pela foto de quem postou; assiste, avança e fecha
   assert.deepEqual(actions, ['story:Story 1/3', 'story:Story 2/3', 'story:Story 3/3']);
   // Só o X do visor leva de volta ao feed (a página falsa do story não reage ao Esc)
   assert.equal(new URL(page.url()).pathname, '/', 'o visor ficou aberto');
+  await page.close();
+});
+
+test('Instagram real: com o feed já rolado, volta ao topo e abre o story NÃO visto da bandeja', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot, ctl, actions } = await setup('https://www.instagram.com/?bandeja=nova', { plan: { story: 2 } });
+  await page.mouse.move(600, 400);
+  await page.mouse.wheel(0, 1500); // a sessão rolou o feed antes: a bandeja saiu da tela
+  await page.waitForFunction(() => window.scrollY > 1000);
+  const visited = [];
+  page.on('framenavigated', (f) => f === page.mainFrame() && visited.push(new URL(f.url()).pathname));
+  assert.equal(await instagram._activities.stories({ page, bot, ctl }), true);
+  assert.equal(visited[0], '/stories/nova/', `abriu ${visited[0]}`);
+  assert.deepEqual(actions, ['story:Story 1/2', 'story:Story 2/2']);
+  await page.close();
+});
+
+test('Instagram real: todos os stories vistos e a foto de quem postou sem story: revê um da bandeja', async (t) => {
+  if (!available) return t.skip('Chromium do Playwright não instalado');
+  const { page, bot, ctl, actions } = await setup('https://www.instagram.com/?bandeja=vista', { plan: { story: 1 } });
+  await page.evaluate(() => (window.avatarSemStory = true));
+  const visited = [];
+  page.on('framenavigated', (f) => f === page.mainFrame() && visited.push(new URL(f.url()).pathname));
+  assert.equal(await instagram._activities.stories({ page, bot, ctl }), true);
+  assert.ok(
+    visited.some((p) => /^\/stories\/(velho|nova)\/$/.test(p)),
+    visited.join(' '),
+  );
+  assert.deepEqual(actions, ['story:Story 1/1']);
   await page.close();
 });
 
