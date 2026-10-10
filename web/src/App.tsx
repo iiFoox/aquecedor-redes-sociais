@@ -152,10 +152,31 @@ function Side() {
 }
 
 function Banners() {
-  const { config, motorOff, deviceLost, relogin, setConfig, run, reload } = useStore();
+  const { config, motorOff, deviceLost, relogin, setConfig, run, reload, accounts, go } = useStore();
   const vacation = config?.pausedUntil && config.pausedUntil > Date.now();
+  // Sessão parada num captcha, com a janela aberta esperando você
+  const captchas = accounts.filter((a) => a.live && a.attention?.kind === 'captcha');
   return (
     <>
+      {captchas.map((a) => (
+        <div className="banner" role="alert" key={`captcha-${a.id}`}>
+          <Icon name="bell" />
+          <div className="grow">
+            <b>Captcha em @{a.username}.</b>{' '}
+            <span className="muted">A janela da conta está aberta na tela: resolva o captcha nela. O robô espera e continua sozinho.</span>
+          </div>
+          <button
+            className="btn sm primary"
+            onClick={() => run(() => api(`/api/accounts/${a.id}/browser`, 'POST', { purpose: 'captcha' }), 'Janela da conta na frente')}
+          >
+            <Icon name="window" />
+            Mostrar a janela
+          </button>
+          <button className="btn sm" onClick={() => go('conta', a.id)}>
+            Ver a conta
+          </button>
+        </div>
+      ))}
       {deviceLost && !motorOff && (
         <div className="banner" role="alert">
           <Icon name="lock" />

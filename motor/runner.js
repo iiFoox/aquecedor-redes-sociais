@@ -179,8 +179,9 @@ function needsAttention(account, kind, reason) {
 }
 
 // Captcha, bloqueio ou login pedido no meio da sessão: para na hora.
-// Captcha: o robô solta tudo, mostra a janela da conta na tela e espera você resolver (até 15 min); resolvido,
-// a sessão continua de onde estava. Sem resolver a tempo (ou janela fechada): para e a conta espera você, como antes.
+// Captcha: o robô solta tudo, mostra a janela da conta na tela e espera você resolver, SEM limite de tempo (captcha
+// abandonado pesa contra a conta); resolvido, a sessão continua de onde estava. Janela fechada ou sessão parada por
+// você: para e a conta fica esperando você, como antes.
 async function guard(page, platform, account, s, ctl) {
   const p = await platform.detectProblem(page).catch(() => null);
   if (!p) return;
@@ -193,8 +194,6 @@ async function guard(page, platform, account, s, ctl) {
   needsAttention(account, kind, p.msg);
   throw new AbortError(p.msg, kind.toUpperCase());
 }
-
-const CAPTCHA_WAIT_MS = 15 * 60000;
 
 // Mostra a janela da conta na tela (ela roda minimizada ou fora da tela) ou volta a escondê-la
 async function showWindow(page, visible) {
@@ -212,14 +211,23 @@ async function showWindow(page, visible) {
   }
 }
 
+// "Mostrar a janela": traz para a frente a janela da sessão que espera você (captcha). false = não há.
+async function showSessionWindow(id) {
+  const s = sessions[id];
+  if (!s || !s.page || !s.waitingHuman) return false;
+  await showWindow(s.page, true);
+  return true;
+}
+
 async function captchaWait(page, platform, account, s, ctl) {
   const name = platforms[account.platform].name;
   const started = Date.now();
   store.setAttention(
     account.id,
     'captcha',
-    `${name} pediu um captcha. A janela da conta está aberta na tela: resolva por lá. O robô espera até 15 min e continua sozinho`,
+    `${name} pediu um captcha. A janela da conta está aberta na tela: resolva por lá. O robô espera você e continua sozinho`,
   );
+  s.waitingHuman = true; // não ocupa vaga: as outras contas continuam aquecendo
   emit({ type: 'attention', id: account.id, attention: store.get(account.id).attention });
   ctl.log('Captcha na tela: parei tudo e abri a janela para você resolver', 'warn');
   await showWindow(page, true);
@@ -230,15 +238,16 @@ async function captchaWait(page, platform, account, s, ctl) {
     },
     closed: () => page.isClosed(),
     stopped: () => s.stop,
-    onTick: (left) => {
+    onTick: () => {
       // Não conta como sessão travada nem como tempo da sessão
       s.lastProgress = Date.now();
       s.endsAt = Math.max(s.endsAt, Date.now() + 2 * 60000);
-      ctl.status(`Esperando você resolver o captcha na janela da conta (até ${Math.ceil(left / 60000)} min)`);
+      ctl.status(`Esperando você resolver o captcha na janela da conta (${Math.round((Date.now() - started) / 60000)} min)`);
     },
     sleep: wait,
-    timeoutMs: CAPTCHA_WAIT_MS,
+    timeoutMs: Infinity,
   });
+  s.waitingHuman = false;
   if (r === 'resolvido') {
     s.endsAt += Date.now() - started;
     store.clearAttention(account.id, 'Captcha resolvido. A sessão continuou', ['captcha']);
@@ -246,12 +255,7 @@ async function captchaWait(page, platform, account, s, ctl) {
     ctl.log('Captcha resolvido por você ✔ Continuando a sessão');
     await wait(1500);
     await showWindow(page, false);
-  } else
-    ctl.log(
-      { tempo: 'O captcha não foi resolvido em 15 min. Sessão encerrada', fechou: 'A janela foi fechada com o captcha na tela' }[r] ||
-        'Sessão interrompida por você',
-      'warn',
-    );
+  } else ctl.log(r === 'fechou' ? 'A janela foi fechada com o captcha na tela' : 'Sessão interrompida por você', 'warn');
   return r;
 }
 
@@ -603,4 +607,7 @@ module.exports = {
   setLock,
   busy,
   openBrowsers: () => Object.keys(manual).length,
+  showSessionWindow,
+  // Sessões ocupando vaga (a que espera você resolver um captcha não ocupa)
+  busySessions: () => Object.values(sessions).filter((x) => !x.waitingHuman).length,
 };

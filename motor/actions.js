@@ -52,6 +52,8 @@ async function local(kind, acc, payload = {}) {
     case 'login':
       return runner.openBrowser(acc, 'login');
     case 'captcha':
+      // Sessão esperando você no captcha: traz a janela dela para a frente (não abre outra)
+      if (await runner.showSessionWindow(acc.id)) return;
       return runner.openBrowser(acc, 'captcha');
     case 'close-browser':
       return runner.closeBrowser(acc.id);

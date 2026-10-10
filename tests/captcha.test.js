@@ -40,3 +40,9 @@ test('captcha: janela fechada ou sessão parada por você encerram a espera na h
   assert.equal(await waitForHuman({ ...f }), 'parou');
   assert.ok(f.now() <= 9000);
 });
+
+test('captcha: sem limite de tempo, a janela fica esperando você até resolver (mesmo horas depois)', async () => {
+  const f = fakes({ solveAfter: 3 * 3600000 });
+  assert.equal(await waitForHuman({ ...f, timeoutMs: Infinity }), 'resolvido');
+  assert.ok(f.now() >= 3 * 3600000);
+});

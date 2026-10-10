@@ -118,7 +118,9 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
 - Captcha, bloqueio ou falta de login: a sessão para na hora e a conta fica com `attention` até o dono resolver
   (captcha: botão "Abrir navegador"; bloqueio: "Liberar"; login: "Login"). Nada volta sozinho.
   Captcha no meio da sessão: o robô não mexe em mais nada, mostra a janela da conta na tela (`runner.captchaWait`,
-  `motor/humanwait.js`) e espera o dono resolver até 15 min; resolvido, a sessão continua. Robô nunca resolve captcha.
+  `motor/humanwait.js`) e espera o dono resolver SEM limite (a janela nunca fecha sozinha: captcha abandonado pesa contra a conta); resolvido, a
+  sessão continua. Faixa no painel com "Mostrar a janela"; a sessão que espera não ocupa vaga (`runner.busySessions`).
+  Robô nunca resolve captcha.
 - TikTok pode mostrar "Seguindo" e descartar o follow (conta nova/desconfiada): follow só conta se o botão mudou e, em
   dia com follow, a sessão confere o "Seguindo" do próprio perfil no começo e no fim; não subiu = alerta e follows
   pausados 3 dias (`followPauseUntil`, `rules.pauseFollows`).

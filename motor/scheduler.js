@@ -11,7 +11,8 @@ const { proxyUpdate } = require('./proxycheck');
 
 const PROXY_EVERY_MS = 30 * 60000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const running = () => Object.keys(runner.activeSessions()).length;
+// Sessão esperando você resolver um captcha não ocupa vaga: as outras contas continuam
+const running = () => runner.busySessions();
 
 let timer = null;
 let proxyTimer = null;

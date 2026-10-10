@@ -214,8 +214,9 @@ export function ComoUsar() {
           <ul className="guide-list">
             <Item t="Pediu login:">clique em Login na página da conta e entre de novo.</Item>
             <Item t="Captcha:">
-              o robô para na hora, a janela da conta aparece na tela e o Windows avisa. Resolva o captcha nela: a sessão continua sozinha.
-              Se ninguém resolver em 15 min, a sessão para; depois clique em Abrir navegador, resolva e feche a janela.
+              o robô para na hora, a janela da conta aparece na tela, o Windows avisa e uma faixa no topo do painel mostra a conta. Resolva
+              o captcha na janela: a sessão continua sozinha. A janela nunca fecha sozinha (captcha abandonado pesa contra a conta); se ela
+              sumir atrás de outras, clique em Mostrar a janela.
             </Item>
             <Item t="Bloqueio de ações:">a conta fica parada até você clicar em Liberar na página dela.</Item>
             <Item t="Proxy fora do ar:">espera o proxy voltar.</Item>
