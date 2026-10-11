@@ -4,6 +4,16 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
+## 2026-10-10 · Antigravity
+- Pedido: ajuste visual no card de metas personalizadas (estava "colado", precisando de espaçamento).
+- Feito: aumentada significativamente a margem e espaçamento na folha de estilos (`web/src/styles.css`):
+  - `.meta-card` (espaçamento entre os blocos dentro do card) subiu de `12px` para `24px`.
+  - `.meta-f5` (espaçamento antes das listas de badges) subiu de `6px` para `12px`.
+  - `.meta-nums`, `.meta-pills`, `.meta-users` (espaçamento de quebra de linha `flex-wrap` entre os badges em si) subiu de `6px` para `16px 12px` (16px vertical, 12px horizontal).
+- Testes: os testes do sistema, lint e typecheck passaram sem quebras (`npm test`, `npm run lint`, `npm run typecheck`). Build finalizada com sucesso.
+- Publicado: 2.1.9 no canal de teste. Estável continua 2.1.2.
+- Pendente: dono testar e mandar liberar (2.1.7 e a 2.1.8); apagar o usuário de teste ao liberar; instalador que confere a versão no servidor antes de instalar; compactação (asar) testada antes com a cópia de outra identidade.
+
 ## 2026-10-10 · Claude
 - Pedido: metas personalizadas fechando certinho (principalmente TikTok); TikTok sem pausa de follows, com aviso.
 - Feito: transição suave ao trocar de meta, número escrito = máximo do dia, modelos sem conflito entre aparelhos,
