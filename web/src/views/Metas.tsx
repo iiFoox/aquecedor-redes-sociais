@@ -31,8 +31,10 @@ const quando = (iso: string) => {
   const d = new Date(iso);
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} às ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
-const dias = (p: Phase) => (p.to >= 9999 ? `dia ${p.from} em diante` : p.from === p.to ? `dia ${p.from}` : `dias ${p.from} a ${p.to}`);
-const onde = (a: Account) => (a.mine ? 'neste aparelho' : a.deviceName ? `em ${a.deviceName}` : 'sem aparelho');
+const dias = (p: Phase) => (p.to >= 9999 ? `Dia ${p.from} em diante` : p.from === p.to ? `Dia ${p.from}` : `Dias ${p.from} a ${p.to}`);
+const onde = (a: Account) => (a.mine ? 'Neste aparelho' : a.deviceName ? `Em ${a.deviceName}` : 'Sem aparelho');
+// O mesmo no meio de uma frase ("Roda em PC do quarto")
+const ondeFrase = (a: Account) => onde(a).charAt(0).toLowerCase() + onde(a).slice(1);
 
 // Largura de celular: o editor troca a tabela de 5 colunas por uma fase por cartão
 function useNarrow(q = '(max-width: 760px)') {
@@ -152,8 +154,8 @@ export function Metas() {
                   </span>
                 </div>
                 <p className="dim meta-card-sub">
-                  {PLAT[t.platform]} · {t.vary ? 'varia um pouco por dia (só para baixo)' : 'números exatos'}
-                  {t.updatedAt ? ` · editado em ${quando(t.updatedAt)}` : ''}
+                  {PLAT[t.platform]} · {t.vary ? 'Varia um pouco por dia (só para baixo)' : 'Números exatos'}
+                  {t.updatedAt ? ` · Editado em ${quando(t.updatedAt)}` : ''}
                 </p>
                 <div className="meta-f5">
                   <span className="dim">Conta pronta (fase 5, dia {t.readyDay} em diante), por dia:</span>
@@ -192,7 +194,7 @@ export function Metas() {
                       ) : null;
                     })
                   ) : (
-                    <span className="pill hit">dentro do recomendado</span>
+                    <span className="pill hit">Dentro do recomendado</span>
                   )}
                 </div>
                 <div className="meta-users">
@@ -204,7 +206,7 @@ export function Metas() {
                       </button>
                     ))
                   ) : (
-                    <span className="dim">nenhuma usa ainda</span>
+                    <span className="dim">Nenhuma usa ainda</span>
                   )}
                 </div>
                 <div className="meta-card-foot">
@@ -377,7 +379,7 @@ function Editor({
           aria-invalid={lvl === 'erro' || undefined}
         />
         <span className="dim">
-          {lim && (v > lim[1] || v < lim[0]) ? `${v > lim[1] ? 'máx.' : 'mín.'} ${v > lim[1] ? lim[1] : lim[0]}` : `rec. ${plans[i][k]}`}
+          {lim && (v > lim[1] || v < lim[0]) ? `${v > lim[1] ? 'Máx.' : 'Mín.'} ${v > lim[1] ? lim[1] : lim[0]}` : `Rec. ${plans[i][k]}`}
         </span>
       </div>
     );
@@ -392,7 +394,7 @@ function Editor({
           <h2 className="meta-title">
             <PlatformBadge platform={t.platform} size="xs" /> {draft.id ? `Editar "${draft.name}"` : `Novo modelo do ${PLAT[t.platform]}`}
           </h2>
-          {draft.updatedAt ? <span className="muted">editado em {quando(draft.updatedAt)}</span> : null}
+          {draft.updatedAt ? <span className="muted">Editado em {quando(draft.updatedAt)}</span> : null}
         </div>
         <div className="meta-presets">
           <span className="dim">Começar de:</span>
@@ -464,7 +466,7 @@ function Editor({
       <section className="panel">
         <div className="panel-head">
           <h2>Por dia, em cada fase</h2>
-          <span className="muted">o número é o máximo do dia · "rec." é a meta recomendada</span>
+          <span className="muted">O número é o máximo do dia · "Rec." é a meta recomendada</span>
         </div>
         {narrow ? (
           <div className="meta-fases">
@@ -534,19 +536,19 @@ function Editor({
       <section className="panel" ref={contasRef}>
         <div className="panel-head">
           <h2>Contas que vão usar este modelo</h2>
-          <span className="muted">{sel.size ? `${sel.size} marcada${sel.size === 1 ? '' : 's'}` : 'nenhuma'}</span>
+          <span className="muted">{sel.size ? `${sel.size} marcada${sel.size === 1 ? '' : 's'}` : 'Nenhuma'}</span>
         </div>
         {mine.length ? (
           <div className="meta-contas">
             {mine.map((a) => {
               const on = sel.has(a.id);
               const was = using(a);
-              const now = a.goal ? (was ? 'usa este modelo' : `usa "${a.goal.name}"`) : 'usa a recomendada';
+              const now = a.goal ? (was ? 'Usa este modelo' : `Usa "${a.goal.name}"`) : 'Usa a recomendada';
               const notes: ReactNode[] = [];
               if (on && !was) {
                 if (a.goal) notes.push(`Sai do modelo "${a.goal.name}".`);
                 notes.push(mudancaDeFase(base, a.day, a.readyDay, validDays));
-                if (!a.mine) notes.push(`Roda ${onde(a)}: a troca chega lá pela internet.`);
+                if (!a.mine) notes.push(`Roda ${ondeFrase(a)}: a troca chega lá pela internet.`);
               }
               if (!on && was) notes.push('Volta para a meta recomendada.');
               if ((on || was) && a.live)
@@ -557,7 +559,7 @@ function Editor({
                   <span>
                     <b>@{a.username}</b>
                     <span className="dim">
-                      {onde(a)} · dia {a.day} · {now}
+                      {onde(a)} · Dia {a.day} · {now}
                     </span>
                     {notes.map((n, i) => (
                       <span key={i} className="meta-conta-nota">
@@ -581,7 +583,7 @@ function Editor({
       <section className="panel">
         <div className="panel-head">
           <h2>Avisos</h2>
-          <span className="muted">{resumo(warn) || 'nenhum'}</span>
+          <span className="muted">{resumo(warn) || 'Nenhum'}</span>
         </div>
         {warn.length ? (
           <ul className="guide-list">
@@ -605,7 +607,7 @@ function Editor({
           <span>
             <b>Resumo:</b>{' '}
             <span className={errs.length ? 'meta-txt-erro' : warn.some((w) => w.nivel === 'risco') ? 'meta-txt-risco' : ''}>
-              {resumo(warn) || 'dentro do recomendado'}
+              {resumo(warn) || 'Dentro do recomendado'}
             </span>
           </span>
           {risky ? (
@@ -674,7 +676,7 @@ function Previa({
     <section className="panel">
       <div className="panel-head">
         <h2>Prévia</h2>
-        <span className="muted">o máximo de cada dia (com "variar" ligado, um pouco menos)</span>
+        <span className="muted">O máximo de cada dia (com "variar" ligado, um pouco menos)</span>
       </div>
       <div className="tags" role="group" aria-label="Meta da prévia">
         {keys.map((key) => (
@@ -704,7 +706,7 @@ function Previa({
           .filter((d, i, a) => a.indexOf(d) === i)
           .map((d) => (
             <text key={d} x={x(d)} y={H - 6} textAnchor="middle" className="meta-chart-txt">
-              {d === 1 ? 'dia 1' : d === n ? `${d}` : `dia ${d}`}
+              {d === 1 ? 'Dia 1' : d === n ? `${d}` : `Dia ${d}`}
             </text>
           ))}
       </svg>

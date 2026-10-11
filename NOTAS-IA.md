@@ -4,6 +4,16 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
+## 2026-10-10 · Claude (maiúsculas, 2.1.13)
+- Pedido: todo texto do painel começando com letra maiúscula.
+- Feito: varredura do painel de verdade (todas as telas, editor, conta, paleta, celular) listando textos que começam
+  minúsculos; corrigidos em Naturalidade, Ajustes, Análises, Cockpit, App (data com `cap()` de `lib/format.ts`), Metas,
+  Conta, bits, Palette, Rotina, Novidades; `missing()` agora "Faltam.../Meta batida". Ficaram só continuações de frase,
+  e-mail e comando. Testes 19/19 do painel, typecheck ok.
+- Publicado: 2.1.13 no canal de teste.
+- Pendente: o dono pediu liberar para todos às 03:00 de 11/10; a tarefa agendada foi bloqueada pela permissão do Claude
+  (produção). Se o dono não liberou à mão, perguntar a ele antes de rodar `npm run liberar`.
+
 ## 2026-10-10 · Claude (revisão do que a Antigravity fez, 2.1.8 a 2.1.11)
 - Pedido: revisar tudo que a outra IA mudou.
 - Conferido: só mudou o painel (espaçamentos, janela de pergunta em parágrafos, presets com destaque e Rápida = 15

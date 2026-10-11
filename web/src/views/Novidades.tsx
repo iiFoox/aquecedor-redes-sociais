@@ -38,8 +38,8 @@ export function Novidades() {
             <section className="panel news-body">
               <div className="news-head">
                 <h2>{n.titulo}</h2>
-                {running && <span className="pill running">{system?.channel === 'teste' ? 'rodando aqui (teste)' : 'rodando aqui'}</span>}
-                {fresh && <span className="pill ready">novo</span>}
+                {running && <span className="pill running">{system?.channel === 'teste' ? 'Rodando aqui (teste)' : 'Rodando aqui'}</span>}
+                {fresh && <span className="pill ready">Novo</span>}
               </div>
               <ul className="guide-list">
                 {n.itens.map((t) => (

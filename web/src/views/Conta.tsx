@@ -175,7 +175,7 @@ function Calendar({ a }: { a: Account; meta?: Meta }) {
       </div>
       <div className="cal-grid">{cells}</div>
       <div className="legend">
-        <span>menos</span>
+        <span>Menos</span>
         <span className="sw">
           <i />
           <i className="h1" />
@@ -183,7 +183,7 @@ function Calendar({ a }: { a: Account; meta?: Meta }) {
           <i className="h3" />
           <i className="h4" />
         </span>
-        <span>mais</span>
+        <span>Mais</span>
         <span>·</span>
         <span className="rd" />
         <span>dia {a.readyDay}, pronta</span>
@@ -467,7 +467,7 @@ export function Conta() {
           <section className="panel">
             <div className="panel-head">
               <h2>Tela da sessão</h2>
-              <span className="muted">o navegador da conta, ao vivo</span>
+              <span className="muted">O navegador da conta, ao vivo</span>
             </div>
             <LiveScreen a={a} />
           </section>
@@ -486,7 +486,7 @@ export function Conta() {
           <section className="panel">
             <div className="panel-head">
               <h2>Sessões</h2>
-              <span className="muted">últimas {full.history.length}</span>
+              <span className="muted">Últimas {full.history.length}</span>
             </div>
             {full.history.length ? (
               <div className="table-wrap">
@@ -532,15 +532,15 @@ export function Conta() {
           <section className="panel">
             <div className="panel-head">
               <h2>
-                Jornada{a.goal ? <span className="pill"> meta: {a.goal.name}</span> : null}
+                Jornada{a.goal ? <span className="pill"> Meta: {a.goal.name}</span> : null}
                 {a.goalRamp ? (
                   <span className="pill ready" title="Os números sobem no máximo +25% por dia até a meta nova">
                     {' '}
-                    em transição
+                    Em transição
                   </span>
                 ) : null}
               </h2>
-              <span className="muted">{readyLeft <= 0 ? 'pronta' : `pronta em ${readyLeft} ${readyLeft === 1 ? 'dia' : 'dias'}`}</span>
+              <span className="muted">{readyLeft <= 0 ? 'Pronta' : `Pronta em ${readyLeft} ${readyLeft === 1 ? 'dia' : 'dias'}`}</span>
             </div>
             <div className="vj">
               {a.phases.map((p) => {
@@ -550,7 +550,7 @@ export function Conta() {
                     <div className="vj-dot">{st === 'done' ? <Icon name="check" /> : p.n}</div>
                     <div>
                       <h3>
-                        {p.name} <small>{p.to >= 9999 ? `dia ${p.from} em diante` : `dias ${p.from} a ${p.to}`}</small>
+                        {p.name} <small>{p.to >= 9999 ? `Dia ${p.from} em diante` : `Dias ${p.from} a ${p.to}`}</small>
                       </h3>
                       <p>{p.desc}</p>
                       {st === 'cur' && (
@@ -574,13 +574,13 @@ export function Conta() {
           <section className="panel">
             <div className="panel-head">
               <h2>Saúde</h2>
-              <span className="muted">{h.nodata ? 'sem dados ainda' : healthLabel(h.score)}</span>
+              <span className="muted">{h.nodata ? 'Sem dados ainda' : healthLabel(h.score)}</span>
             </div>
             <div className="health-big">
               <Ring score={h.score} size={76} />
               <div className="h-rows">
                 {hRow('Consistência', h.consistency, 'dias com sessão')}
-                {hRow('Metas', h.completion, 'últimas sessões')}
+                {hRow('Metas', h.completion, 'Últimas sessões')}
                 {hRow('Segurança', h.safety, 'captcha e bloqueio na semana')}
               </div>
             </div>
@@ -604,7 +604,7 @@ export function Conta() {
       <section className="panel mt">
         <div className="panel-head">
           <h2>Calendário da jornada</h2>
-          <span className="muted">um quadrado por dia; a cor mostra quanto da meta foi batido</span>
+          <span className="muted">Um quadrado por dia; a cor mostra quanto da meta foi batido</span>
         </div>
         <div className="cal-wrap">
           <div>
@@ -650,7 +650,7 @@ export function Conta() {
       <section className="panel mt">
         <div className="panel-head">
           <h2>Eventos</h2>
-          <span className="muted">os mais recentes primeiro</span>
+          <span className="muted">Os mais recentes primeiro</span>
         </div>
         <div className="feed">
           {full.events.length ? (

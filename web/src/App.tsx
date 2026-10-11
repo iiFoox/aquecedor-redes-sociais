@@ -6,7 +6,7 @@ import { Onboarding } from './components/Onboarding.tsx';
 import { NomeAparelho } from './components/Aparelho.tsx';
 import { Confirm } from './components/Confirm.tsx';
 import { Palette } from './components/Palette.tsx';
-import { duration, hhmm } from './lib/format.ts';
+import { cap, duration, hhmm } from './lib/format.ts';
 import { effectiveTheme, useTheme } from './lib/theme.ts';
 import { useStore, type View } from './store.tsx';
 import { Ajustes } from './views/Ajustes.tsx';
@@ -275,7 +275,7 @@ export function App() {
   const now = new Date();
   const sub =
     view === 'cockpit' && config
-      ? `${now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })} · piloto automático ${config.active ? 'ligado' : 'desligado'} · janela ${config.start}–${config.end}`
+      ? `${cap(now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }))} · Piloto automático ${config.active ? 'ligado' : 'desligado'} · Janela ${config.start}–${config.end}`
       : SUB[view];
 
   return (

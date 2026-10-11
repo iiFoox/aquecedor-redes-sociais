@@ -43,24 +43,24 @@ function Traits({ p }: { p: Persona }) {
     [
       'Leitura',
       p.readSpeed > 1 ? `${pct(p.readSpeed)} mais devagar` : `${pct(p.readSpeed).replace('-', '')} mais rápida`,
-      'tempo lendo legendas e posts',
+      'Tempo lendo legendas e posts',
     ],
-    ['Ritmo', p.pace > 1 ? `${pct(p.pace)} mais calmo` : `${pct(p.pace).replace('-', '')} mais ágil`, 'cliques e transições'],
-    ['Paciência com vídeos', p.patience >= 1 ? 'assiste mais até o fim' : 'pula mais rápido', `${p.patience}x`],
-    ['Curtir', p.likeBias >= 1 ? 'curte mais cedo no dia' : 'curte mais tarde no dia', 'o total segue o plano'],
-    ['Horário preferido', `por volta das ${p.peak}h`, `espalha ±${p.spread.toString().replace('.', ',')} h`],
+    ['Ritmo', p.pace > 1 ? `${pct(p.pace)} mais calmo` : `${pct(p.pace).replace('-', '')} mais ágil`, 'Cliques e transições'],
+    ['Paciência com vídeos', p.patience >= 1 ? 'Assiste mais até o fim' : 'Pula mais rápido', `${p.patience}x`],
+    ['Curtir', p.likeBias >= 1 ? 'Curte mais cedo no dia' : 'Curte mais tarde no dia', 'O total segue o plano'],
+    ['Horário preferido', `Por volta das ${p.peak}h`, `Espalha ±${p.spread.toString().replace('.', ',')} h`],
     [
       'Distrações',
-      p.distraction >= 1.15 ? 'se distrai bastante' : p.distraction <= 0.85 ? 'se distrai pouco' : 'normal',
+      p.distraction >= 1.15 ? 'Se distrai bastante' : p.distraction <= 0.85 ? 'Se distrai pouco' : 'Normal',
       `${p.distraction}x`,
     ],
     [
       'Rolagem',
-      `passos de ~${p.scroll.step} px`,
+      `Passos de ~${p.scroll.step} px`,
       `${Math.round(p.scroll.flick * 100)}% rápidas · ${Math.round(p.scroll.overshoot * 100)}% passa do ponto`,
     ],
-    ['Digitação', `${p.typingCps.toString().replace('.', ',')} letras/s`, 'na busca do TikTok, às vezes erra e apaga'],
-    ['Curtir vídeo', `${Math.round((p.doubleTap ?? 0.4) * 100)}% com dois cliques`, 'o resto no coração'],
+    ['Digitação', `${p.typingCps.toString().replace('.', ',')} letras/s`, 'Na busca do TikTok, às vezes erra e apaga'],
+    ['Curtir vídeo', `${Math.round((p.doubleTap ?? 0.4) * 100)}% com dois cliques`, 'O resto no coração'],
   ];
   return (
     <dl className="nat-traits">
@@ -82,7 +82,7 @@ export function Naturalidade({ full }: { full: AccountFull }) {
     <section className="panel mt">
       <div className="panel-head">
         <h2>Naturalidade</h2>
-        <span className="muted">o jeito desta conta e os tempos da última sessão</span>
+        <span className="muted">O jeito desta conta e os tempos da última sessão</span>
       </div>
       <div className="nat-grid">
         <div>

@@ -58,7 +58,7 @@ function Instruments({ now }: { now: number }) {
         <div className="sub">
           {running.length
             ? running.map((a) => `@${a.username} há ${Math.max(0, Math.round((now - a.live!.startedAt) / 60000))} min`).join(' · ')
-            : 'nenhuma conta rodando'}
+            : 'Nenhuma conta rodando'}
         </div>
       </div>
       <div className="inst">
@@ -67,7 +67,7 @@ function Instruments({ now }: { now: number }) {
         <div className={`bar ${avg >= 1 ? 'ok' : ''}`}>
           <i style={{ width: `${pct(Math.min(1, avg))}%` }} />
         </div>
-        <div className="sub">{complete ? `${complete} de ${accounts.length} contas completas` : 'nenhuma conta completa ainda'}</div>
+        <div className="sub">{complete ? `${complete} de ${accounts.length} contas completas` : 'Nenhuma conta completa ainda'}</div>
       </div>
       <div className={`inst ${waiting.length ? 'attention' : ''}`}>
         <div className="eyebrow">Esperando você</div>
@@ -88,7 +88,7 @@ function Instruments({ now }: { now: number }) {
           {vacation
             ? 'modo férias ligado'
             : !config.active
-              ? 'piloto automático desligado'
+              ? 'Piloto automático desligado'
               : next
                 ? `@${next.a.username} · ${missing(next.a.plan, next.a.today)}`
                 : 'nenhuma conta com sessão pendente'}
@@ -405,14 +405,14 @@ export function Cockpit() {
         <section className="panel">
           <div className="panel-head">
             <h2>Ao vivo</h2>
-            <span className="muted">o que o motor fez, em todas as contas</span>
+            <span className="muted">O que o motor fez, em todas as contas</span>
           </div>
           <Feed />
         </section>
         <section className="panel">
           <div className="panel-head">
             <h2>Alertas</h2>
-            <span className="muted">{openAlerts ? plural(openAlerts, 'aberto', 'abertos') : 'nenhum aberto'}</span>
+            <span className="muted">{openAlerts ? plural(openAlerts, 'aberto', 'abertos') : 'Nenhum aberto'}</span>
           </div>
           <Alerts />
         </section>

@@ -26,7 +26,7 @@ export function Palette({ onClose, onNewAccount }: { onClose: () => void; onNewA
   const cmds = useMemo(() => {
     const c: Cmd[] = [];
     for (const a of accounts) {
-      c.push({ g: 'Contas', label: `@${a.username}`, hint: 'abrir página', ic: a.platform, run: () => go('conta', a.id) });
+      c.push({ g: 'Contas', label: `@${a.username}`, hint: 'Abrir página', ic: a.platform, run: () => go('conta', a.id) });
       if (a.live) c.push({ g: 'Contas', label: `Parar sessão · @${a.username}`, ic: 'stop', run: () => act.stop(a) });
       else if (a.attention?.kind === 'captcha')
         c.push({ g: 'Contas', label: `Abrir navegador (captcha) · @${a.username}`, ic: 'window', run: () => act.captcha(a) });
@@ -56,10 +56,10 @@ export function Palette({ onClose, onNewAccount }: { onClose: () => void; onNewA
             config.active ? 'Piloto automático desligado' : 'Piloto automático ligado',
           ),
       });
-    c.push({ g: 'Ações', label: 'Modo férias', hint: 'pausar tudo', ic: 'pause', run: () => go('rotina') });
+    c.push({ g: 'Ações', label: 'Modo férias', hint: 'Pausar tudo', ic: 'pause', run: () => go('rotina') });
     c.push({ g: 'Ações', label: 'Fazer backup dos logins agora', ic: 'cloud', run: () => act.backupNow() });
     c.push({ g: 'Ações', label: 'Trocar tema', ic: 'moon', run: toggleTheme });
-    c.push({ g: 'Ações', label: 'Como usar', hint: 'guia de cada tela', ic: 'help', run: () => go('ajuda') });
+    c.push({ g: 'Ações', label: 'Como usar', hint: 'Guia de cada tela', ic: 'help', run: () => go('ajuda') });
     return c;
   }, [accounts, go, act, config, setConfig, run, onNewAccount, toggleTheme]);
 

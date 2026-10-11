@@ -5,10 +5,17 @@ import * as f from '../web/src/lib/format.ts';
 
 test('quanto falta para a meta, em português', () => {
   const plan = { minutes: 12, watch: 27, like: 5, follow: 0, profile: 0, search: 0 };
-  assert.equal(f.missing(plan, { watch: 55, like: 4 }), 'falta 1 curtida');
-  assert.equal(f.missing(plan, { watch: 25, like: 3 }), 'faltam 2 vídeos e 2 curtidas');
-  assert.equal(f.missing(plan, { watch: 27, like: 5 }), 'meta batida');
-  assert.equal(f.missing({ like: 3, search: 1, profile: 2 }, {}), 'faltam 3 curtidas, 1 busca e 2 perfis');
+  assert.equal(f.missing(plan, { watch: 55, like: 4 }), 'Falta 1 curtida');
+  assert.equal(f.missing(plan, { watch: 25, like: 3 }), 'Faltam 2 vídeos e 2 curtidas');
+  assert.equal(f.missing(plan, { watch: 27, like: 5 }), 'Meta batida');
+  assert.equal(f.missing({ like: 3, search: 1, profile: 2 }, {}), 'Faltam 3 curtidas, 1 busca e 2 perfis');
+});
+
+test('primeira letra maiúscula (textos montados na hora)', () => {
+  assert.equal(f.cap('sábado, 10/10'), 'Sábado, 10/10');
+  assert.equal(f.cap('início'), 'Início');
+  assert.equal(f.cap('Já maiúscula'), 'Já maiúscula');
+  assert.equal(f.cap(''), '');
 });
 
 test('cor do dia no calendário', () => {

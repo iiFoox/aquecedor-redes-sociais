@@ -108,7 +108,7 @@ export function Ajustes() {
                   direito no ícone perto do relógio.
                 </span>
               </div>
-              <Ok on yes="ligado" no="" />
+              <Ok on yes="Ligado" no="" />
             </div>
           ) : (
             <>
@@ -121,14 +121,14 @@ export function Ajustes() {
                       : 'Só quando ligado por "npm run ligar" (agora está pelo npm start).'}
                   </span>
                 </div>
-                <Ok on={!!system?.pm2} yes="ligado" no="desligado" />
+                <Ok on={!!system?.pm2} yes="Ligado" no="Desligado" />
               </div>
               <div className="set-row">
                 <div>
                   <b>Liga junto com o Windows</b>
                   <span>{system?.autostart ? 'Para tirar: npm run autostart:desligar' : 'Para ligar: npm run autostart:ligar'}</span>
                 </div>
-                <Ok on={!!system?.autostart} yes="ligado" no="desligado" />
+                <Ok on={!!system?.autostart} yes="Ligado" no="Desligado" />
               </div>
             </>
           )}
@@ -148,7 +148,7 @@ export function Ajustes() {
             </div>
             <div>
               <dt>Último</dt>
-              <dd>{last?.at ? `${new Date(last.at).toLocaleString('pt-BR')} · ${last.sizeMB} MB` : 'nenhum ainda'}</dd>
+              <dd>{last?.at ? `${new Date(last.at).toLocaleString('pt-BR')} · ${last.sizeMB} MB` : 'Nenhum ainda'}</dd>
             </div>
             <div>
               <dt>Guarda</dt>
@@ -159,7 +159,7 @@ export function Ajustes() {
             <div>
               <dt>Situação</dt>
               <dd>
-                {backup?.running ? 'fazendo backup...' : backup?.due ? 'pendente: roda quando nenhuma conta estiver aberta' : 'em dia'}
+                {backup?.running ? 'Fazendo backup...' : backup?.due ? 'Pendente: roda quando nenhuma conta estiver aberta' : 'Em dia'}
               </dd>
             </div>
           </dl>

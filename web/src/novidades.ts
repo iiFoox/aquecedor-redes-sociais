@@ -9,6 +9,14 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.13',
+    data: '2026-10-10',
+    titulo: 'Textos com a primeira letra maiúscula',
+    itens: [
+      'Revisão do painel inteiro: títulos, selos, botões, legendas e dicas agora começam com letra maiúscula (ex.: "Rodando aqui", "Dias 1 a 3", "Faltam 2 curtidas").',
+    ],
+  },
+  {
     versao: '2.1.12',
     data: '2026-10-10',
     titulo: 'Metas: aviso de "nenhum modelo" certinho no celular',

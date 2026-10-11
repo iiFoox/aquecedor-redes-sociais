@@ -52,6 +52,9 @@ export function heat(v: number | null | undefined) {
   return 'h4';
 }
 
+// Primeira letra maiúscula (texto montado na hora, ex.: dia da semana)
+export const cap = (s: string) => (s ? s.charAt(0).toLocaleUpperCase('pt-BR') + s.slice(1) : s);
+
 export const healthLabel = (s: number) => (s >= 70 ? 'Saudável' : s >= 40 ? 'Atenção' : 'Crítica');
 export const healthColor = (s: number) => (s >= 70 ? 'var(--ok)' : s >= 40 ? 'var(--warn)' : 'var(--bad)');
 
@@ -91,9 +94,9 @@ export function missing(plan: Record<string, number>, done: Record<string, numbe
       const n = plan[k] - (done[k] || 0);
       return `${n} ${unit(k, n)}`;
     });
-  if (!parts.length) return 'meta batida';
+  if (!parts.length) return 'Meta batida';
   const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} e ${parts[parts.length - 1]}` : parts[0];
-  return `${parts.length === 1 && parts[0].startsWith('1 ') ? 'falta' : 'faltam'} ${list}`;
+  return `${parts.length === 1 && parts[0].startsWith('1 ') ? 'Falta' : 'Faltam'} ${list}`;
 }
 
 export const goalKeys = (plan: Record<string, number>, done: Record<string, number>, order: string[]) =>

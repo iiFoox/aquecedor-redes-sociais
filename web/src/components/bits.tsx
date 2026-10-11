@@ -120,7 +120,7 @@ export function Journey({ a }: { a: Account; meta?: Meta }) {
         <span>
           <b>Fase {a.phase.n}</b> · {a.phase.name}
         </span>
-        <span>{ready ? 'pronta para postar' : `pronta em ${left} ${left === 1 ? 'dia' : 'dias'}, ${ddmm(readyDate)}`}</span>
+        <span>{ready ? 'Pronta para postar' : `Pronta em ${left} ${left === 1 ? 'dia' : 'dias'}, ${ddmm(readyDate)}`}</span>
       </div>
     </div>
   );

@@ -96,7 +96,7 @@ export function Rotina() {
               <b>Horário em que este PC fica ligado</b>
               <span>Aprendido nos últimos dias. As sessões caem dentro dele, para nenhum dia se perder com o PC desligado.</span>
             </div>
-            <span className="mono">{hoursText(system?.onHours) || 'aprendendo (2 dias)'}</span>
+            <span className="mono">{hoursText(system?.onHours) || 'Aprendendo (2 dias)'}</span>
           </div>
           <div className="set-row">
             <div>

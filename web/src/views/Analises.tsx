@@ -20,7 +20,7 @@ export function Analises() {
         <div className="inst">
           <div className="eyebrow">Sessões</div>
           <div className="big">{sessions}</div>
-          <div className="sub">nos últimos 30 dias</div>
+          <div className="sub">Nos últimos 30 dias</div>
         </div>
         <div className="inst">
           <div className="eyebrow">Sessões concluídas</div>
@@ -32,18 +32,18 @@ export function Analises() {
         <div className="inst">
           <div className="eyebrow">Tempo de tela</div>
           <div className="big">{(total / 60).toFixed(1).replace('.', ',')} h</div>
-          <div className="sub">somando todas as contas</div>
+          <div className="sub">Somando todas as contas</div>
         </div>
         <div className={`inst ${grave ? 'attention' : ''}`}>
           <div className="eyebrow">Captchas e bloqueios</div>
           <div className="big">{grave}</div>
-          <div className="sub">{grave ? 'veja os prints na página de cada conta' : 'nenhum em 30 dias'}</div>
+          <div className="sub">{grave ? 'Veja os prints na página de cada conta' : 'Nenhum em 30 dias'}</div>
         </div>
       </div>
       <section className="panel">
         <div className="panel-head">
           <h2>Minutos por dia</h2>
-          <span className="muted">todas as contas · 30 dias</span>
+          <span className="muted">Todas as contas · 30 dias</span>
         </div>
         <BarChart
           vals={mins}
