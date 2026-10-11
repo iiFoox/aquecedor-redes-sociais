@@ -2914,7 +2914,7 @@ tr:last-child td {
 .meta-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 .meta-card-head {
   display: flex;
@@ -2947,7 +2947,7 @@ tr:last-child td {
 .meta-f5 {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   font-size: 12.5px;
 }
 .meta-nums,
@@ -2956,7 +2956,7 @@ tr:last-child td {
 .meta-card-foot {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 10px 8px;
   align-items: center;
 }
 .meta-num {

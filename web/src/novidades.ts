@@ -9,6 +9,14 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.8',
+    data: '2026-10-10',
+    titulo: 'Ajuste de interface nas Metas Personalizadas',
+    itens: [
+      'Aumentado o espaçamento entre os itens no card de Metas Personalizadas para não ficarem "colados" uns aos outros.',
+    ],
+  },
+  {
     versao: '2.1.7',
     data: '2026-10-10',
     titulo: 'Metas personalizadas fecham o dia certinho; TikTok: follows sem pausa, com aviso',
