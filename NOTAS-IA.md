@@ -4,6 +4,21 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
+## 2026-10-11 · Claude (atualiza ao abrir + app mais leve, 2.1.14)
+- Pedido: instalar a atualização antes de começar as sessões quando o PC liga; instalador sempre terminar na última
+  versão; deixar o app mais leve. (A "hora marcada" da liberação foi descartada pelo dono: já tinha liberado.)
+- Feito: `desktop/main.js` `updateFirst` (antes de ligar o motor: procura com limite de 15 s; versão nova = baixa,
+  instala e volta já nela; sem internet/erro = segue normal). `desktop/updater.js`: cada parte com limite de 10 min.
+  `scripts/podar.js` (chamado no `scripts/manifesto.js`): tira os 65 pacotes que só o PM2 usa e 202 arquivos de
+  documentação/tipos: 3.785 → 1.497 arquivos, 42 → 29 MB. asar NÃO: testei (funciona com ELECTRON_RUN_AS_NODE), mas
+  arquivo único pela metade = app não abre e não se conserta; ficou anotado no CLAUDE.md.
+- Testes: suíte 199 + teste da poda (só `navegador-login` instável); QA com a cópia de outra identidade:
+  autoconserto 27/27 e atualizar ao abrir 17/17 (o motor da versão velha nunca ligou), ambos com o app podado;
+  fumaça do app podado: todos os .js do app carregam e o Edge abre com o plugin do robô.
+- Publicado: 2.1.14 no canal de teste. Estável continua 2.1.13 (liberar só com o OK do dono).
+- Pendente: o dono testar a 2.1.14; scripts de QA do instalador estão no rascunho do Claude (qa11.js, qa12.js,
+  build-teste.js) — se outra IA precisar, pedir ao dono para o Claude colocá-los em `scripts/qa/`.
+
 ## 2026-10-11 · Claude (2.1.13 liberada para todos)
 - Pedido: o dono mandou subir para produção.
 - Feito: `npm run liberar` (conferiu as 3 partes); `latest.json` e `latest-teste.json` = 2.1.13. Depois: 199 testes,

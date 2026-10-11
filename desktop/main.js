@@ -575,7 +575,7 @@ async function installUpdate(opts) {
   }
   const prev = readPending();
   const attempts = prev && prev.to === to ? (prev.attempts || 1) + 1 : 1;
-  const hidden = auto || !(win && win.isVisible());
+  const hidden = opts && typeof opts.hidden === 'boolean' ? opts.hidden : auto || !(win && win.isVisible());
   writePending({ from: app.getVersion(), to, at: Date.now(), attempts, hidden });
   log(`Atualização: instalando ${app.getVersion()} → ${to} (${auto ? 'sozinha, nada aberto' : 'você pediu'}, tentativa ${attempts})`);
   if (!(opts && opts.repair))
@@ -653,6 +653,45 @@ function installerRunning() {
   );
 }
 
+// Ao abrir: versão nova já liberada no servidor? Baixa e instala ANTES de ligar o motor (as sessões só começam
+// depois, já na versão nova). Também é o que deixa uma instalação nova sempre na última versão, mesmo com um
+// instalador antigo. Sem internet, servidor lento (15 s) ou download que falha: segue normal e a procura de sempre
+// tenta depois. Não roda logo depois de uma atualização que não terminou (a tentativa de sempre cuida disso).
+// Devolve true se o app está fechando para instalar.
+async function updateFirst(pending, hidden) {
+  if (!app.isPackaged || pending.retry || readPending()) return false;
+  let m;
+  try {
+    m = await Promise.race([
+      updater.latest(app.getVersion(), UPDATE_BASE, channel()),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('servidor demorou')), 15000)),
+    ]);
+  } catch (e) {
+    log(`Atualização ao abrir: não consegui procurar (${e.message}). Sigo e procuro depois`);
+    return false;
+  }
+  if (!m) return false;
+  log(`Atualização ao abrir: versão ${m.version} disponível. Instalo antes de começar as sessões`);
+  setState('cinza', `${NAME}: baixando a versão ${m.version}...`);
+  notify(
+    'Atualizando antes de começar',
+    `Baixando a versão ${m.version}. Leva alguns minutos; as contas começam depois, já na versão nova.`,
+  );
+  updating = true;
+  try {
+    updateFile = await updater.download(m, path.join(app.getPath('temp'), `${APP_ID}-update`), () => {}, UPDATE_BASE);
+    updateSha = m.sha256;
+    updateReady = m.version;
+  } catch (e) {
+    log(`Atualização ao abrir: o download falhou (${e.message}). Sigo nesta versão e tento depois`);
+    return false;
+  } finally {
+    updating = false;
+  }
+  await installUpdate({ auto: true, hidden });
+  return quitting === true; // o instalador abriu: o app fecha e volta na versão nova
+}
+
 // Abriu depois de uma atualização? Confere se ficou na versão nova. Devolve se deve começar escondido.
 function checkPending() {
   const p = readPending();
@@ -727,8 +766,13 @@ if (!app.requestSingleInstanceLock()) {
       return repair(`${integ.count} arquivos faltando`, integ.missing.join('\n'));
     }
     if (app.isPackaged) saveSettings({ repairs: [] }); // instalação boa: zera as tentativas de conserto
-    startChild('motor', 'motor/index.js');
-    startChild('painel', 'painel/index.js');
+    // Versão nova esperando no servidor: instala antes de as sessões começarem
+    if (await updateFirst(pending, HIDDEN || pending.hidden)) return;
+    // (se o instalador não abriu, installUpdate já religou motor e painel)
+    if (!children.motor || children.motor.child.exitCode !== null) {
+      startChild('motor', 'motor/index.js');
+      startChild('painel', 'painel/index.js');
+    }
     // Primeira abertura do app instalado: liga "Iniciar com o Windows". Já ligado: confere se aponta para este
     // executável (a pasta pode ter mudado numa atualização) e corrige.
     if (app.isPackaged && settings().autostart === undefined) setAutostart(true);

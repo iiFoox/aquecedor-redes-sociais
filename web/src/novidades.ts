@@ -9,6 +9,17 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.14',
+    data: '2026-10-11',
+    titulo: 'Atualiza antes de começar e instala mais rápido',
+    itens: [
+      'Ao ligar o computador (ou abrir o app), se tiver versão nova, o app baixa e instala primeiro e só depois começa a aquecer as contas, já na versão nova. Sem internet, abre normal e tenta depois.',
+      'Instalar com um instalador antigo agora termina sempre na versão mais nova: o app confere no servidor logo ao abrir.',
+      'App mais leve: 60% menos arquivos (de 3.785 para 1.497), o que deixa a instalação e as atualizações bem mais rápidas, principalmente em computador mais fraco.',
+      'Se a internet cair no meio de uma atualização, ela não fica presa: desiste e tenta de novo depois.',
+    ],
+  },
+  {
     versao: '2.1.13',
     data: '2026-10-10',
     titulo: 'Textos com a primeira letra maiúscula',

@@ -197,3 +197,47 @@ test('canais: estável lê latest.json, teste lê latest-teste.json; canal desco
   assert.equal(await updater.latest('2.2.0', updater.BASE, 'teste'), null, 'já está na versão em teste');
   assert.deepEqual(asked, ['latest.json', 'latest-teste.json', 'latest.json', 'latest-teste.json']);
 });
+
+test('poda do pacote: tira o que só o PM2 usa e o que não roda; mantém tudo que o app carrega', () => {
+  const { prune } = require('../scripts/podar');
+  const app = fs.mkdtempSync(path.join(os.tmpdir(), 'wu-poda-'));
+  const pkg = (dir, name, deps = {}, files = {}) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name, dependencies: deps }));
+    fs.writeFileSync(path.join(dir, 'index.js'), 'module.exports = 1;');
+    for (const [f, s] of Object.entries(files)) fs.writeFileSync(path.join(dir, f), s);
+  };
+  const nm = (...p) => path.join(app, 'node_modules', ...p);
+  pkg(app, 'app', { express: '1', '@supabase/supabase-js': '1', pm2: '1' });
+  pkg(nm('express'), 'express', { 'on-finished': '1', debug: '1' }, { 'README.md': 'x', 'index.d.ts': 'x' });
+  pkg(nm('on-finished'), 'on-finished', { 'ee-first': '1' });
+  pkg(nm('ee-first'), 'ee-first');
+  pkg(nm('debug'), 'debug', { ms: '1' });
+  pkg(nm('ms'), 'ms');
+  pkg(nm('@supabase', 'supabase-js'), '@supabase/supabase-js', { ws: '1' });
+  pkg(nm('@supabase', 'supabase-js', 'node_modules', 'ws'), 'ws'); // aninhado: é dele
+  pkg(nm('ws'), 'ws'); // o de cima é do pm2
+  pkg(nm('pm2'), 'pm2', { lodash: '1', 'ee-first': '1', 'supports-color': '1' });
+  pkg(nm('lodash'), 'lodash');
+  pkg(nm('@pm2', 'io'), '@pm2/io');
+  pkg(nm('supports-color'), 'supports-color', { 'has-flag': '1' });
+  pkg(nm('has-flag'), 'has-flag');
+  const r = prune(app);
+  const has = (...p) => fs.existsSync(nm(...p));
+  for (const p of [
+    ['express'],
+    ['on-finished'],
+    ['ee-first'],
+    ['debug'],
+    ['ms'],
+    ['@supabase', 'supabase-js'],
+    ['@supabase', 'supabase-js', 'node_modules', 'ws'],
+    ['supports-color'],
+    ['has-flag'],
+  ])
+    assert.ok(has(...p), `tirou ${p.join('/')}, que o app usa`);
+  for (const p of [['lodash'], ['ws'], ['pm2'], ['@pm2']]) assert.ok(!has(...p), `deixou ${p.join('/')}, que só o PM2 usa`);
+  assert.ok(!has('express', 'README.md') && !has('express', 'index.d.ts') && has('express', 'index.js'));
+  assert.deepEqual(r, { packages: 4, files: 2 });
+  fs.rmSync(app, { recursive: true, force: true });
+});

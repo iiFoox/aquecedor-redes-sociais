@@ -106,6 +106,13 @@ este aparelho` (nunca upsert): aparelho desatualizado não puxa de volta uma con
   o instalador vai em partes de 45 MB + `latest.json` (SHA-256 de cada parte e do todo) e é instalado em silêncio (`/S --force-run --updated`).
   Janela aberta: pergunta. Janela fechada e nada aberto (sem sessão nem navegador): instala sozinha e volta escondida.
   Antes de instalar grava `data/update-pending.json`; na volta confere a versão (`logic.pendingUpdate`), tenta de novo até 3 vezes.
+  Ao abrir (`updateFirst`, antes de ligar o motor): versão nova no servidor = baixa e instala ANTES das sessões (instalação
+  nova com instalador antigo também acaba na última). Procura com limite de 15 s; sem internet ou falha, segue normal.
+  Cada parte do download tem até 10 min (`AbortSignal.timeout`).
+  Poda do pacote (`scripts/podar.js`, chamado pelo `scripts/manifesto.js` antes da lista do autoconserto): tira os
+  pacotes que só o PM2 usa (o PM2 é só do terminal) e `.md`/`.d.ts`/`.map`: 3.785 → ~1.500 arquivos. `asar` continua
+  desligado de propósito: com tudo num arquivo só, uma atualização interrompida deixaria o app sem abrir e sem como se
+  consertar (o autoconserto precisa dos arquivos soltos).
   `scripts/instalar.ps1`: primeira instalação num aparelho novo (`irm .../downloads/instalar.ps1 | iex`). Ícones: `npm run icones`.
 - Login do aparelho (`motor/cloud.js`): entrar de novo no painel SUBSTITUI o login guardado (trocar ou recuperar a senha derruba
   os outros logins no Supabase; o painel entrega o novo ao motor na hora). Login caído (`SIGNED_OUT` ou login salvo inválido):

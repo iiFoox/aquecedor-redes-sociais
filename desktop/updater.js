@@ -38,7 +38,8 @@ async function download(m, dir, onProgress = () => {}, base = BASE) {
   try {
     for (const p of m.parts) {
       if (!/^[\w.-]+$/.test(p.name)) throw new Error('Nome de parte inválido');
-      const r = await fetch(`${base}/${encodeURIComponent(p.name)}`, { cache: 'no-store' });
+      // Cada parte (45 MB) tem até 10 min: internet que cai no meio não deixa a atualização presa para sempre
+      const r = await fetch(`${base}/${encodeURIComponent(p.name)}`, { cache: 'no-store', signal: AbortSignal.timeout(10 * 60000) });
       if (!r.ok) throw new Error(`Parte ${p.name}: ${r.status}`);
       const buf = Buffer.from(await r.arrayBuffer());
       if (crypto.createHash('sha256').update(buf).digest('hex') !== p.sha256) throw new Error(`Parte ${p.name} chegou corrompida`);
