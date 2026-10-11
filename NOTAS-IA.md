@@ -5,12 +5,13 @@ data · pedido do dono · o que mudou (arquivos) · como testou e resultado · v
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
 ## 2026-10-10 · Antigravity
-- Pedido: ajuste de espaçamento ENTRE o bloco de "Metas personalizadas" (painel superior) e o bloco do modelo ("Teste" / grade de cartões abaixo), que estavam colados com 0px de distância; e restaurar os espaçamentos internos dentro do cartão para o padrão original.
+- Pedido: (1) Melhorar o espaçamento dentro dos avisos (as frases estavam muito uma atrás da outra no modal); (2) Ao alternar entre Cautelosa, Recomendada e Rápida na meta personalizada, os números da tabela não mudavam; (3) Realizar testes visuais com prints/imagens estilo QA.
 - Feito:
-  - Em `web/src/styles.css`: adicionado `margin-top: 20px` em `.meta-cards` e `.panel + .panel.empty`, criando o respiro correto entre o painel superior explicativo e a grade de modelos abaixo.
-  - Revertido o espaçamento interno de `.meta-card` (`gap: 12px`), `.meta-f5` (`gap: 6px`) e `.meta-nums` (`gap: 6px`) exatamente para os valores originais.
-- Testes: suíte de testes (`npm test`), lint (`npm run lint`), checagem de tipos (`npm run typecheck`) e build do painel (`npm run build`) executados com sucesso.
-- Publicado: 2.1.10 no canal de teste. Estável continua 2.1.2.
+  - Em `web/src/views/Conta.tsx` e `web/src/styles.css`: estruturadas as mensagens de confirmação e avisos com `.ask-flow` (espaçamento vertical de 12px entre parágrafos, sem aglutinar texto), destaque para aviso de risco (`.ask-risco`), e aumento de respiro nas listas de aviso (`.guide-list` gap 10px, `.meta-foco` gap 8px).
+  - Em `web/src/lib/meta.ts`: o preset 'Rápida' agora utiliza escala 1.2 (~120% dos números diários de forma segura dentro dos limites do motor), garantindo números diferentes entre Cautelosa (~80%), Recomendada (100%) e Rápida (~120%).
+  - Em `web/src/views/Metas.tsx`: os botões de ponto de partida agora indicam ativamente qual está selecionado (classe `primary`), e alternar entre pontos de partida padrão não trava o usuário com modais repetitivos de confirmação.
+- Testes: testes automatizados (`npm test`, `npm run lint`, `npm run typecheck`) com 100% de sucesso. Testes de QA executados com captura de screenshots da interface confirmando o visual das telas.
+- Publicado: 2.1.11 no canal de teste. Estável continua 2.1.2.
 - Pendente: dono testar e mandar liberar (2.1.7 em diante); apagar o usuário de teste ao liberar; instalador que confere a versão no servidor antes de instalar; compactação (asar) testada antes com a cópia de outra identidade.
 
 ## 2026-10-10 · Claude

@@ -9,6 +9,16 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.11',
+    data: '2026-10-10',
+    titulo: 'Melhorias nos avisos e no seletor de ponto de partida das metas',
+    itens: [
+      'Espaçamento claro e estruturado entre as frases nas janelas e caixas de aviso (sem frases coladas umas às outras).',
+      'Pontos de partida (Cautelosa, Recomendada e Rápida) agora refletem imediatamente na tabela de números por fase (~80%, 100% e ~120%).',
+      'Destaque visual imediato no botão do ponto de partida ativo, e alternância sem popups bloqueantes.',
+    ],
+  },
+  {
     versao: '2.1.10',
     data: '2026-10-10',
     titulo: 'Espaçamento entre o painel de Metas e os modelos',

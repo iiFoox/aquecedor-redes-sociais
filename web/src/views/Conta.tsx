@@ -207,14 +207,14 @@ function GoalPicker({ a }: { a: Account }) {
     const ok = await ask({
       title: t ? `Usar a meta "${t.name}" em @${a.username}?` : `Voltar @${a.username} para a meta recomendada?`,
       body: (
-        <>
+        <div className="ask-flow">
           <p>{meta ? mudancaDeFase(meta.phases, a.day, a.readyDay, readyDay) : null}</p>
-          <p>
-            O plano de hoje é refeito com a meta {t ? 'nova' : 'recomendada'}.{' '}
-            {a.live ? 'A sessão que está rodando agora termina com o plano antigo; a mudança vale a partir da próxima. ' : ''}
-            {t ? 'Meta personalizada é por sua conta e risco.' : ''}
-          </p>
-        </>
+          <p>O plano de hoje é refeito com a meta {t ? 'nova' : 'recomendada'}.</p>
+          {a.live ? (
+            <p>A sessão que está rodando agora termina com o plano antigo; a mudança vale a partir da próxima.</p>
+          ) : null}
+          {t ? <p className="ask-risco">Meta personalizada é por sua conta e risco.</p> : null}
+        </div>
       ),
       ok: t ? 'Usar esta meta' : 'Voltar para a recomendada',
     });

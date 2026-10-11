@@ -299,8 +299,13 @@ function Editor({
     onClose();
   };
   const start = async (p: Preset) => {
+    const list = presets(plans);
+    const matchesPreset = list.some(
+      (pr) => pr.readyDay === t.readyDay && JSON.stringify(t.phases) === JSON.stringify(pr.phases)
+    );
     const changed = JSON.stringify(t.phases) !== JSON.stringify(draft.phases) || t.readyDay !== draft.readyDay;
     if (
+      !matchesPreset &&
       changed &&
       !(await ask({
         title: `Começar de "${p.name}"?`,
@@ -393,11 +398,21 @@ function Editor({
         </div>
         <div className="meta-presets">
           <span className="dim">Começar de:</span>
-          {presets(plans).map((p) => (
-            <button key={p.key} type="button" className="btn sm" onClick={() => start(p)} title={p.desc}>
-              {p.name} <span className="dim">· {p.readyDay} dias</span>
-            </button>
-          ))}
+          {presets(plans).map((p) => {
+            const active = t.readyDay === p.readyDay && JSON.stringify(t.phases) === JSON.stringify(p.phases);
+            return (
+              <button
+                key={p.key}
+                type="button"
+                className={`btn sm${active ? ' primary' : ''}`}
+                onClick={() => start(p)}
+                title={p.desc}
+                aria-pressed={active}
+              >
+                {p.name} <span className="dim">· {p.readyDay} dias</span>
+              </button>
+            );
+          })}
         </div>
         <div className="meta-campos">
           <div className="field">

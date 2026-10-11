@@ -142,8 +142,8 @@ export function total(base: Phase[], phases: Nums[], readyDay: number, key: stri
   return serie(base, phases, readyDay, key, Math.max(1, readyDay - 1)).reduce((s, v) => s + v, 0);
 }
 
-// Pontos de partida do editor: cautelosa (30 dias, ~80% do recomendado), recomendada (22) e rápida (15, os números da
-// recomendada em menos dias). Metas zeradas continuam zeradas; nenhuma vira impossível.
+// Pontos de partida do editor: cautelosa (30 dias, ~80% do recomendado), recomendada (22) e rápida (15 dias,
+// números ~120% para aquecimento acelerado). Metas zeradas continuam zeradas; nenhuma vira impossível.
 export interface Preset {
   key: string;
   name: string;
@@ -157,7 +157,7 @@ export function presets(plans: Nums[]): Preset[] {
   return [
     { key: 'cautelosa', name: 'Cautelosa', readyDay: 30, desc: '30 dias, ~80% dos números', phases: scale(0.8) },
     { key: 'recomendada', name: 'Recomendada', readyDay: READY_DAY, desc: `${READY_DAY} dias, os números recomendados`, phases: scale(1) },
-    { key: 'rapida', name: 'Rápida', readyDay: 15, desc: '15 dias, os números recomendados', phases: scale(1) },
+    { key: 'rapida', name: 'Rápida', readyDay: 15, desc: '15 dias, ~120% dos números', phases: scale(1.2) },
   ];
 }
 

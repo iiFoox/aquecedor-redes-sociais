@@ -2791,7 +2791,7 @@ tr:last-child td {
   padding-left: 20px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 10px;
   line-height: 1.55;
   max-width: 76ch;
   color: var(--muted);
@@ -3083,7 +3083,7 @@ li.meta-erro {
   font-size: 13.5px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 .meta-foco-dica {
   margin-top: 10px;
@@ -3275,7 +3275,18 @@ li.meta-erro {
   filter: brightness(1.08);
 }
 .ask-body {
-  line-height: 1.55;
+  line-height: 1.6;
+}
+.ask-flow {
+  display: grid;
+  gap: 12px;
+}
+.ask-flow p {
+  margin: 0;
+}
+.ask-risco {
+  color: var(--warn);
+  font-weight: 500;
 }
 @media (max-width: 760px) {
   .meta-cards {
