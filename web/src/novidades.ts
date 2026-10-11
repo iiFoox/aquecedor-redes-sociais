@@ -9,6 +9,14 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.9',
+    data: '2026-10-10',
+    titulo: 'Aumento mais expressivo no espaçamento',
+    itens: [
+      'O espaçamento entre as metas e os cards aumentou ainda mais para garantir que os elementos não fiquem colados.',
+    ],
+  },
+  {
     versao: '2.1.8',
     data: '2026-10-10',
     titulo: 'Ajuste de interface nas Metas Personalizadas',
