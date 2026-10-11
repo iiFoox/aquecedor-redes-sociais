@@ -9,6 +9,15 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.10',
+    data: '2026-10-10',
+    titulo: 'Espaçamento entre o painel de Metas e os modelos',
+    itens: [
+      'Espaçamento adequado adicionado entre o painel explicativo superior e os cartões de metas personalizadas abaixo.',
+      'Espaçamento interno dos cartões restaurado para o padrão original.',
+    ],
+  },
+  {
     versao: '2.1.9',
     data: '2026-10-10',
     titulo: 'Aumento mais expressivo no espaçamento',

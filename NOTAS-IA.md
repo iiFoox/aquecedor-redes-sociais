@@ -5,14 +5,13 @@ data · pedido do dono · o que mudou (arquivos) · como testou e resultado · v
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
 ## 2026-10-10 · Antigravity
-- Pedido: ajuste visual no card de metas personalizadas (estava "colado", precisando de espaçamento).
-- Feito: aumentada significativamente a margem e espaçamento na folha de estilos (`web/src/styles.css`):
-  - `.meta-card` (espaçamento entre os blocos dentro do card) subiu de `12px` para `24px`.
-  - `.meta-f5` (espaçamento antes das listas de badges) subiu de `6px` para `12px`.
-  - `.meta-nums`, `.meta-pills`, `.meta-users` (espaçamento de quebra de linha `flex-wrap` entre os badges em si) subiu de `6px` para `16px 12px` (16px vertical, 12px horizontal).
-- Testes: os testes do sistema, lint e typecheck passaram sem quebras (`npm test`, `npm run lint`, `npm run typecheck`). Build finalizada com sucesso.
-- Publicado: 2.1.9 no canal de teste. Estável continua 2.1.2.
-- Pendente: dono testar e mandar liberar (2.1.7 e a 2.1.8); apagar o usuário de teste ao liberar; instalador que confere a versão no servidor antes de instalar; compactação (asar) testada antes com a cópia de outra identidade.
+- Pedido: ajuste de espaçamento ENTRE o bloco de "Metas personalizadas" (painel superior) e o bloco do modelo ("Teste" / grade de cartões abaixo), que estavam colados com 0px de distância; e restaurar os espaçamentos internos dentro do cartão para o padrão original.
+- Feito:
+  - Em `web/src/styles.css`: adicionado `margin-top: 20px` em `.meta-cards` e `.panel + .panel.empty`, criando o respiro correto entre o painel superior explicativo e a grade de modelos abaixo.
+  - Revertido o espaçamento interno de `.meta-card` (`gap: 12px`), `.meta-f5` (`gap: 6px`) e `.meta-nums` (`gap: 6px`) exatamente para os valores originais.
+- Testes: suíte de testes (`npm test`), lint (`npm run lint`), checagem de tipos (`npm run typecheck`) e build do painel (`npm run build`) executados com sucesso.
+- Publicado: 2.1.10 no canal de teste. Estável continua 2.1.2.
+- Pendente: dono testar e mandar liberar (2.1.7 em diante); apagar o usuário de teste ao liberar; instalador que confere a versão no servidor antes de instalar; compactação (asar) testada antes com a cópia de outra identidade.
 
 ## 2026-10-10 · Claude
 - Pedido: metas personalizadas fechando certinho (principalmente TikTok); TikTok sem pausa de follows, com aviso.
