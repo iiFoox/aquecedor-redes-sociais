@@ -171,3 +171,82 @@ Instalar e usar o aplicativo (passo a passo do dono): `GUIA-INSTALACAO.md`.
 - Cada fase termina com testes e lint passando, commit e push.
 - QA ao vivo: nunca entrar pelo PAINEL com usuário de teste enquanto houver contas sem dono (`owner_id` null): o painel
   chama `claim_legacy_accounts` e o usuário de teste vira dono das contas antigas. Logar o teste direto pelo supabase-js.
+
+## Como trabalhamos (vale para qualquer IA neste projeto)
+
+O dono alterna entre o Claude e outra IA. Quem pegar o projeto segue este roteiro e ANOTA tudo em `NOTAS-IA.md`
+(o que fez, o que testou, o que ficou pendente), para a próxima IA continuar de onde parou. Respostas ao dono em
+português do Brasil, simples, sem jargão.
+
+### Roteiro de cada mudança
+1. Ler este arquivo inteiro e o `NOTAS-IA.md` (entradas do topo primeiro). `git log --oneline -15` mostra o que mudou.
+2. Achar o código certo antes de mexer (as seções "Estrutura" e "Regras" acima dizem onde fica cada coisa).
+3. Mudança de regra ou lógica: escrever primeiro um teste que FALHA mostrando o problema, depois corrigir até passar.
+4. `npm test`, `npm run lint`, `npm run typecheck`. Mexeu no painel: `npm run build`. `npx prettier --write <arquivos>`.
+   - `tests/navegador-login.test.js` às vezes falha só junto com a suíte inteira; sozinho
+     (`node --test tests/navegador-login.test.js`) passa. Qualquer OUTRA falha tem de ser resolvida.
+5. Subir a versão em `package.json` e `package-lock.json` (as 2 primeiras ocorrências de "version") e escrever a
+   entrada em `web/src/novidades.ts` (no topo, na linguagem do dono: o que ele vai notar).
+6. Commit em português no estilo dos anteriores, push.
+7. `npm run publicar` (vai só para o CANAL DE TESTE). Conferir `latest-teste.json` com a versão nova e `latest.json`
+   (estável) sem mudar.
+8. Dizer ao dono o que testar. `npm run liberar` SÓ quando ele disser que testou e está tudo ok.
+9. Anotar em `NOTAS-IA.md`.
+
+### Os 5 tipos de teste (do mais barato ao mais caro)
+1. **Regras puras** (`tests/rules.test.js`, `meta.test.js`, `web-format.test.ts` e outros): `node:test` +
+   `assert/strict` sobre funções de `motor/rules.js`, `motor/custom.js`, `web/src/lib/*.ts`. Rápidos, rodar sempre.
+2. **Simulador** (`motor/sim/simulate.js`): roda o código REAL das plataformas com relógio e página falsos, dias
+   inteiros, sem navegador. `simulate({ account: { platform, username, interests, template, switchAt: { day, template } }, days, seed })`
+   devolve `{ daily, sessions }`. Serve para: teto do dia (`rules.limitOf`), dia que fecha (`rules.completion === 1`),
+   transição de meta, Rotina. A bateria de `tests/metas-transicao.test.js` (metas pequenas a grandes, exatas e
+   variando, TikTok e Instagram) tem de fechar 100% dos dias. Para investigar um dia que não fechou: rodar a semente
+   que falhou e olhar `sessions[i].logs`, `.actions` e `.reason` (`goals` = bateu; `limit` = travou no teto; `cap` =
+   tempo). Para ver o agendador, embrulhar `rules.decide` e imprimir o motivo a cada mudança.
+3. **Navegador com página falsa** (`tests/navegador.test.js` para o TikTok, `navegador-instagram.test.js`): Chromium
+   do Playwright; toda requisição é respondida pelo teste com uma página que imita a estrutura do site (nada vai para
+   a internet). Caso novo do site: acrescentar o pedaço na página falsa (ex.: `?bandeja=nova` na home do Instagram) e
+   um teste chamando a atividade (ex.: `instagram._activities.stories({ page, bot, ctl })`).
+4. **Banco falso** (`tests/metas-aparelhos.test.js`): `store._useClient(fake)` com um cliente que imita o supabase-js.
+   Para lógica do `store.js` que grava ou relê o banco.
+5. **Ao vivo** (só com o dono autorizando; nunca nos testes automáticos):
+   - **Painel de verdade**: motor + painel do projeto em portas e pasta de dados à parte (`WU_DATA_DIR`,
+     `MOTOR_PORT`, `PORT`), Playwright no painel, usuário de TESTE (credenciais: pedir ao dono; nunca no Git), contas
+     de teste criadas pela API e apagadas no fim. Respeitar a regra de QA ao vivo (contas sem dono).
+   - **Sessão real numa conta**: só numa CÓPIA da pasta do perfil (`%APPDATA%\WarmUp Studio\data\profiles\<id>`;
+     `robocopy <origem> <destino> /E /XD Cache "Code Cache" GPUCache`), Edge, `createCtl` real + `platform.run`, plano
+     de `planForDay(dia, rng, modelo)`. Antes: conferir que o app do dono não está com sessão dessa conta
+     (`accounts.status.live` e `data.nextAfter` no banco) e rodar longe do próximo horário. Depois: apagar a cópia (tem
+     o login da conta). Contas liberadas pelo dono para teste: @alemdofato5 (Instagram) e @skateanimals2 (TikTok).
+   - **Instalador e atualização**: só com a cópia de outra identidade (regra acima).
+
+### Dicas de ambiente (Windows)
+- Arquivo com barra invertida (regex, caminhos): editar pelo editor ou por script Python gravado em arquivo; o heredoc
+  do bash come as barras. Gravar UTF-8 sem BOM.
+- App instalado do dono: dados em `%APPDATA%\WarmUp Studio\data` (motor na porta 3101, senha interna em `motor.token`).
+- Investigar o banco: `node -e` com `@supabase/supabase-js` e a chave do `.env`, só leitura (estrutura só por migração).
+- O PC do dono recebe o canal de teste pelo ícone perto do relógio → "Receber atualizações em teste".
+
+### Estado em 2026-10-10 (o mais novo fica em NOTAS-IA.md)
+- Estável (todos os aparelhos): 2.1.2. Canal de teste: 2.1.7. Aguardando o dono testar para `npm run liberar`.
+- Ao liberar: apagar o usuário de teste `wu.teste.1791651493829@gmail.com` e os aparelhos dele (autorizado só nesse
+  momento). A migração `20261010180000_relatorios_dos_aparelhos.sql` (tabela `app_reports`) NÃO foi aplicada: o dono
+  recusou; perguntar antes.
+- Pedidos pendentes do dono: instalador que confere no servidor a versão mais nova antes de instalar; compactar os
+  arquivos do app (asar), testando antes com a cópia de outra identidade.
+
+### Prompt para a outra IA (o dono cola isto)
+```
+Você vai continuar o projeto WarmUp Studio nesta pasta. Antes de qualquer coisa:
+1. Leia o CLAUDE.md inteiro (estrutura, regras e a seção "Como trabalhamos") e o NOTAS-IA.md.
+2. Rode npm test, npm run lint e npm run typecheck e me diga se está tudo passando.
+As regras da seção "Regras" do CLAUDE.md não podem ser quebradas (principalmente: publicar só no canal de teste e
+nunca rodar npm run liberar sem eu mandar; nunca testar o instalador com o id de verdade; testes nunca abrem
+TikTok/Instagram; sessão real só em CÓPIA do perfil e com minha autorização; nada de segredo no Git).
+Para cada pedido meu, siga o "Roteiro de cada mudança" do CLAUDE.md: teste que falha primeiro, depois a correção,
+testes/lint/typecheck, versão + novidades.ts, commit e npm run publicar.
+Ao terminar cada tarefa, escreva uma entrada no topo do NOTAS-IA.md (data, o que pedi, o que mudou e em quais
+arquivos, como testou e o resultado, versão publicada, o que ficou pendente) e atualize o CLAUDE.md se mudou alguma
+regra ou estrutura.
+Fale comigo em português do Brasil, simples. Minha tarefa agora é: <escreva aqui>
+```
