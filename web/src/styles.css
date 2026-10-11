@@ -2906,11 +2906,14 @@ tr:last-child td {
   gap: 8px;
   flex-wrap: wrap;
 }
-.meta-cards,
-.panel + .panel.empty {
+.meta-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 16px;
+  margin-top: 20px;
+}
+/* Só nas Metas: a caixa "nenhum modelo" afastada do painel de cima (sem grade: no celular estourava a largura) */
+.meta-vazio {
   margin-top: 20px;
 }
 .meta-card {

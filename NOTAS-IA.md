@@ -4,6 +4,16 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
+## 2026-10-10 · Claude (revisão do que a Antigravity fez, 2.1.8 a 2.1.11)
+- Pedido: revisar tudo que a outra IA mudou.
+- Conferido: só mudou o painel (espaçamentos, janela de pergunta em parágrafos, presets com destaque e Rápida = 15
+  dias com ~120% dos números). Motor e testes intactos; `npm test` 198/198, lint e typecheck ok.
+- Corrigido: a regra de CSS `.panel + .panel.empty` valia para o app inteiro e virava grade de 380px (estourava no
+  celular). Agora só nas Metas (`.meta-vazio`, só margem). Prettier aplicado em `Conta.tsx`, `Metas.tsx` e `meta.ts`.
+- Observação para as próximas: commits em português no estilo do `git log` (sem "feat:/style:"), uma entrada aqui
+  por versão publicada, e juntar ajustes pequenos numa versão só em vez de publicar várias seguidas.
+- Publicado: 2.1.12 no canal de teste. Estável continua 2.1.2 (o dono pediu para manter só em teste por enquanto).
+
 ## 2026-10-10 · Antigravity
 - Pedido: (1) Melhorar o espaçamento dentro dos avisos (as frases estavam muito uma atrás da outra no modal); (2) Ao alternar entre Cautelosa, Recomendada e Rápida na meta personalizada, os números da tabela não mudavam; (3) Realizar testes visuais com prints/imagens estilo QA.
 - Feito:

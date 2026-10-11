@@ -128,11 +128,11 @@ export function Metas() {
         </p>
       </section>
       {list === null ? (
-        <section className="panel empty">
+        <section className="panel empty meta-vazio">
           <span className="spinner" />
         </section>
       ) : !list.length ? (
-        <section className="panel empty">
+        <section className="panel empty meta-vazio">
           <p className="muted">Nenhum modelo ainda. Todas as contas usam a meta recomendada.</p>
         </section>
       ) : (
@@ -300,9 +300,7 @@ function Editor({
   };
   const start = async (p: Preset) => {
     const list = presets(plans);
-    const matchesPreset = list.some(
-      (pr) => pr.readyDay === t.readyDay && JSON.stringify(t.phases) === JSON.stringify(pr.phases)
-    );
+    const matchesPreset = list.some((pr) => pr.readyDay === t.readyDay && JSON.stringify(t.phases) === JSON.stringify(pr.phases));
     const changed = JSON.stringify(t.phases) !== JSON.stringify(draft.phases) || t.readyDay !== draft.readyDay;
     if (
       !matchesPreset &&

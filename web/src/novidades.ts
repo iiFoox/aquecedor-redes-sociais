@@ -9,6 +9,12 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.12',
+    data: '2026-10-10',
+    titulo: 'Metas: aviso de "nenhum modelo" certinho no celular',
+    itens: ['A caixa "Nenhum modelo ainda" das Metas personalizadas não passa mais da largura da tela no celular.'],
+  },
+  {
     versao: '2.1.11',
     data: '2026-10-10',
     titulo: 'Melhorias nos avisos e no seletor de ponto de partida das metas',
@@ -31,17 +37,13 @@ export const NOVIDADES: Novidade[] = [
     versao: '2.1.9',
     data: '2026-10-10',
     titulo: 'Aumento mais expressivo no espaçamento',
-    itens: [
-      'O espaçamento entre as metas e os cards aumentou ainda mais para garantir que os elementos não fiquem colados.',
-    ],
+    itens: ['O espaçamento entre as metas e os cards aumentou ainda mais para garantir que os elementos não fiquem colados.'],
   },
   {
     versao: '2.1.8',
     data: '2026-10-10',
     titulo: 'Ajuste de interface nas Metas Personalizadas',
-    itens: [
-      'Aumentado o espaçamento entre os itens no card de Metas Personalizadas para não ficarem "colados" uns aos outros.',
-    ],
+    itens: ['Aumentado o espaçamento entre os itens no card de Metas Personalizadas para não ficarem "colados" uns aos outros.'],
   },
   {
     versao: '2.1.7',

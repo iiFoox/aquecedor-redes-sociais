@@ -210,9 +210,7 @@ function GoalPicker({ a }: { a: Account }) {
         <div className="ask-flow">
           <p>{meta ? mudancaDeFase(meta.phases, a.day, a.readyDay, readyDay) : null}</p>
           <p>O plano de hoje é refeito com a meta {t ? 'nova' : 'recomendada'}.</p>
-          {a.live ? (
-            <p>A sessão que está rodando agora termina com o plano antigo; a mudança vale a partir da próxima.</p>
-          ) : null}
+          {a.live ? <p>A sessão que está rodando agora termina com o plano antigo; a mudança vale a partir da próxima.</p> : null}
           {t ? <p className="ask-risco">Meta personalizada é por sua conta e risco.</p> : null}
         </div>
       ),
