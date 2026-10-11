@@ -228,9 +228,8 @@ português do Brasil, simples, sem jargão.
 - O PC do dono recebe o canal de teste pelo ícone perto do relógio → "Receber atualizações em teste".
 
 ### Estado em 2026-10-10 (o mais novo fica em NOTAS-IA.md)
-- Estável (todos os aparelhos): 2.1.2. Canal de teste: 2.1.7. Aguardando o dono testar para `npm run liberar`.
-- Ao liberar: apagar o usuário de teste `wu.teste.1791651493829@gmail.com` e os aparelhos dele (autorizado só nesse
-  momento). A migração `20261010180000_relatorios_dos_aparelhos.sql` (tabela `app_reports`) NÃO foi aplicada: o dono
+- 2026-10-11: 2.1.13 liberada para todos (estável e teste iguais). O usuário de teste antigo foi apagado: QA ao vivo
+  no painel precisa de um usuário de teste novo (pedir ao dono). A migração `20261010180000_relatorios_dos_aparelhos.sql` (tabela `app_reports`) NÃO foi aplicada: o dono
   recusou; perguntar antes.
 - Pedidos pendentes do dono: instalador que confere no servidor a versão mais nova antes de instalar; compactar os
   arquivos do app (asar), testando antes com a cópia de outra identidade.

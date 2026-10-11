@@ -4,6 +4,17 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
+## 2026-10-11 · Claude (2.1.13 liberada para todos)
+- Pedido: o dono mandou subir para produção.
+- Feito: `npm run liberar` (conferiu as 3 partes); `latest.json` e `latest-teste.json` = 2.1.13. Depois: 199 testes,
+  lint e typecheck ok. PC do dono (Vinicin_Cria) já na 2.1.13; DESKTOP-R23N759 (2.1.2) e DESKTOP-VGJ4DFT (2.1.1)
+  estavam desligados e atualizam quando ligarem (conferir `devices.app_version`).
+- Usuário de teste `wu.teste.1791651493829@gmail.com` apagado (autorizado pelo dono para o momento da liberação),
+  com os 14 aparelhos, a configuração e a chave dele. Não tinha conta, proxy nem login de conta. QA ao vivo no
+  painel agora precisa de um usuário de teste NOVO (pedir ao dono).
+- Pendente: atualização com horário marcado dentro do próprio aviso; instalador que confere a versão no servidor;
+  compactação (asar).
+
 ## 2026-10-10 · Claude (maiúsculas, 2.1.13)
 - Pedido: todo texto do painel começando com letra maiúscula.
 - Feito: varredura do painel de verdade (todas as telas, editor, conta, paleta, celular) listando textos que começam
