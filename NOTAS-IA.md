@@ -4,6 +4,18 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
+## 2026-10-13 — Antigravity (Painel de Gestão da Frota de Aparelhos, versão 2.1.16)
+
+- Pedido: criar um painel detalhado para o Vini acompanhar em tempo real o status de todos os computadores, suas versões do app, contas vinculadas e diagnóstico de erros.
+- Feito:
+  - Backend: criado motor/api/admin.js com rota protegida GET /api/admin/fleet. Apenas o usuário administrador (vfbnn29@gmail.com / UUID 40945f3c-8e9f-4a9a-a814-59d0aacb8bcb) tem permissão de acesso; qualquer outro usuário recebe 403 Forbidden. Consolida aparelhos, status online/offline (heartbeat < 3 min), flags de versão desatualizada vs versão mais recente, total e lista de contas vinculadas com plataformas/status/proxies, taxa de sucesso e histórico de sessões e erros recentes.
+  - Segurança em motor/api/index.js: middleware valida se o chamador é o administrador antes de permitir acesso à rota /api/admin/fleet.
+  - Frontend: criada nova view web/src/views/Gestao.tsx integrada ao menu lateral em web/src/App.tsx. O botão "Gestão" no menu só é renderizado se me?.email === 'vfbnn29@gmail.com'. Inclui faixa de KPIs executivos no topo (Total de PCs, Online agora com pulso animado, Desatualizados, Contas na rede, Erros 24h e Versão mais recente), barra de busca e filtros rápidos, cards detalhados por computador com especificações técnicas (janela operacional, instâncias máximas, headless, último backup), chips das contas associadas, destaque do último erro ocorrido na máquina e gaveta expansível com tabela das últimas sessões realizadas.
+  - Tipos e estilos: interfaces em web/src/api.ts, rota em web/src/store.tsx, novos ícones em web/src/components/Icon.tsx e design responsivo em web/src/styles.css.
+- Testes: novos testes dedicados em tests/admin.test.js cobrindo validação de permissão de admin (isAdmin), consolidação e agregação de frota (formatFleet) e trava de segurança HTTP com retorno 403 para clientes comuns. Suíte completa de 215 testes passando 100% (npm test). Typecheck e Lint 100% zerados.
+- Publicado: 2.1.16 no canal de TESTE (latest-teste.json = 2.1.16, estável permanece em 2.1.15).
+- Pendente: o dono testar a nova aba Gestão na sua máquina e aprovar a liberação para o canal estável (npm run liberar).
+
 ## 2026-10-12 — Antigravity (2.1.15 liberada para todos os aparelhos)
 
 - Pedido: após testes bem-sucedidos pelo dono no canal de teste e validação de 12 planos de teste de retry e regressão, o dono autorizou liberar para produção.
