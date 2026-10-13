@@ -9,9 +9,9 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
-    versao: '2.1.16',
+    versao: '2.1.17',
     data: '2026-10-13',
-    titulo: 'Painel de Gestão da Frota de Computadores',
+    titulo: 'Painel de Gestão com status de Proxy por sessão',
     itens: [
       'Novo painel de Gestão exclusivo para o administrador acompanhar em tempo real todos os computadores da rede.',
       'Acompanhamento da versão instalada e avisos de computadores desatualizados na frota.',

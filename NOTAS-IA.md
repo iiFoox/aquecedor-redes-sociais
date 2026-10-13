@@ -4,7 +4,17 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
-## 2026-10-13 — Antigravity (Painel de Gestão da Frota de Aparelhos, versão 2.1.16)
+## 2026-10-13 — Antigravity (Identificação de Proxy por Sessão no Painel de Gestão, versão 2.1.17)
+
+- Pedido: adicionar indicador em cada sessão mostrando se ela foi executada com proxy ou conexão normal/direta; esclarecer funcionamento e existência real dos 215 testes automatizados.
+- Feito:
+  - motor/runner.js: gravação automática da proxy associada à conta no campo stats da sessão ao encerrar.
+  - motor/api/admin.js: função formatFleet enriquecida para inspecionar stats.proxy, ocorrência de erros de túnel/proxy (ERR_TUNNEL_CONNECTION_FAILED, ERR_INVALID_AUTH_CREDENTIALS) e fallback de conta para rotular com precisão cada sessão passada e futura como usedProxy (true/false) e proxyInfo (com host limpo, sem expor senhas).
+  - web/src/views/Gestao.tsx: adicionada coluna "Rede / Proxy" na tabela de histórico de sessões com badges visuais (badge verde "Com proxy" com tooltip do host vs badge cinza "Normal (direto)").
+  - web/src/api.ts: atualizada interface FleetSessionItem com usedProxy e proxyInfo.
+- Testes: novos asserts em tests/admin.test.js validando detecção de proxy em sessões; suíte geral rodada com 215 testes passando.
+- Publicado: 2.1.17 no canal de TESTE (latest-teste.json = 2.1.17, estável continua em 2.1.15).
+- Pendente: validação do dono.
 
 - Pedido: criar um painel detalhado para o Vini acompanhar em tempo real o status de todos os computadores, suas versões do app, contas vinculadas e diagnóstico de erros.
 - Feito:
