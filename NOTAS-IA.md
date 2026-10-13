@@ -14,6 +14,9 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
   - web/src/api.ts: atualizada interface FleetSessionItem com usedProxy e proxyInfo.
 - Testes: novos asserts em tests/admin.test.js validando detecção de proxy em sessões; suíte geral rodada com 215 testes passando.
 - Publicado: 2.1.17 no canal de TESTE (latest-teste.json = 2.1.17, estável continua em 2.1.15).
+- Segurança e sigilo:
+  - novidades.ts: removida toda e qualquer menção ao painel de gestão para não alertar outros usuários nas notas de atualização (substituído por nota discreta de "Melhorias de estabilidade e conexões").
+  - store.tsx e App.tsx: blindagem contra acesso forçado via hash ou URL (#gestao). Se qualquer usuário diferente de vfbnn29@gmail.com cair na rota, o painel reseta imediatamente a navegação para o cockpit e limpa a URL, além de não montar o componente.
 - Pendente: validação do dono.
 
 - Pedido: criar um painel detalhado para o Vini acompanhar em tempo real o status de todos os computadores, suas versões do app, contas vinculadas e diagnóstico de erros.
