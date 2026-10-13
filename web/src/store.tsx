@@ -268,6 +268,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, []);
 
+  // Gestão exclusiva para o administrador: se outro usuário cair em #gestao, volta imediatamente ao cockpit
+  useEffect(() => {
+    if (nav.view === 'gestao' && me && me.email !== 'vfbnn29@gmail.com') {
+      setNav({ view: 'cockpit', accountId: null });
+      try {
+        history.replaceState(null, '', '#cockpit');
+      } catch {}
+    }
+  }, [nav.view, me]);
+
   // Sair: encerra a sessão no servidor e volta para o login
   const logout = useCallback(async () => {
     try {

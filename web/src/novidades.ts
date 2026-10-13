@@ -11,13 +11,10 @@ export const NOVIDADES: Novidade[] = [
   {
     versao: '2.1.17',
     data: '2026-10-13',
-    titulo: 'Painel de Gestão com status de Proxy por sessão',
+    titulo: 'Melhorias de estabilidade e conexões',
     itens: [
-      'Novo painel de Gestão exclusivo para o administrador acompanhar em tempo real todos os computadores da rede.',
-      'Acompanhamento da versão instalada e avisos de computadores desatualizados na frota.',
-      'Status online/offline em tempo real e último sinal visto de cada máquina.',
-      'Lista e total de contas vinculadas a cada computador com status e proxies.',
-      'Histórico de sessões recentes, taxa de sucesso e diagnóstico detalhado dos últimos erros ocorridos em cada máquina.',
+      'Aprimoramentos internos na sincronização de dados e estabilidade das sessões.',
+      'Otimizações na rotina de verificação e reconexão de rede.',
     ],
   },
   {

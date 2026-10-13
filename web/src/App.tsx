@@ -352,7 +352,7 @@ export function App() {
             {view === 'proxies' && <Proxies />}
             {view === 'analises' && <Analises />}
             {view === 'ajustes' && <Ajustes />}
-            {view === 'gestao' && <Gestao />}
+            {view === 'gestao' && store.me?.email === 'vfbnn29@gmail.com' && <Gestao />}
           </>
         )}
       </main>
