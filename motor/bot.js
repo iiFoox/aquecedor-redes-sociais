@@ -54,6 +54,7 @@ function createBot(page, ctl, opts = {}) {
   let api = null;
   async function check() {
     lastGuard = clock.now();
+    if (ctl.shouldStop && ctl.shouldStop()) throw new StopError();
     if (api) await api.guard();
   }
 
@@ -317,7 +318,7 @@ function createBot(page, ctl, opts = {}) {
       } catch (err) {
         if (tryNum < maxTries && isNetworkErr(err)) {
           ctl.status(`Conexão oscilou, aguardando para tentar novamente (${tryNum}/${maxTries})...`);
-          await new Promise((r) => setTimeout(r, tryNum === 1 ? 3000 : 5000));
+          await clock.sleep(tryNum === 1 ? 3000 : 5000);
           await check();
           continue;
         }
