@@ -114,16 +114,16 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
 
 ## 2026-10-13 · Antigravity (2.1.18)
 
-- Pedido:
+- Pedido do Vini:
   1. Corrigir reconciliação de proxies no painel de gestão: sessões e contas rodadas com proxy apareciam como "Normal (direto)" e "Direto".
   2. Identificar e exibir o host/IP:porta exato do proxy em cada sessão recente e nos chips de contas (sem expor credenciais/senhas).
   3. Recolocar a versão 2.1.16 em "O que há de novo?" sem pular versões e sem citar nada sobre painel/gestão de frota (descrita como ajustes de tolerância e validação de proxies).
   4. Revisar toda a estrutura do painel e dados vindos do Supabase.
 - Diagnóstico da causa raiz:
-  - Na tabela `accounts`: proxies salvos em `data.proxy` eram ignorados porque a query só selecionava a coluna raiz `proxy`.
-  - Na tabela `sessions`: a query não selecionava a coluna `stats` (JSONB onde o runner salva `stats.proxy`), fazendo `s.stats` chegar `undefined`.
+  - Na tabela `accounts` do Supabase: proxies salvos em `data.proxy` eram ignorados porque a query só selecionava a coluna raiz `proxy`.
+  - Na tabela `sessions` do Supabase: a query não selecionava a coluna `stats` (JSONB onde o runner salva `stats.proxy`), fazendo `s.stats` chegar `undefined`.
   - O filtro de sessões por computador usava `|| s.owner_id === d.owner_id`, o que podia misturar sessões de diferentes máquinas do mesmo usuário.
-- Feito:
+- O que foi feito:
   - Em `motor/api/admin.js`:
     - Adicionada função `cleanProxyHost` que remove protocolos e credenciais (`user:pass@`) e extrai de forma limpa o host/porta (ex.: `45.38.101.186:6119`).
     - Query de `accounts` atualizada para selecionar `data` e ler `a.proxy || a.data?.proxy`.
@@ -134,11 +134,18 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
   - Em `web/src/api.ts` e `web/src/views/Gestao.tsx`:
     - Adicionado campo `proxyInfo?: string | null` em `FleetAccount`.
     - Tabela de sessões exibe o host/porta real do proxy em badge verde (`[globo] 45.38.101.186:6119`) quando a sessão rodou com proxy, e badge cinza (`Normal (direto)`) quando foi direto.
-    - Chips de contas exibem o badge verde com o host do proxy ou tooltip detalhado.
-  - Em `web/src/novidades.ts`: reinserida a versão 2.1.16 ("Aprimoramentos na validação de rede e proxies") e adicionada a 2.1.18 ("Melhorias de desempenho e conexões"), sem qualquer menção a painel ou frota.
+    - Chips de contas exibem o badge verde com o host do proxy ou tooltip detalhado (`Proxy configurado: 45.38.101.186:6119`).
+  - Em `web/src/novidades.ts`: reinserida a versão 2.1.16 ("Aprimoramentos na validação de rede e proxies") e adicionada a 2.1.18 ("Melhorias de desempenho e conexões"), sem qualquer menção a painel ou frota (regra estrita de sigilo comercial pedida pelo dono).
   - Em `tests/admin.test.js`: adicionados testes para `cleanProxyHost`, proxy em `data.proxy`, sessão com `stats.proxy` e isolamento de frota.
-- Testes:
-  - `npm test` passando (216/216 testes).
+- Camadas de segurança da aba "Gestão":
+  1. Menu lateral só renderiza a aba se `me?.email === 'vfbnn29@gmail.com'`.
+  2. Hook de rota redireciona imediatamente para `cockpit` se outro usuário tentar acessar via hash `#gestao`.
+  3. Componente React `Gestao.tsx` desmonta e retorna `null` se não for o e-mail do Vini.
+  4. Backend HTTP em `/api/admin/fleet` retorna `403 Forbidden` para qualquer usuário que não seja o Vini (testado em `tests/admin.test.js`).
+- Testes e Validação:
+  - `npm test` 100% passando (216 de 216 testes).
   - `npm run typecheck` e `npm run lint` 100% limpos.
   - Testes com dados reais do Supabase confirmaram `@alemdofato5` (tiktok) com `hasProxy: true` e sessões #112, #110, #99 com `usedProxy: true` exibindo `45.38.101.186:6119`.
-- Publicado: 2.1.18 no canal de teste. Estável continua 2.1.15.
+- Estado dos Canais:
+  - Canal de teste: publicado na **v2.1.18** (`latest-teste.json`).
+  - Canal estável dos clientes: permanece em **v2.1.15** (`latest.json`). Só liberar após aprovação explícita do Vini com `npm run liberar`.
