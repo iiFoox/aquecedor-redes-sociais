@@ -317,6 +317,8 @@ export interface FleetAccount {
 export interface FleetSessionItem {
   id: number;
   account: string;
+  usedProxy: boolean;
+  proxyInfo: string | null;
   startedAt: string | null;
   endedAt: string | null;
   minutes: number;

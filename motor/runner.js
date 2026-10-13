@@ -521,7 +521,7 @@ async function run(account, platform, s, ctl) {
       day: s.day,
       phase: s.phase,
       minutes,
-      stats: s.stats,
+      stats: { ...(s.stats || {}), proxy: account.proxy || null },
       plan: s.plan,
       completion: rules.completion(s.plan, store.todayOf(account.id)),
       result,

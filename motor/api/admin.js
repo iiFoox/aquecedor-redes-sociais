@@ -95,15 +95,34 @@ function formatFleet({ usersData, devices = [], accounts = [], sessions = [], la
             account: accountMap.get(lastErrorSession.account_id)?.username || lastErrorSession.account_id,
           }
         : null,
-      recentSessions: dSessions.slice(0, 10).map((s) => ({
-        id: s.id,
-        account: accountMap.get(s.account_id)?.username || s.account_id,
-        startedAt: s.started_at,
-        endedAt: s.ended_at,
-        minutes: s.minutes,
-        result: s.result,
-        error: s.error,
-      })),
+      recentSessions: dSessions.slice(0, 10).map((s) => {
+        const acc = accountMap.get(s.account_id);
+        const hasProxyInStats = s.stats && typeof s.stats === 'object' && s.stats.proxy !== undefined ? Boolean(s.stats.proxy) : null;
+        const hasProxyError = Boolean(s.error && /tunnel|proxy|auth_credentials|socks/i.test(s.error));
+        const usedProxy = hasProxyInStats !== null ? hasProxyInStats : hasProxyError || Boolean(acc && acc.proxy);
+        const proxyRaw = (s.stats && typeof s.stats === 'object' && s.stats.proxy) || acc?.proxy || null;
+        let proxyHost = null;
+        if (proxyRaw) {
+          try {
+            const u = new URL(proxyRaw);
+            proxyHost = u.protocol + '//' + u.host;
+          } catch {
+            proxyHost = String(proxyRaw).replace(/\/\/[^@]*@/, '//');
+          }
+        }
+
+        return {
+          id: s.id,
+          account: acc?.username || s.account_id,
+          usedProxy,
+          proxyInfo: proxyHost || (usedProxy ? 'Proxy' : null),
+          startedAt: s.started_at,
+          endedAt: s.ended_at,
+          minutes: s.minutes,
+          result: s.result,
+          error: s.error,
+        };
+      }),
     };
   });
 

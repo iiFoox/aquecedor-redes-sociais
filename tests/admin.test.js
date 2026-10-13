@@ -117,6 +117,8 @@ test('formatFleet: consolida aparelhos, contas, status online e erros', () => {
   assert.equal(d1.totalErrors, 0);
   assert.equal(d1.successRate, 100);
   assert.equal(d1.lastError, null);
+  assert.equal(d1.recentSessions[0].usedProxy, true);
+  assert.match(d1.recentSessions[0].proxyInfo, /proxy1:8080/);
 
   // Validação do dev-2 (Juninho)
   const d2 = result.devices.find((d) => d.id === 'dev-2');
@@ -135,6 +137,7 @@ test('formatFleet: consolida aparelhos, contas, status online e erros', () => {
   assert.equal(d2.lastError.error, 'net::ERR_TUNNEL_CONNECTION_FAILED');
   assert.equal(d2.lastError.account, 'conta_juninho');
   assert.equal(d2.recentSessions.length, 1);
+  assert.equal(d2.recentSessions[0].usedProxy, true); // detectado pelo erro de túnel
 });
 
 test('trava HTTP: usuário comum recebe 403 Forbidden em /api/admin/fleet', async () => {

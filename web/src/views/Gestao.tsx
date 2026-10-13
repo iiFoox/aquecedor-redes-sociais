@@ -410,6 +410,7 @@ export function Gestao() {
                         <thead>
                           <tr>
                             <th>Conta</th>
+                            <th>Rede / Proxy</th>
                             <th>Início</th>
                             <th>Duração</th>
                             <th>Resultado</th>
@@ -420,6 +421,17 @@ export function Gestao() {
                           {dev.recentSessions.map((s: FleetSessionItem) => (
                             <tr key={s.id} className={s.error ? 'err-row' : ''}>
                               <td className="bold">@{s.account}</td>
+                              <td>
+                                {s.usedProxy ? (
+                                  <span className="badge xs ok" title={s.proxyInfo || 'Rodou com proxy'}>
+                                    <Icon name="globe" /> Com proxy
+                                  </span>
+                                ) : (
+                                  <span className="badge xs muted" title="Conexão direta sem proxy">
+                                    Normal (direto)
+                                  </span>
+                                )}
+                              </td>
                               <td>{formatRelTime(s.startedAt)}</td>
                               <td>{s.minutes ? `${s.minutes.toFixed(1)} min` : '< 1 min'}</td>
                               <td>
