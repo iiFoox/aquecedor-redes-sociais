@@ -293,3 +293,76 @@ export interface Access {
   ok: boolean;
   reason: 'ok' | 'senha' | 'bloqueado' | 'cadastro' | 'cadastro-recusado' | 'sair' | 'troca-senha';
 }
+
+// ---------- Gestão de Frotas / Aparelhos (Admin) ----------
+export interface FleetSummary {
+  totalDevices: number;
+  onlineDevices: number;
+  outdatedDevices: number;
+  totalAccounts: number;
+  totalErrors24h: number;
+  latestVersion: string;
+}
+
+export interface FleetAccount {
+  id: string;
+  platform: Platform;
+  username: string;
+  hasProxy: boolean;
+  status: Record<string, unknown> | null;
+  day: number | null;
+  phase: number | null;
+}
+
+export interface FleetSessionItem {
+  id: number;
+  account: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  minutes: number;
+  result: string;
+  error: string | null;
+}
+
+export interface FleetDevice {
+  id: string;
+  name: string;
+  ownerId: string;
+  ownerEmail: string;
+  appVersion: string;
+  isLatest: boolean;
+  createdAt: string;
+  lastSeen: string | null;
+  online: boolean;
+  config: {
+    start?: string;
+    end?: string;
+    max?: number;
+    headless?: boolean;
+    muteAudio?: boolean;
+    lastBackup?: {
+      at: number;
+      dir: string;
+      file: string;
+      sizeMB?: number;
+      seconds?: number;
+      error?: string | null;
+    } | null;
+  };
+  accountsCount: number;
+  accounts: FleetAccount[];
+  totalSessions: number;
+  totalErrors: number;
+  successRate: number;
+  lastError: {
+    at: string;
+    error: string;
+    account: string;
+  } | null;
+  recentSessions: FleetSessionItem[];
+}
+
+export interface FleetData {
+  summary: FleetSummary;
+  devices: FleetDevice[];
+}

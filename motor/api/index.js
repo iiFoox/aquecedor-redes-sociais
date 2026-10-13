@@ -39,6 +39,11 @@ function createApi({ token, deviceUser = () => (cloud.ready() && !cloud.needsLog
     req.userId = String(req.headers['x-wu-user'] || '');
     if (!req.userId) return res.status(401).json({ error: 'Sem usuário do painel', auth: false });
     if (req.path.startsWith('/api/_device') || req.path === '/api/meta') return next();
+    if (req.path.startsWith('/api/admin')) {
+      const { isAdmin } = require('./admin');
+      if (!isAdmin(req.userId)) return res.status(403).json({ error: 'Acesso restrito ao administrador' });
+      return next();
+    }
     // O aparelho roda para um usuário só: quem entrou no painel tem de ser ele
     const owner = deviceUser();
     if (!owner)
@@ -78,7 +83,15 @@ function createApi({ token, deviceUser = () => (cloud.ready() && !cloud.needsLog
       onHours: store.hours(), // horas em que este PC costuma ficar ligado (Rotina)
     });
   });
-  app.use('/api', require('./device'), require('./accounts'), require('./proxies'), require('./config'), require('./stream'));
+  app.use(
+    '/api',
+    require('./device'),
+    require('./accounts'),
+    require('./proxies'),
+    require('./config'),
+    require('./stream'),
+    require('./admin'),
+  );
   app.use('/api', (_, res) => res.status(404).json({ error: 'Rota não encontrada' }));
 
   // JSON quebrado no corpo vira 400; o resto, 500 com a causa no terminal

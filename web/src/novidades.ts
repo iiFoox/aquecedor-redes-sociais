@@ -9,6 +9,18 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.16',
+    data: '2026-10-13',
+    titulo: 'Painel de Gestão da Frota de Computadores',
+    itens: [
+      'Novo painel de Gestão exclusivo para o administrador acompanhar em tempo real todos os computadores da rede.',
+      'Acompanhamento da versão instalada e avisos de computadores desatualizados na frota.',
+      'Status online/offline em tempo real e último sinal visto de cada máquina.',
+      'Lista e total de contas vinculadas a cada computador com status e proxies.',
+      'Histórico de sessões recentes, taxa de sucesso e diagnóstico detalhado dos últimos erros ocorridos em cada máquina.',
+    ],
+  },
+  {
     versao: '2.1.15',
     data: '2026-10-12',
     titulo: 'Tolerância a oscilações de proxy e rede',

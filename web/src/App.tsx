@@ -18,6 +18,7 @@ import { Rotina } from './views/Rotina.tsx';
 import { ComoUsar } from './views/ComoUsar.tsx';
 import { lastSeen, Novidades } from './views/Novidades.tsx';
 import { Metas } from './views/Metas.tsx';
+import { Gestao } from './views/Gestao.tsx';
 import { NOVIDADES } from './novidades.ts';
 
 const NAV: [View, string, string][] = [
@@ -41,6 +42,7 @@ const SUB: Record<View, string> = {
   ajuda: 'O que cada tela faz e como o aquecimento funciona',
   novidades: 'Tudo o que mudou em cada versão do app',
   metas: 'Seus modelos de meta: prazo e números de cada fase, por sua conta e risco',
+  gestao: 'Monitoramento detalhado de todos os computadores, versões e contas',
 };
 
 // Primeira vez neste navegador: um convite discreto para o "Como usar" (some ao abrir ou fechar)
@@ -89,6 +91,7 @@ function GuideHint() {
 
 function Side() {
   const { accounts, view, accountId, go, system, backup, motorOff, me, logout } = useStore();
+  const navList: [View, string, string][] = me?.email === 'vfbnn29@gmail.com' ? [...NAV, ['gestao', 'Gestão', 'monitor']] : NAV;
   return (
     <aside className="side" aria-label="Navegação">
       <div className="brand">
@@ -100,7 +103,7 @@ function Side() {
         </span>
       </div>
       <nav className="nav">
-        {NAV.map(([v, l, i]) => (
+        {navList.map(([v, l, i]) => (
           <button key={v} aria-current={view === v ? 'page' : undefined} onClick={() => go(v)}>
             <Icon name={i} />
             <span>{l}</span>
@@ -271,7 +274,8 @@ export function App() {
   }, []);
 
   const acc = accounts.find((a) => a.id === accountId);
-  const title = view === 'conta' ? 'Conta' : NAV.find((n) => n[0] === view)![1];
+  const navList: [View, string, string][] = store.me?.email === 'vfbnn29@gmail.com' ? [...NAV, ['gestao', 'Gestão', 'monitor']] : NAV;
+  const title = view === 'conta' ? 'Conta' : navList.find((n) => n[0] === view)?.[1] || 'Painel';
   const now = new Date();
   const sub =
     view === 'cockpit' && config
@@ -348,6 +352,7 @@ export function App() {
             {view === 'proxies' && <Proxies />}
             {view === 'analises' && <Analises />}
             {view === 'ajustes' && <Ajustes />}
+            {view === 'gestao' && <Gestao />}
           </>
         )}
       </main>

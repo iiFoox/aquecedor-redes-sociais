@@ -16,8 +16,8 @@ import {
 } from './api.ts';
 import { confetti } from './lib/confetti.ts';
 
-export type View = 'cockpit' | 'conta' | 'rotina' | 'proxies' | 'analises' | 'ajustes' | 'ajuda' | 'novidades' | 'metas';
-export const VIEWS: View[] = ['cockpit', 'conta', 'rotina', 'proxies', 'analises', 'ajustes', 'ajuda', 'novidades', 'metas'];
+export type View = 'cockpit' | 'conta' | 'rotina' | 'proxies' | 'analises' | 'ajustes' | 'ajuda' | 'novidades' | 'metas' | 'gestao';
+export const VIEWS: View[] = ['cockpit', 'conta', 'rotina', 'proxies', 'analises', 'ajustes', 'ajuda', 'novidades', 'metas', 'gestao'];
 
 interface Toast {
   id: number;
