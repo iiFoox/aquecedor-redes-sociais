@@ -9,6 +9,15 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.15',
+    data: '2026-10-12',
+    titulo: 'Tolerância a oscilações de proxy e rede',
+    itens: [
+      'Se o proxy ou a conexão oscilar ao abrir o TikTok ou Instagram, o robô agora tenta novamente de forma automática (até 3 tentativas) antes de dar erro.',
+      'Avisos no painel indicando quando a conexão oscilou e uma nova tentativa está em andamento.',
+    ],
+  },
+  {
     versao: '2.1.14',
     data: '2026-10-11',
     titulo: 'Atualiza antes de começar e instala mais rápido',

@@ -301,9 +301,29 @@ function createBot(page, ctl, opts = {}) {
     return (await clickVisible(iconSelector, iconOpts)) ? 'icon' : null;
   }
 
+  // Navega para um endereço com tolerância a oscilações transitórias de rede/proxy (até 3 tentativas).
   async function goto(url, label) {
-    ctl.status(label || 'Navegando');
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    const maxTries = 3;
+    const isNetworkErr = (e) =>
+      /ERR_TUNNEL_CONNECTION_FAILED|ERR_INVALID_AUTH_CREDENTIALS|ERR_PROXY_CONNECTION_FAILED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_PROXY_AUTH_REQUESTED|ERR_TIMED_OUT|ERR_NAME_NOT_RESOLVED|ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ERR_SSL_PROTOCOL_ERROR|Timeout \d+ms/i.test(
+        e?.message || '',
+      );
+
+    for (let tryNum = 1; tryNum <= maxTries; tryNum++) {
+      ctl.status(tryNum === 1 ? label || 'Navegando' : `${label || 'Navegando'}: tentando novamente (${tryNum}/${maxTries})`);
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        break;
+      } catch (err) {
+        if (tryNum < maxTries && isNetworkErr(err)) {
+          ctl.status(`Conexão oscilou, aguardando para tentar novamente (${tryNum}/${maxTries})...`);
+          await new Promise((r) => setTimeout(r, tryNum === 1 ? 3000 : 5000));
+          await check();
+          continue;
+        }
+        throw err;
+      }
+    }
     await pause('load', label ? `${label}: carregando` : 'Carregando página');
     await check();
   }

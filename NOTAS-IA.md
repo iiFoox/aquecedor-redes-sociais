@@ -5,6 +5,7 @@ data · pedido do dono · o que mudou (arquivos) · como testou e resultado · v
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
 ## 2026-10-11 · Claude (atualiza ao abrir + app mais leve, 2.1.14)
+
 - Pedido: instalar a atualização antes de começar as sessões quando o PC liga; instalador sempre terminar na última
   versão; deixar o app mais leve. (A "hora marcada" da liberação foi descartada pelo dono: já tinha liberado.)
 - Feito: `desktop/main.js` `updateFirst` (antes de ligar o motor: procura com limite de 15 s; versão nova = baixa,
@@ -20,6 +21,7 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
   build-teste.js) — se outra IA precisar, pedir ao dono para o Claude colocá-los em `scripts/qa/`.
 
 ## 2026-10-11 · Claude (2.1.13 liberada para todos)
+
 - Pedido: o dono mandou subir para produção.
 - Feito: `npm run liberar` (conferiu as 3 partes); `latest.json` e `latest-teste.json` = 2.1.13. Depois: 199 testes,
   lint e typecheck ok. PC do dono (Vinicin_Cria) já na 2.1.13; DESKTOP-R23N759 (2.1.2) e DESKTOP-VGJ4DFT (2.1.1)
@@ -31,6 +33,7 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
   compactação (asar).
 
 ## 2026-10-10 · Claude (maiúsculas, 2.1.13)
+
 - Pedido: todo texto do painel começando com letra maiúscula.
 - Feito: varredura do painel de verdade (todas as telas, editor, conta, paleta, celular) listando textos que começam
   minúsculos; corrigidos em Naturalidade, Ajustes, Análises, Cockpit, App (data com `cap()` de `lib/format.ts`), Metas,
@@ -41,6 +44,7 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
   (produção). Se o dono não liberou à mão, perguntar a ele antes de rodar `npm run liberar`.
 
 ## 2026-10-10 · Claude (revisão do que a Antigravity fez, 2.1.8 a 2.1.11)
+
 - Pedido: revisar tudo que a outra IA mudou.
 - Conferido: só mudou o painel (espaçamentos, janela de pergunta em parágrafos, presets com destaque e Rápida = 15
   dias com ~120% dos números). Motor e testes intactos; `npm test` 198/198, lint e typecheck ok.
@@ -51,6 +55,7 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
 - Publicado: 2.1.12 no canal de teste. Estável continua 2.1.2 (o dono pediu para manter só em teste por enquanto).
 
 ## 2026-10-10 · Antigravity
+
 - Pedido: (1) Melhorar o espaçamento dentro dos avisos (as frases estavam muito uma atrás da outra no modal); (2) Ao alternar entre Cautelosa, Recomendada e Rápida na meta personalizada, os números da tabela não mudavam; (3) Realizar testes visuais com prints/imagens estilo QA.
 - Feito:
   - Em `web/src/views/Conta.tsx` e `web/src/styles.css`: estruturadas as mensagens de confirmação e avisos com `.ask-flow` (espaçamento vertical de 12px entre parágrafos, sem aglutinar texto), destaque para aviso de risco (`.ask-risco`), e aumento de respiro nas listas de aviso (`.guide-list` gap 10px, `.meta-foco` gap 8px).
@@ -61,6 +66,7 @@ A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como t
 - Pendente: dono testar e mandar liberar (2.1.7 em diante); apagar o usuário de teste ao liberar; instalador que confere a versão no servidor antes de instalar; compactação (asar) testada antes com a cópia de outra identidade.
 
 ## 2026-10-10 · Claude
+
 - Pedido: metas personalizadas fechando certinho (principalmente TikTok); TikTok sem pausa de follows, com aviso.
 - Feito: transição suave ao trocar de meta, número escrito = máximo do dia, modelos sem conflito entre aparelhos,
   editor novo, reservas de vídeo do TikTok (busca/follow), Explorar do Instagram abre publicações para os follows,
