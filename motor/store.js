@@ -95,10 +95,10 @@ function accountFromRow(row) {
     id: row.id,
     platform: row.platform,
     username: row.username,
+    proxy: row.proxy || data.proxy || null,
     ownerId: row.owner_id || null,
     deviceId: row.device_id || null,
-    remoteStatus: row.status || null, // o que o aparelho dono está fazendo agora (contas de outros aparelhos)
-    // Trava: o aparelho que está com a conta aberta (sessão ou navegador) e até quando
+    remoteStatus: row.status || null,
     lease: row.lease_device ? { device: row.lease_device, until: row.lease_until ? Date.parse(row.lease_until) : 0 } : null,
   };
 }
@@ -167,7 +167,7 @@ async function init({ client, user, device }) {
   const alSince = iso(Date.now() - ALERTS_DAYS * 86400000);
   const [accRows, prxRows, cfg, evRows, alRows, seRows] = await Promise.all([
     fetchAll(
-      () => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status, lease_device, lease_until').order('id'),
+      () => sb.from('accounts').select('id, platform, username, proxy, data, owner_id, device_id, status, lease_device, lease_until').order('id'),
       'contas',
     ),
     fetchAll(() => sb.from('proxies').select('id, url, status, ms, data, owner_id').order('id'), 'proxies'),
@@ -287,7 +287,7 @@ function subscribe() {
 async function reloadAccounts() {
   if (!sb) return accounts.length;
   const rows = await fetchAll(
-    () => sb.from('accounts').select('id, platform, username, data, owner_id, device_id, status, lease_device, lease_until').order('id'),
+    () => sb.from('accounts').select('id, platform, username, proxy, data, owner_id, device_id, status, lease_device, lease_until').order('id'),
     'contas',
   );
   const seen = new Set(rows.map((r) => r.id));
@@ -331,9 +331,10 @@ function flush() {
 // owner_id só vai junto quando a conta tem dono: o dono de uma conta sem dono é gravado por fora
 // (cadastro do 1º usuário ou "npm run usuario"), e o motor não pode sobrescrever com vazio.
 function accountToRow(a) {
-  const { live, loginOpen, id, platform, username, events, alerts, history, ownerId, deviceId: dev, remoteStatus, lease, ...data } = a;
-  return { id, platform, username, data, owner_id: ownerId || userId, device_id: dev || deviceId };
-}
+    const { live, loginOpen, id, platform, username, events, alerts, history, ownerId, deviceId: dev, remoteStatus, lease, proxy, ...data } = a;
+    const p = proxy || null;
+    return { id, platform, username, proxy: p, data: { ...data, proxy: p }, owner_id: ownerId || userId, device_id: dev || deviceId };
+  }
 const proxyToRow = ({ id, url, status, ms, ownerId, ...rest }) => ({ id, url, status, ms, data: rest, owner_id: ownerId || userId });
 const alertToRow = (x, accountId) => ({
   id: x.id,
@@ -368,8 +369,8 @@ async function doFlush() {
     // Conta que já existe: só atualiza se ainda for deste aparelho no banco. Se outro aparelho levou a conta
     // (e o aviso ainda não chegou aqui), não escreve por cima nem puxa a conta de volta.
     for (const a of mineDirty.filter((x) => !news.some((r) => r.id === x.id))) {
-      const { platform, username, data } = accountToRow(a);
-      const r = await sb.from('accounts').update({ platform, username, data }).eq('id', a.id).eq('device_id', deviceId).select('id');
+      const { platform, username, proxy, data } = accountToRow(a);
+      const r = await sb.from('accounts').update({ platform, username, proxy, data }).eq('id', a.id).eq('device_id', deviceId).select('id');
       if (!check('salvar conta', r)) dirty.accounts.add(a.id);
     }
 

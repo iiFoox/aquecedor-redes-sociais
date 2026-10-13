@@ -9,12 +9,30 @@ export interface Novidade {
 
 export const NOVIDADES: Novidade[] = [
   {
+    versao: '2.1.18',
+    data: '2026-10-13',
+    titulo: 'Melhorias de desempenho e conexões',
+    itens: [
+      'Otimização no monitoramento e registro de conexões de proxy durante as sessões.',
+      'Melhorias de desempenho na sincronização de dados em segundo plano.',
+    ],
+  },
+  {
     versao: '2.1.17',
     data: '2026-10-13',
     titulo: 'Melhorias de estabilidade e conexões',
     itens: [
       'Aprimoramentos internos na sincronização de dados e estabilidade das sessões.',
       'Otimizações na rotina de verificação e reconexão de rede.',
+    ],
+  },
+  {
+    versao: '2.1.16',
+    data: '2026-10-12',
+    titulo: 'Aprimoramentos na validação de rede e proxies',
+    itens: [
+      'Ajustes e melhorias na tolerância a oscilações e detecção de latência em proxies.',
+      'Maior robustez na inicialização do navegador com conexões intermediadas.',
     ],
   },
   {

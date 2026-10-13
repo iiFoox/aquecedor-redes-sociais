@@ -347,8 +347,8 @@ export function Gestao() {
                         <PlatformBadge platform={acc.platform} size="xs" />
                         <span className="fdc-acc-user">@{acc.username}</span>
                         {acc.hasProxy ? (
-                          <span className="badge xs ok" title="Com proxy configurado">
-                            <Icon name="globe" /> Proxy
+                          <span className="badge xs ok" title={acc.proxyInfo ? `Proxy configurado: ${acc.proxyInfo}` : 'Com proxy configurado'}>
+                            <Icon name="globe" /> {acc.proxyInfo ? acc.proxyInfo : 'Proxy'}
                           </span>
                         ) : (
                           <span className="badge xs muted" title="Sem proxy">
@@ -423,8 +423,8 @@ export function Gestao() {
                               <td className="bold">@{s.account}</td>
                               <td>
                                 {s.usedProxy ? (
-                                  <span className="badge xs ok" title={s.proxyInfo || 'Rodou com proxy'}>
-                                    <Icon name="globe" /> Com proxy
+                                  <span className="badge xs ok" title={s.proxyInfo ? `Sessão executada via proxy: ${s.proxyInfo}` : 'Rodou com proxy'}>
+                                    <Icon name="globe" /> {s.proxyInfo ? s.proxyInfo : 'Com proxy'}
                                   </span>
                                 ) : (
                                   <span className="badge xs muted" title="Conexão direta sem proxy">

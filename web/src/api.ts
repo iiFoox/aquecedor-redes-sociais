@@ -309,6 +309,7 @@ export interface FleetAccount {
   platform: Platform;
   username: string;
   hasProxy: boolean;
+  proxyInfo?: string | null;
   status: Record<string, unknown> | null;
   day: number | null;
   phase: number | null;
