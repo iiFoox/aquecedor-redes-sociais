@@ -4,6 +4,14 @@ Cada IA que trabalhar no projeto escreve aqui, no TOPO, uma entrada por tarefa:
 data · pedido do dono · o que mudou (arquivos) · como testou e resultado · versão publicada (canal) · pendências.
 A próxima IA lê isto antes de começar (junto com o CLAUDE.md, seção "Como trabalhamos").
 
+## 2026-10-12 — Antigravity (2.1.15 liberada para todos os aparelhos)
+
+- Pedido: após testes bem-sucedidos pelo dono no canal de teste e validação de 12 planos de teste de retry e regressão, o dono autorizou liberar para produção.
+- Feito: `npm run liberar`. O instalador e partes foram conferidos criptograficamente (SHA-256) e `latest.json` foi atualizado com a versão 2.1.15.
+- Testes: 12 planos de testes dedicados em `tests/bot-retry.test.js` (12/12 passando). Suíte completa de mais de 200 testes (regras, simulador de transições, Instagram real e TikTok real) 100% aprovada. Lint e typecheck zerados.
+- Publicado: 2.1.15 no canal ESTÁVEL (liberada para todos os aparelhos). Todos os aparelhos atualizam automaticamente ou via "Procurar atualização".
+- Pendente: nenhuma pendência.
+
 ## 2026-10-11 · Claude (atualiza ao abrir + app mais leve, 2.1.14)
 
 - Pedido: instalar a atualização antes de começar as sessões quando o PC liga; instalador sempre terminar na última
